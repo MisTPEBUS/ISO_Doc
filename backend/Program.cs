@@ -5,6 +5,9 @@ using IsoDocument.Api.Data.Entities;
 using IsoDocument.Api.Features.Auth;
 using IsoDocument.Api.Features.Auth.Dtos;
 using IsoDocument.Api.Features.Auth.Validators;
+using IsoDocument.Api.Features.Depts;
+using IsoDocument.Api.Features.Depts.Dtos;
+using IsoDocument.Api.Features.Depts.Validators;
 using IsoDocument.Api.Features.Health;
 using IsoDocument.Api.Security;
 using IsoDocument.Api.Security.Authorization;
@@ -70,6 +73,8 @@ builder.Services.AddScoped<IAuthorizationHandler, DocumentAccessHandler>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
 builder.Services.AddScoped<IValidator<ChangePasswordRequest>, ChangePasswordRequestValidator>();
+builder.Services.AddScoped<IValidator<CreateDeptRequest>, CreateDeptRequestValidator>();
+builder.Services.AddScoped<IValidator<UpdateDeptRequest>, UpdateDeptRequestValidator>();
 builder.Services.AddOptions<StorageOptions>()
     .BindConfiguration(StorageOptions.SectionName)
     .Validate(
@@ -90,6 +95,8 @@ builder.Services.AddDbContext<IsoDbContext>(options =>
     options.UseNpgsql(connectionString));
 builder.Services.AddScoped<IAuthUserStore, EfAuthUserStore>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IDeptStore, EfDeptStore>();
+builder.Services.AddScoped<IDeptService, DeptService>();
 builder.Services.AddScoped<IHealthService, HealthService>();
 
 var app = builder.Build();

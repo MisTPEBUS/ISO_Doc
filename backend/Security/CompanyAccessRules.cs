@@ -11,4 +11,18 @@ public static class CompanyAccessRules
         UserRole.COMPANY_ADMIN => currentCompanyId == targetCompanyId,
         _ => false
     };
+
+    public static CompanyFilterResolution ResolveCompanyFilter(
+        UserRole? role,
+        Guid? currentCompanyId,
+        Guid? requestedCompanyId) => role switch
+    {
+        UserRole.SYSTEM_ADMIN => new(true, requestedCompanyId),
+        UserRole.COMPANY_ADMIN when currentCompanyId.HasValue
+            && (!requestedCompanyId.HasValue || requestedCompanyId == currentCompanyId) =>
+            new(true, currentCompanyId),
+        _ => new(false, null)
+    };
 }
+
+public readonly record struct CompanyFilterResolution(bool IsAllowed, Guid? CompanyId);
