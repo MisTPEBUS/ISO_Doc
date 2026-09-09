@@ -94,10 +94,30 @@ docker compose down
 docker compose down -v
 ```
 
+### Legacy（舊系統 MySQL 5.7，資料遷移參考用）
+
+```yaml
+host: localhost
+database: iso_production
+port: 3307
+username: root
+password: admin
+```
+
+啟動並還原舊資料：
+
+```powershell
+docker compose up -d legacy
+docker exec -i iso-mysql-legacy sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" iso_production' < D:\qnap-ubuntu-export\iso_production.sql
+```
+
+舊 dump 檔（含正式資料）不進版控，需另外取得。
+
 ## 資料掛載位置
 
 ```text
 iso_postgres_development_data -> /var/lib/postgresql/data
 iso_postgres_test_data        -> /var/lib/postgresql/data
 iso_postgres_production_data  -> /var/lib/postgresql/data
+iso_mysql_legacy_data         -> /var/lib/mysql
 ```
