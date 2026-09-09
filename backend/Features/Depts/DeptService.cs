@@ -2,6 +2,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
+using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Depts.Dtos;
 using IsoDocument.Api.Security;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +15,7 @@ public sealed class DeptService(
     ICurrentUser currentUser,
     IValidator<CreateDeptRequest> createValidator,
     IValidator<UpdateDeptRequest> updateValidator,
+    IOperationAuditLogService auditLogService,
     TimeProvider timeProvider) : IDeptService
 {
     private const int DefaultPage = 1;
@@ -98,6 +100,18 @@ public sealed class DeptService(
             return DuplicateName<DeptResponse>();
         }
 
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                dept.CompanyId,
+                AuditActions.CreateDept,
+                AuditResourceTypes.Dept,
+                dept.Id,
+                new
+                {
+                    new_value = new { name = dept.Name, seq = dept.Seq }
+                }),
+            cancellationToken);
+
         return Result<DeptResponse>.Success(ToResponse(dept));
     }
 
@@ -150,6 +164,7 @@ public sealed class DeptService(
             return DuplicateName<DeptResponse>();
         }
 
+        var oldValue = new { name = dept.Name, seq = dept.Seq };
         dept.Name = name;
         dept.Seq = request.Seq;
         dept.UpdatedAt = timeProvider.GetUtcNow();
@@ -161,6 +176,19 @@ public sealed class DeptService(
         {
             return DuplicateName<DeptResponse>();
         }
+
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                dept.CompanyId,
+                AuditActions.UpdateDept,
+                AuditResourceTypes.Dept,
+                dept.Id,
+                new
+                {
+                    old_value = oldValue,
+                    new_value = new { name = dept.Name, seq = dept.Seq }
+                }),
+            cancellationToken);
 
         return Result<DeptResponse>.Success(ToResponse(dept));
     }
@@ -184,8 +212,17 @@ public sealed class DeptService(
                 "The department cannot be deleted because it still has active users.");
         }
 
+        var oldValue = new { name = dept.Name, seq = dept.Seq };
         deptStore.Remove(dept);
         await deptStore.SaveChangesAsync(cancellationToken);
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                dept.CompanyId,
+                AuditActions.DeleteDept,
+                AuditResourceTypes.Dept,
+                dept.Id,
+                new { old_value = oldValue }),
+            cancellationToken);
         return Result.Success();
     }
 

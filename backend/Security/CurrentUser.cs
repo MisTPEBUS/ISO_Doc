@@ -12,6 +12,8 @@ public interface ICurrentUser
 
     Guid? DeptId { get; }
 
+    string? Empno { get; }
+
     UserRole? Role { get; }
 
     bool CanAccessCompany(Guid companyId);
@@ -28,6 +30,8 @@ public sealed class CurrentUser(IHttpContextAccessor httpContextAccessor) : ICur
     public Guid? CompanyId => ReadGuidClaim(AuthClaimTypes.CompanyId);
 
     public Guid? DeptId => ReadGuidClaim(AuthClaimTypes.DeptId);
+
+    public string? Empno => Principal?.FindFirstValue(AuthClaimTypes.Empno);
 
     public UserRole? Role => Enum.TryParse<UserRole>(
         Principal?.FindFirstValue(ClaimTypes.Role),

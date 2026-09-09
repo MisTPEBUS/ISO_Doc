@@ -5,6 +5,8 @@ using IsoDocument.Api.Data.Entities;
 using IsoDocument.Api.Features.Auth;
 using IsoDocument.Api.Features.Auth.Dtos;
 using IsoDocument.Api.Features.Auth.Validators;
+using IsoDocument.Api.Features.AuditLogs;
+using IsoDocument.Api.Features.Backup;
 using IsoDocument.Api.Features.Depts;
 using IsoDocument.Api.Features.Depts.Dtos;
 using IsoDocument.Api.Features.Depts.Validators;
@@ -12,6 +14,10 @@ using IsoDocument.Api.Features.Documents;
 using IsoDocument.Api.Features.Documents.Dtos;
 using IsoDocument.Api.Features.Documents.Validators;
 using IsoDocument.Api.Features.Health;
+using IsoDocument.Api.Features.Home;
+using IsoDocument.Api.Features.Permissions;
+using IsoDocument.Api.Features.Permissions.Dtos;
+using IsoDocument.Api.Features.Permissions.Validators;
 using IsoDocument.Api.Features.Users;
 using IsoDocument.Api.Features.Users.Dtos;
 using IsoDocument.Api.Features.Users.Validators;
@@ -76,6 +82,7 @@ builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddScoped<IAuthSession, CookieAuthSession>();
 builder.Services.AddScoped<IAuthorizationHandler, CompanyScopeHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, DocumentAccessHandler>();
+builder.Services.AddScoped<IDocumentAccessStore, EfDocumentAccessStore>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
 builder.Services.AddScoped<IValidator<ChangePasswordRequest>, ChangePasswordRequestValidator>();
@@ -85,6 +92,7 @@ builder.Services.AddScoped<IValidator<CreateDocumentRequest>, CreateDocumentRequ
 builder.Services.AddScoped<IValidator<UpdateDocumentRequest>, UpdateDocumentRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateDocumentVersionRequest>, CreateDocumentVersionRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateAttachmentsRequest>, CreateAttachmentsRequestValidator>();
+builder.Services.AddScoped<IValidator<UpdateDocumentDeptPermissionsRequest>, UpdateDocumentDeptPermissionsRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateUserRequest>, CreateUserRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateUserRequest>, UpdateUserRequestValidator>();
 builder.Services.AddOptions<StorageOptions>()
@@ -115,9 +123,26 @@ builder.Services.AddScoped<IDocumentVersionStore, EfDocumentVersionStore>();
 builder.Services.AddScoped<IDocumentVersionService, DocumentVersionService>();
 builder.Services.AddScoped<IAttachmentStore, EfAttachmentStore>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
+builder.Services.AddScoped<IDocumentPermissionStore, EfDocumentPermissionStore>();
+builder.Services.AddScoped<IDocumentPermissionService, DocumentPermissionService>();
+builder.Services.AddScoped<IAuditLogStore, EfAuditLogStore>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IUserStore, EfUserStore>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IHealthService, HealthService>();
+builder.Services.AddScoped<IBackupStore, EfBackupStore>();
+builder.Services.AddScoped<IBackupService, BackupService>();
+builder.Services.AddScoped<IDocumentsBrowseStore, EfDocumentsBrowseStore>();
+builder.Services.AddScoped<IDocumentsBrowseService, DocumentsBrowseService>();
+builder.Services.AddScoped<IDownloadAuditLogService>(serviceProvider =>
+    serviceProvider.GetRequiredService<IAuditLogService>() as IDownloadAuditLogService
+    ?? throw new InvalidOperationException("The audit log service does not support download auditing."));
+builder.Services.AddScoped<IBackupAuditLogService>(serviceProvider =>
+    serviceProvider.GetRequiredService<IAuditLogService>() as IBackupAuditLogService
+    ?? throw new InvalidOperationException("The audit log service does not support backup auditing."));
+builder.Services.AddScoped<IOperationAuditLogService>(serviceProvider =>
+    serviceProvider.GetRequiredService<IAuditLogService>() as IOperationAuditLogService
+    ?? throw new InvalidOperationException("The audit log service does not support operation auditing."));
 
 var app = builder.Build();
 

@@ -3,6 +3,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
+using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Users.Dtos;
 using IsoDocument.Api.Security;
 using Microsoft.AspNetCore.Identity;
@@ -17,6 +18,7 @@ public sealed class UserService(
     IValidator<CreateUserRequest> createValidator,
     IValidator<UpdateUserRequest> updateValidator,
     IPasswordHasher<User> passwordHasher,
+    IOperationAuditLogService auditLogService,
     TimeProvider timeProvider) : IUserService
 {
     private const int DefaultPage = 1;
@@ -129,6 +131,15 @@ public sealed class UserService(
             return DuplicateEmpno<UserResponse>();
         }
 
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                user.CompanyId,
+                AuditActions.CreateUser,
+                AuditResourceTypes.User,
+                user.Id,
+                new { new_value = ToAuditValue(user) }),
+            cancellationToken);
+
         return Result<UserResponse>.Success(ToResponse(user));
     }
 
@@ -182,6 +193,7 @@ public sealed class UserService(
                 FieldError("deptId", "The specified department does not belong to this company."));
         }
 
+        var oldValue = ToAuditValue(user);
         user.Name = request.Name!.Trim();
         user.Email = NormalizeOptional(request.Email);
         user.DeptId = request.DeptId;
@@ -190,6 +202,18 @@ public sealed class UserService(
         user.NotifyEmailEnabled = request.NotifyEmailEnabled;
         user.UpdatedAt = timeProvider.GetUtcNow();
         await userStore.SaveChangesAsync(cancellationToken);
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                user.CompanyId,
+                AuditActions.UpdateUser,
+                AuditResourceTypes.User,
+                user.Id,
+                new
+                {
+                    old_value = oldValue,
+                    new_value = ToAuditValue(user)
+                }),
+            cancellationToken);
         return Result<UserResponse>.Success(ToResponse(user));
     }
 
@@ -206,9 +230,22 @@ public sealed class UserService(
             return Result.Forbidden("You do not have permission to deactivate this user.");
         }
 
+        var wasActive = user.IsActive;
         user.IsActive = false;
         user.UpdatedAt = timeProvider.GetUtcNow();
         await userStore.SaveChangesAsync(cancellationToken);
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                user.CompanyId,
+                AuditActions.DeleteUser,
+                AuditResourceTypes.User,
+                user.Id,
+                new
+                {
+                    old_value = new { is_active = wasActive },
+                    new_value = new { is_active = user.IsActive }
+                }),
+            cancellationToken);
         return Result.Success();
     }
 
@@ -234,6 +271,15 @@ public sealed class UserService(
         user.UpdatedAt = timeProvider.GetUtcNow();
         await userStore.SaveChangesAsync(cancellationToken);
 
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                user.CompanyId,
+                AuditActions.ResetUserPassword,
+                AuditResourceTypes.User,
+                user.Id,
+                new { new_value = new { must_change_password = true } }),
+            cancellationToken);
+
         return Result<ResetPasswordResponse>.Success(new(temporaryPassword));
     }
 
@@ -254,6 +300,17 @@ public sealed class UserService(
         user.Id, user.CompanyId, user.DeptId, user.Empno, user.Name, user.Email,
         user.Role, user.IsActive, user.MustChangePassword, user.NotifyEmailEnabled,
         user.LastLoginAt, user.CreatedAt, user.UpdatedAt);
+
+    private static object ToAuditValue(User user) => new
+    {
+        empno = user.Empno,
+        name = user.Name,
+        email = user.Email,
+        dept_id = user.DeptId,
+        role = user.Role,
+        is_active = user.IsActive,
+        notify_email_enabled = user.NotifyEmailEnabled
+    };
 
     private static Dictionary<string, string[]> FieldError(string field, string message) =>
         new(StringComparer.Ordinal) { [field] = [message] };

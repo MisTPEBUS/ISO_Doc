@@ -16,11 +16,21 @@ public sealed class ExceptionHandlingMiddleware(
         }
         catch (DomainException exception)
         {
+            if (context.Response.HasStarted)
+            {
+                throw;
+            }
+
             await WriteDomainProblemAsync(context, exception.Result);
         }
         catch (Exception exception)
         {
             logger.LogError(exception, "An unhandled exception occurred while processing the request.");
+            if (context.Response.HasStarted)
+            {
+                throw;
+            }
+
             await WriteProblemAsync(
                 context,
                 StatusCodes.Status500InternalServerError,

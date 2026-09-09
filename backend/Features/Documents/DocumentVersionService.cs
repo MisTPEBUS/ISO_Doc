@@ -2,6 +2,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
+using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Documents.Dtos;
 using IsoDocument.Api.Security;
 using IsoDocument.Api.Storage;
@@ -16,6 +17,7 @@ public sealed class DocumentVersionService(
     StorageKeyBuilder storageKeyBuilder,
     ICurrentUser currentUser,
     IValidator<CreateDocumentVersionRequest> validator,
+    IOperationAuditLogService auditLogService,
     TimeProvider timeProvider) : IDocumentVersionService
 {
     private static readonly byte[] PdfMagicBytes = "%PDF-"u8.ToArray();
@@ -125,6 +127,23 @@ public sealed class DocumentVersionService(
             };
             versionStore.Add(version);
             await versionStore.SaveChangesAsync(cancellationToken);
+            await auditLogService.WriteAsync(
+                new AuditLogWriteRequest(
+                    document.CompanyId,
+                    AuditActions.PublishDocumentVersion,
+                    AuditResourceTypes.DocumentVersion,
+                    version.Id,
+                    new
+                    {
+                        document_id = document.Id,
+                        version = version.Version,
+                        change_type = request.ChangeType,
+                        effective_date = version.EffectiveDate,
+                        previous_published_version_ids = previousPublished
+                            .Select(previous => previous.Id)
+                            .ToArray()
+                    }),
+                cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
             return Result<DocumentVersionResponse>.Success(new(

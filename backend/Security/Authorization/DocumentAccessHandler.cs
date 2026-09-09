@@ -1,21 +1,49 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 
 namespace IsoDocument.Api.Security.Authorization;
 
-public sealed class DocumentAccessHandler
+public sealed class DocumentAccessHandler(IDocumentAccessStore documentAccessStore)
     : AuthorizationHandler<DocumentAccessRequirement, DocumentAccessResource>
 {
-    protected override Task HandleRequirementAsync(
+    protected override async Task HandleRequirementAsync(
         AuthorizationHandlerContext context,
         DocumentAccessRequirement requirement,
         DocumentAccessResource resource)
     {
-        _ = resource;
+        var role = Enum.TryParse<UserRole>(
+            context.User.FindFirstValue(ClaimTypes.Role),
+            ignoreCase: false,
+            out var parsedRole)
+            ? parsedRole
+            : (UserRole?)null;
+        var companyId = Guid.TryParse(
+            context.User.FindFirstValue(AuthClaimTypes.CompanyId),
+            out var parsedCompanyId)
+            ? parsedCompanyId
+            : (Guid?)null;
+        var documentCompanyId = await documentAccessStore.FindDocumentCompanyIdAsync(
+            resource.DocumentId, CancellationToken.None);
 
-        // TODO(milestone Documents): Query document_dept_permissions for resource.DocumentId
-        // and the authenticated user's dept_id claim. Succeed only when that department has
-        // access to the document (with the role/scope behavior defined by SPEC §5 Permission).
-        // Keeping DocumentAccessResource as the stable input means callers will not change.
-        return Task.CompletedTask;
+        if (documentCompanyId.HasValue
+            && CompanyAccessRules.CanAccess(role, companyId, documentCompanyId.Value))
+        {
+            context.Succeed(requirement);
+            return;
+        }
+
+        if (role is not UserRole.USER
+            || !Guid.TryParse(
+                context.User.FindFirstValue(AuthClaimTypes.DeptId),
+                out var deptId))
+        {
+            return;
+        }
+
+        if (await documentAccessStore.DeptHasAccessAsync(
+            resource.DocumentId, deptId, CancellationToken.None))
+        {
+            context.Succeed(requirement);
+        }
     }
 }

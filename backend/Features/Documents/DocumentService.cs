@@ -2,6 +2,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
+using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Documents.Dtos;
 using IsoDocument.Api.Security;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +15,7 @@ public sealed class DocumentService(
     ICurrentUser currentUser,
     IValidator<CreateDocumentRequest> createValidator,
     IValidator<UpdateDocumentRequest> updateValidator,
+    IOperationAuditLogService auditLogService,
     TimeProvider timeProvider) : IDocumentService
 {
     private const int DefaultPage = 1;
@@ -97,6 +99,15 @@ public sealed class DocumentService(
             return DuplicateDocumentNo<DocumentResponse>();
         }
 
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                document.CompanyId,
+                AuditActions.CreateDocument,
+                AuditResourceTypes.Document,
+                document.Id,
+                new { new_value = ToAuditValue(document) }),
+            cancellationToken);
+
         return Result<DocumentResponse>.Success(ToResponse(document));
     }
 
@@ -156,9 +167,22 @@ public sealed class DocumentService(
                 "You do not have permission to update this document.");
         }
 
+        var oldValue = ToAuditValue(document);
         document.Name = request.Name!.Trim();
         document.UpdatedAt = timeProvider.GetUtcNow();
         await documentStore.SaveChangesAsync(cancellationToken);
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                document.CompanyId,
+                AuditActions.UpdateDocument,
+                AuditResourceTypes.Document,
+                document.Id,
+                new
+                {
+                    old_value = oldValue,
+                    new_value = ToAuditValue(document)
+                }),
+            cancellationToken);
         return Result<DocumentResponse>.Success(ToResponse(document));
     }
 
@@ -175,9 +199,22 @@ public sealed class DocumentService(
             return Result.Forbidden("You do not have permission to deactivate this document.");
         }
 
+        var wasActive = document.IsActive;
         document.IsActive = false;
         document.UpdatedAt = timeProvider.GetUtcNow();
         await documentStore.SaveChangesAsync(cancellationToken);
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                document.CompanyId,
+                AuditActions.DeleteDocument,
+                AuditResourceTypes.Document,
+                document.Id,
+                new
+                {
+                    old_value = new { is_active = wasActive },
+                    new_value = new { is_active = document.IsActive }
+                }),
+            cancellationToken);
         return Result.Success();
     }
 
@@ -203,6 +240,13 @@ public sealed class DocumentService(
         document.CreatedBy,
         document.CreatedAt,
         document.UpdatedAt);
+
+    private static object ToAuditValue(Document document) => new
+    {
+        document_no = document.DocumentNo,
+        name = document.Name,
+        is_active = document.IsActive
+    };
 
     private static Dictionary<string, string[]> ToErrors(ValidationResult validation) =>
         validation.Errors

@@ -2,6 +2,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
+using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Documents.Dtos;
 using IsoDocument.Api.Security;
 using IsoDocument.Api.Storage;
@@ -16,6 +17,7 @@ public sealed class AttachmentService(
     StorageKeyBuilder storageKeyBuilder,
     ICurrentUser currentUser,
     IValidator<CreateAttachmentsRequest> validator,
+    IOperationAuditLogService auditLogService,
     TimeProvider timeProvider) : IAttachmentService
 {
     public async Task<Result<IReadOnlyList<AttachmentResponse>>> ListAsync(
@@ -135,6 +137,27 @@ public sealed class AttachmentService(
 
             attachmentStore.AddRange(attachments);
             await attachmentStore.SaveChangesAsync(cancellationToken);
+            foreach (var attachment in attachments)
+            {
+                await auditLogService.WriteAsync(
+                    new AuditLogWriteRequest(
+                        context.Document.CompanyId,
+                        attachment.FileKey is null
+                            ? AuditActions.CreateAttachmentMetadata
+                            : AuditActions.UploadAttachment,
+                        AuditResourceTypes.Attachment,
+                        attachment.Id,
+                        new
+                        {
+                            document_version_id = versionId,
+                            attachment_no = attachment.AttachmentNo,
+                            name = attachment.Name,
+                            original_file_name = attachment.OriginalFileName,
+                            has_file = attachment.FileKey is not null
+                        }),
+                    cancellationToken);
+            }
+
             await transaction.CommitAsync(cancellationToken);
 
             return Result<CreateAttachmentsResponse>.Success(new(
@@ -179,6 +202,23 @@ public sealed class AttachmentService(
 
         attachmentStore.Remove(context.Attachment);
         await attachmentStore.SaveChangesAsync(cancellationToken);
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                context.CompanyId,
+                AuditActions.DeleteAttachment,
+                AuditResourceTypes.Attachment,
+                context.Attachment.Id,
+                new
+                {
+                    old_value = new
+                    {
+                        document_version_id = context.Attachment.DocumentVersionId,
+                        attachment_no = context.Attachment.AttachmentNo,
+                        name = context.Attachment.Name,
+                        original_file_name = context.Attachment.OriginalFileName
+                    }
+                }),
+            cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return Result.Success();
     }

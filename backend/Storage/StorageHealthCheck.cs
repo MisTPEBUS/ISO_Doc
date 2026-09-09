@@ -13,9 +13,12 @@ public sealed class StorageHealthCheck(StoragePathGuard pathGuard) : IHealthChec
             return HealthCheckResult.Unhealthy("The configured storage root does not exist.");
         }
 
-        var probePath = Path.Combine(pathGuard.RootPath, $".storage-health-{Guid.NewGuid():N}");
+        var stagingPath = pathGuard.ResolveInternalPath("staging");
+        var probePath = pathGuard.ResolveInternalPath(
+            $"staging/.storage-health-{Guid.NewGuid():N}");
         try
         {
+            Directory.CreateDirectory(stagingPath);
             await using var probe = new FileStream(
                 probePath,
                 FileMode.CreateNew,
