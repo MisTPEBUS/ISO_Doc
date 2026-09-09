@@ -1,0 +1,35 @@
+# ---------- Build output ----------
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+
+# ---------- Secrets / local config ----------
+.env
+.env.*
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.local.json
+secrets.json
+*.pem
+*.key
+
+# ---------- Runtime storage / logs ----------
+storage-data/
+logs/
+*.log
+
+# ---------- VCS / IDE / docs ----------
+.git
+.gitignore
+.dockerignore
+.vs/
+.vscode/
+.idea/
+*.md
+docs/
+
+# ---------- Local db ----------
+*.db
+*.db-shm
+*.db-wal

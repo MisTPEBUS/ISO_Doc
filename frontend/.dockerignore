@@ -1,0 +1,28 @@
+# ---------- Dependencies / build output ----------
+node_modules/
+dist/
+dist-ssr/
+build/
+.vite/
+.cache/
+coverage/
+
+# ---------- Secrets ----------
+.env
+.env.*
+
+# ---------- Logs ----------
+logs/
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- VCS / IDE / docs ----------
+.git
+.gitignore
+.dockerignore
+.vscode/
+.idea/
+*.md
+docs/

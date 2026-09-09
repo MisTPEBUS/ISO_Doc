@@ -1,0 +1,71 @@
+services:
+  development:
+    build:
+      context: .
+    image: iso-postgres:16
+    container_name: iso-postgres-development
+    environment:
+      POSTGRES_DB: ${DEVELOPMENT_DATABASE}
+      POSTGRES_USER: ${DEVELOPMENT_USERNAME}
+      POSTGRES_PASSWORD: ${DEVELOPMENT_PASSWORD}
+    ports:
+      - "${DEVELOPMENT_PORT}:5432"
+    volumes:
+      - development_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  test:
+    build:
+      context: .
+    image: iso-postgres:16
+    container_name: iso-postgres-test
+    environment:
+      POSTGRES_DB: ${TEST_DATABASE}
+      POSTGRES_USER: ${TEST_USERNAME}
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "${TEST_PORT}:5432"
+    volumes:
+      - test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  production:
+    build:
+      context: .
+    image: iso-postgres:16
+    container_name: iso-postgres-production
+    environment:
+      POSTGRES_DB: ${PRODUCTION_DATABASE}
+      POSTGRES_USER: ${PRODUCTION_USERNAME}
+      POSTGRES_PASSWORD: ${PRODUCTION_PASSWORD}
+    ports:
+      - "${PRODUCTION_PORT}:5432"
+    volumes:
+      - production_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  development_data:
+    name: iso_postgres_development_data
+  test_data:
+    name: iso_postgres_test_data
+  production_data:
+    name: iso_postgres_production_data

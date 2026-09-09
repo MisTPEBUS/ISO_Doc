@@ -1,0 +1,42 @@
+# ---------- Secrets / environment ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+
+# ---------- 內部文件 / AI 提示詞（不公開）----------
+codex_prompts.md
+SPEC.md
+
+# ---------- Docker runtime data ----------
+data/
+*.tar
+
+# ---------- .NET build artifacts (backend + tests) ----------
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+project.lock.json
+project.assets.json
+*.nuget.props
+*.nuget.targets
+
+# ---------- Logs ----------
+logs/
+*.log
+
+# ---------- IDE / editor ----------
+.vs/
+.vscode/
+.idea/
+*.swp
+*.DS_Store
+Thumbs.db
+
+# ---------- OS ----------
+desktop.ini

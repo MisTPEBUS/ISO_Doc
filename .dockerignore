@@ -1,0 +1,16 @@
+# 這個 build context 只用來建 postgres 映像，其餘一律排除
+.git
+.gitignore
+.dockerignore
+.env
+.env.*
+compose.yaml
+*.md
+*.tar
+data/
+
+# 應用程式原始碼不屬於 postgres 映像
+backend/
+frontend/
+tests/
+.config/

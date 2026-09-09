@@ -1,0 +1,42 @@
+# ---------- .NET build output ----------
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+*.userprefs
+*.cache
+project.assets.json
+project.nuget.cache
+*.nuget.dgspec.json
+*.nuget.g.props
+*.nuget.g.targets
+
+# ---------- Local config / secrets ----------
+# 本機專用設定與正式環境設定不進版控（含連線字串、帳密）
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.local.json
+appsettings.local.json
+*.env
+.env
+secrets.json
+
+# ---------- Runtime storage (使用者上傳的文件) ----------
+storage-data/*
+!storage-data/.gitkeep
+
+# ---------- Logs ----------
+logs/
+*.log
+
+# ---------- EF / SQLite local db ----------
+*.db
+*.db-shm
+*.db-wal
+
+# ---------- IDE ----------
+.vs/
+.vscode/
+.idea/

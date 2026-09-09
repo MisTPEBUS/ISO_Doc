@@ -1,0 +1,129 @@
+using FluentValidation;
+using IsoDocument.Api.Common;
+using IsoDocument.Api.Data;
+using IsoDocument.Api.Data.Entities;
+using IsoDocument.Api.Features.Auth;
+using IsoDocument.Api.Features.Auth.Dtos;
+using IsoDocument.Api.Features.Auth.Validators;
+using IsoDocument.Api.Features.Health;
+using IsoDocument.Api.Security;
+using IsoDocument.Api.Security.Authorization;
+using IsoDocument.Api.Storage;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Serilog;
+using Serilog.Formatting.Compact;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((context, services, loggerConfiguration) =>
+    loggerConfiguration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .WriteTo.Console(new RenderedCompactJsonFormatter()));
+
+// Add services to the container.
+// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+builder.Services.AddOpenApi();
+builder.Services.AddProblemDetails();
+builder.Services.AddControllersWithViews(options =>
+    options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute()));
+builder.Services.AddAntiforgery(options =>
+{
+        options.HeaderName = "X-XSRF-TOKEN";
+    options.Cookie.Name = "isodocs.antiforgery";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+});
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "isodocs.auth";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = true;
+        options.EventsType = typeof(ApiCookieAuthenticationEvents);
+    });
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(Policies.CompanyAdminScope, policy =>
+        policy.RequireAuthenticatedUser()
+            .RequireRole(nameof(UserRole.COMPANY_ADMIN), nameof(UserRole.SYSTEM_ADMIN))
+            .AddRequirements(new CompanyScopeRequirement()));
+    options.AddPolicy(Policies.DocumentAccess, policy =>
+        policy.RequireAuthenticatedUser().AddRequirements(new DocumentAccessRequirement()));
+});
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ApiCookieAuthenticationEvents>();
+builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+builder.Services.AddScoped<IAuthSession, CookieAuthSession>();
+builder.Services.AddScoped<IAuthorizationHandler, CompanyScopeHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, DocumentAccessHandler>();
+builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
+builder.Services.AddScoped<IValidator<ChangePasswordRequest>, ChangePasswordRequestValidator>();
+builder.Services.AddOptions<StorageOptions>()
+    .BindConfiguration(StorageOptions.SectionName)
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.RootPath),
+        "Storage:RootPath must be configured.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<StoragePathGuard>();
+builder.Services.AddSingleton<StorageKeyBuilder>();
+builder.Services.AddSingleton<IDocumentStorage, LocalFileStorage>();
+builder.Services.AddHealthChecks()
+    .AddCheck<StorageHealthCheck>("storage", tags: ["startup"]);
+
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' was not found.");
+
+builder.Services.AddDbContext<IsoDbContext>(options =>
+    options.UseNpgsql(connectionString));
+builder.Services.AddScoped<IAuthUserStore, EfAuthUserStore>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IHealthService, HealthService>();
+
+var app = builder.Build();
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseStatusCodePages();
+app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapControllers();
+
+var startupHealth = app.Services
+    .GetRequiredService<HealthCheckService>()
+    .CheckHealthAsync(registration => registration.Tags.Contains("startup"))
+    .GetAwaiter()
+    .GetResult();
+if (startupHealth.Status != HealthStatus.Healthy)
+{
+    throw new InvalidOperationException("Storage health check failed during startup.");
+}
+
+app.Run();
+
+record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
+{
+    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+}
+
+public partial class Program
+{
+}

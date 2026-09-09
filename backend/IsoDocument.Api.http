@@ -1,0 +1,6 @@
+@IsoDocument.Api_HostAddress = http://localhost:5170
+
+GET {{IsoDocument.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
