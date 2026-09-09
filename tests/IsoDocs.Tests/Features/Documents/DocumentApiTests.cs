@@ -4,10 +4,12 @@ using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
 using IsoDocument.Api.Features.Auth;
 using IsoDocument.Api.Features.Auth.Dtos;
+using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Documents;
 using IsoDocument.Api.Features.Documents.Dtos;
 using IsoDocument.Api.Security;
 using IsoDocs.Tests.Features.Auth;
+using IsoDocs.Tests.Features.AuditLogs;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
@@ -45,6 +47,7 @@ public sealed class DocumentApiTests
         Assert.True(body.IsActive);
         Assert.Equal(factory.AuthStore.User.Id, body.CreatedBy);
         Assert.Contains(factory.DocumentStore.Documents, document => document.Id == body.Id);
+        AssertAudit(factory.Audit, AuditActions.CreateDocument, body.Id);
     }
 
     [Fact]
@@ -152,6 +155,7 @@ public sealed class DocumentApiTests
         Assert.NotNull(body);
         Assert.Equal("Updated Manual", body.Name);
         Assert.Equal("ISO-001", body.DocumentNo);
+        AssertAudit(factory.Audit, AuditActions.UpdateDocument, document.Id);
     }
 
     [Fact]
@@ -196,6 +200,7 @@ public sealed class DocumentApiTests
         Assert.NotNull(body);
         Assert.False(body.IsActive);
         Assert.Contains(factory.DocumentStore.Documents, candidate => candidate.Id == document.Id);
+        AssertAudit(factory.Audit, AuditActions.DeleteDocument, document.Id);
     }
 
     [Fact]
@@ -211,6 +216,18 @@ public sealed class DocumentApiTests
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    private static void AssertAudit(
+        RecordingOperationAuditLogService audit,
+        string action,
+        Guid resourceId)
+    {
+        var entry = Assert.Single(audit.Entries);
+        Assert.Equal(action, entry.Action);
+        Assert.Equal(AuditResourceTypes.Document, entry.ResourceType);
+        Assert.Equal(resourceId, entry.ResourceId);
+        Assert.NotNull(entry.Detail);
     }
 
     private static async Task LoginAsync(HttpClient client)
@@ -257,12 +274,14 @@ internal sealed class DocumentWebApplicationFactory : WebApplicationFactory<Prog
         CompanyA = AuthStore.User.CompanyId;
         CompanyB = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         DocumentStore = new FakeDocumentStore([CompanyA, CompanyB]);
+        Audit = new RecordingOperationAuditLogService();
     }
 
     public Guid CompanyA { get; }
     public Guid CompanyB { get; }
     public FakeAuthUserStore AuthStore { get; }
     public FakeDocumentStore DocumentStore { get; }
+    public RecordingOperationAuditLogService Audit { get; }
 
     public HttpClient CreateSecureClient() => CreateClient(new WebApplicationFactoryClientOptions
     {
@@ -282,6 +301,8 @@ internal sealed class DocumentWebApplicationFactory : WebApplicationFactory<Prog
             services.AddSingleton<IAuthUserStore>(AuthStore);
             services.RemoveAll<IDocumentStore>();
             services.AddSingleton<IDocumentStore>(DocumentStore);
+            services.RemoveAll<IOperationAuditLogService>();
+            services.AddSingleton<IOperationAuditLogService>(Audit);
         });
     }
 }

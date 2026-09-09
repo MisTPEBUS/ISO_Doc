@@ -4,10 +4,12 @@ using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
 using IsoDocument.Api.Features.Auth;
 using IsoDocument.Api.Features.Auth.Dtos;
+using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Users;
 using IsoDocument.Api.Features.Users.Dtos;
 using IsoDocument.Api.Security;
 using IsoDocs.Tests.Features.Auth;
+using IsoDocs.Tests.Features.AuditLogs;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
@@ -51,6 +53,7 @@ public sealed class UserApiTests
         Assert.NotEqual(
             PasswordVerificationResult.Failed,
             new PasswordHasher<User>().VerifyHashedPassword(stored, stored.PasswordDigest, "1"));
+        AssertAudit(factory.Audit, AuditActions.CreateUser, body.Id);
     }
 
     [Fact]
@@ -124,6 +127,7 @@ public sealed class UserApiTests
         Assert.Contains(factory.UserStore.Users, candidate => candidate.Id == user.Id);
         Assert.DoesNotContain(defaultList!.Items, candidate => candidate.Id == user.Id);
         Assert.Contains(fullList!.Items, candidate => candidate.Id == user.Id && !candidate.IsActive);
+        AssertAudit(factory.Audit, AuditActions.DeleteUser, user.Id);
     }
 
     [Fact]
@@ -149,6 +153,7 @@ public sealed class UserApiTests
             PasswordVerificationResult.Failed,
             new PasswordHasher<User>().VerifyHashedPassword(
                 user, user.PasswordDigest, body.TemporaryPassword));
+        AssertAudit(factory.Audit, AuditActions.ResetUserPassword, user.Id);
     }
 
     [Fact]
@@ -175,6 +180,7 @@ public sealed class UserApiTests
         Assert.Equal("Updated Name", body.Name);
         Assert.Equal("COMPANY_ADMIN", body.Role);
         Assert.False(body.NotifyEmailEnabled);
+        AssertAudit(factory.Audit, AuditActions.UpdateUser, user.Id);
     }
 
     [Fact]
@@ -241,6 +247,18 @@ public sealed class UserApiTests
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    private static void AssertAudit(
+        RecordingOperationAuditLogService audit,
+        string action,
+        Guid resourceId)
+    {
+        var entry = Assert.Single(audit.Entries);
+        Assert.Equal(action, entry.Action);
+        Assert.Equal(AuditResourceTypes.User, entry.ResourceType);
+        Assert.Equal(resourceId, entry.ResourceId);
+        Assert.NotNull(entry.Detail);
+    }
+
     private static async Task LoginAsync(HttpClient client)
     {
         var response = await client.PostAsJsonAsync(
@@ -289,6 +307,7 @@ internal sealed class UserWebApplicationFactory : WebApplicationFactory<Program>
         UserStore = new FakeUserStore(
             [CompanyA, CompanyB],
             new Dictionary<Guid, Guid> { [DeptA] = CompanyA, [DeptB] = CompanyB });
+        Audit = new RecordingOperationAuditLogService();
     }
 
     public Guid CompanyA { get; }
@@ -297,6 +316,7 @@ internal sealed class UserWebApplicationFactory : WebApplicationFactory<Program>
     public Guid DeptB { get; }
     public FakeAuthUserStore AuthStore { get; }
     public FakeUserStore UserStore { get; }
+    public RecordingOperationAuditLogService Audit { get; }
 
     public HttpClient CreateSecureClient() => CreateClient(new WebApplicationFactoryClientOptions
     {
@@ -316,6 +336,8 @@ internal sealed class UserWebApplicationFactory : WebApplicationFactory<Program>
             services.AddSingleton<IAuthUserStore>(AuthStore);
             services.RemoveAll<IUserStore>();
             services.AddSingleton<IUserStore>(UserStore);
+            services.RemoveAll<IOperationAuditLogService>();
+            services.AddSingleton<IOperationAuditLogService>(Audit);
         });
     }
 }

@@ -4,10 +4,12 @@ using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
 using IsoDocument.Api.Features.Auth;
 using IsoDocument.Api.Features.Auth.Dtos;
+using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Depts;
 using IsoDocument.Api.Features.Depts.Dtos;
 using IsoDocument.Api.Security;
 using IsoDocs.Tests.Features.Auth;
+using IsoDocs.Tests.Features.AuditLogs;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
@@ -44,6 +46,7 @@ public sealed class DeptApiTests
         Assert.Equal("Quality", body.Name);
         Assert.Equal(10, body.Seq);
         Assert.Contains(factory.DeptStore.Depts, dept => dept.Id == body.Id);
+        AssertAudit(factory.Audit, AuditActions.CreateDept, AuditResourceTypes.Dept, body.Id);
     }
 
     [Fact]
@@ -112,6 +115,7 @@ public sealed class DeptApiTests
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.DoesNotContain(factory.DeptStore.Depts, candidate => candidate.Id == dept.Id);
+        AssertAudit(factory.Audit, AuditActions.DeleteDept, AuditResourceTypes.Dept, dept.Id);
     }
 
     [Fact]
@@ -212,6 +216,7 @@ public sealed class DeptApiTests
         Assert.NotNull(body);
         Assert.Equal("Production", body.Name);
         Assert.Equal(30, body.Seq);
+        AssertAudit(factory.Audit, AuditActions.UpdateDept, AuditResourceTypes.Dept, dept.Id);
     }
 
     [Fact]
@@ -233,6 +238,19 @@ public sealed class DeptApiTests
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("Operations", dept.Name);
+    }
+
+    private static void AssertAudit(
+        RecordingOperationAuditLogService audit,
+        string action,
+        string resourceType,
+        Guid resourceId)
+    {
+        var entry = Assert.Single(audit.Entries);
+        Assert.Equal(action, entry.Action);
+        Assert.Equal(resourceType, entry.ResourceType);
+        Assert.Equal(resourceId, entry.ResourceId);
+        Assert.NotNull(entry.Detail);
     }
 
     private static async Task LoginAsync(HttpClient client)
@@ -280,6 +298,7 @@ internal sealed class DeptWebApplicationFactory : WebApplicationFactory<Program>
         CompanyA = AuthStore.User.CompanyId;
         CompanyB = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         DeptStore = new FakeDeptStore([CompanyA, CompanyB]);
+        Audit = new RecordingOperationAuditLogService();
     }
 
     public Guid CompanyA { get; }
@@ -289,6 +308,8 @@ internal sealed class DeptWebApplicationFactory : WebApplicationFactory<Program>
     public FakeAuthUserStore AuthStore { get; }
 
     public FakeDeptStore DeptStore { get; }
+
+    public RecordingOperationAuditLogService Audit { get; }
 
     public HttpClient CreateSecureClient() => CreateClient(new WebApplicationFactoryClientOptions
     {
@@ -308,6 +329,8 @@ internal sealed class DeptWebApplicationFactory : WebApplicationFactory<Program>
             services.AddSingleton<IAuthUserStore>(AuthStore);
             services.RemoveAll<IDeptStore>();
             services.AddSingleton<IDeptStore>(DeptStore);
+            services.RemoveAll<IOperationAuditLogService>();
+            services.AddSingleton<IOperationAuditLogService>(Audit);
         });
     }
 }

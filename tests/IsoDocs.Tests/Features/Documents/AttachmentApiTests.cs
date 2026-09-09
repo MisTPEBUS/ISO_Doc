@@ -4,11 +4,13 @@ using System.Net.Http.Json;
 using IsoDocument.Api.Data.Entities;
 using IsoDocument.Api.Features.Auth;
 using IsoDocument.Api.Features.Auth.Dtos;
+using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Documents;
 using IsoDocument.Api.Features.Documents.Dtos;
 using IsoDocument.Api.Security;
 using IsoDocument.Api.Storage;
 using IsoDocs.Tests.Features.Auth;
+using IsoDocs.Tests.Features.AuditLogs;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
@@ -50,6 +52,20 @@ public sealed class AttachmentApiTests
         var objectKey = Assert.Single(factory.Storage.WrittenKeys);
         Assert.Contains("/v1.0/att/01_", objectKey, StringComparison.Ordinal);
         Assert.EndsWith("_form.pdf", objectKey, StringComparison.Ordinal);
+        Assert.Collection(
+            factory.Audit.Entries,
+            entry =>
+            {
+                Assert.Equal(AuditActions.UploadAttachment, entry.Action);
+                Assert.Equal(AuditResourceTypes.Attachment, entry.ResourceType);
+                Assert.NotNull(entry.Detail);
+            },
+            entry =>
+            {
+                Assert.Equal(AuditActions.CreateAttachmentMetadata, entry.Action);
+                Assert.Equal(AuditResourceTypes.Attachment, entry.ResourceType);
+                Assert.NotNull(entry.Detail);
+            });
     }
 
     [Fact]
@@ -120,6 +136,11 @@ public sealed class AttachmentApiTests
         Assert.DoesNotContain(factory.AttachmentStore.Attachments, item => item.Id == attachment.Id);
         Assert.Contains(attachment.FileKey!, factory.Storage.TrashedKeys);
         Assert.True(factory.AttachmentStore.TransactionCommitted);
+        var audit = Assert.Single(factory.Audit.Entries);
+        Assert.Equal(AuditActions.DeleteAttachment, audit.Action);
+        Assert.Equal(AuditResourceTypes.Attachment, audit.ResourceType);
+        Assert.Equal(attachment.Id, audit.ResourceId);
+        Assert.NotNull(audit.Detail);
     }
 
     [Fact]
@@ -254,6 +275,7 @@ internal sealed class AttachmentWebApplicationFactory : WebApplicationFactory<Pr
         };
         AttachmentStore = new FakeAttachmentStore(Document, Version, "COMPANYA", AuthStore.User.Id);
         Storage = new FakeDocumentStorage();
+        Audit = new RecordingOperationAuditLogService();
     }
 
     public FakeAuthUserStore AuthStore { get; }
@@ -261,6 +283,7 @@ internal sealed class AttachmentWebApplicationFactory : WebApplicationFactory<Pr
     public DocumentVersion Version { get; }
     public FakeAttachmentStore AttachmentStore { get; }
     public FakeDocumentStorage Storage { get; }
+    public RecordingOperationAuditLogService Audit { get; }
 
     public HttpClient CreateSecureClient() => CreateClient(new WebApplicationFactoryClientOptions
     {
@@ -282,6 +305,8 @@ internal sealed class AttachmentWebApplicationFactory : WebApplicationFactory<Pr
             services.AddSingleton<IAttachmentStore>(AttachmentStore);
             services.RemoveAll<IDocumentStorage>();
             services.AddSingleton<IDocumentStorage>(Storage);
+            services.RemoveAll<IOperationAuditLogService>();
+            services.AddSingleton<IOperationAuditLogService>(Audit);
         });
     }
 }

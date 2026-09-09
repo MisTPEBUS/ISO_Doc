@@ -4,11 +4,13 @@ using System.Net.Http.Json;
 using IsoDocument.Api.Data.Entities;
 using IsoDocument.Api.Features.Auth;
 using IsoDocument.Api.Features.Auth.Dtos;
+using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Documents;
 using IsoDocument.Api.Features.Documents.Dtos;
 using IsoDocument.Api.Security;
 using IsoDocument.Api.Storage;
 using IsoDocs.Tests.Features.Auth;
+using IsoDocs.Tests.Features.AuditLogs;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -49,6 +51,11 @@ public sealed class DocumentVersionApiTests
         Assert.Equal(UtcToday(), created.PublishDate);
         Assert.Equal(effectiveDate, created.EffectiveDate);
         Assert.Single(factory.Storage.WrittenKeys);
+        var audit = Assert.Single(factory.Audit.Entries);
+        Assert.Equal(AuditActions.PublishDocumentVersion, audit.Action);
+        Assert.Equal(AuditResourceTypes.DocumentVersion, audit.ResourceType);
+        Assert.Equal(created.Id, audit.ResourceId);
+        Assert.NotNull(audit.Detail);
     }
 
     [Fact]
@@ -129,6 +136,7 @@ public sealed class DocumentVersionApiTests
             factory.VersionStore.Versions,
             version => version.Status == "PUBLISHED");
         Assert.Single(factory.Storage.TrashedKeys);
+        Assert.Empty(factory.Audit.Entries);
     }
 
     private static byte[] ValidPdf() => "%PDF-1.7\nmock"u8.ToArray();
@@ -202,12 +210,14 @@ internal sealed class DocumentVersionWebApplicationFactory : WebApplicationFacto
         };
         VersionStore = new FakeDocumentVersionStore(Document, "COMPANYA");
         Storage = new FakeDocumentStorage();
+        Audit = new RecordingOperationAuditLogService();
     }
 
     public FakeAuthUserStore AuthStore { get; }
     public Document Document { get; }
     public FakeDocumentVersionStore VersionStore { get; }
     public FakeDocumentStorage Storage { get; }
+    public RecordingOperationAuditLogService Audit { get; }
 
     public HttpClient CreateSecureClient() => CreateClient(new WebApplicationFactoryClientOptions
     {
@@ -229,6 +239,8 @@ internal sealed class DocumentVersionWebApplicationFactory : WebApplicationFacto
             services.AddSingleton<IDocumentVersionStore>(VersionStore);
             services.RemoveAll<IDocumentStorage>();
             services.AddSingleton<IDocumentStorage>(Storage);
+            services.RemoveAll<IOperationAuditLogService>();
+            services.AddSingleton<IOperationAuditLogService>(Audit);
         });
     }
 }
