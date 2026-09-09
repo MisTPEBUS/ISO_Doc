@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ISO 文件管理系統｜管理介面</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./assets/styles.css" />
+</head>
+<body data-page="admin">
+  <iso-topbar mode="admin"></iso-topbar>
+
+  <div class="admin-shell">
+    <admin-sidebar></admin-sidebar>
+
+    <main class="admin-main">
+      <section class="page-heading" aria-labelledby="admin-title">
+        <div>
+          <p class="eyebrow">文件管理</p>
+          <h1 id="admin-title">ISO 文件維護</h1>
+          <p>管理文件版本、生效狀態、附件與發行資訊。</p>
+        </div>
+        <button type="button" class="btn btn-primary" id="create-document">新增文件</button>
+      </section>
+
+      <section class="dashboard-strip" aria-label="文件摘要">
+        <article class="metric">
+          <span>有效文件</span>
+          <strong>128</strong>
+        </article>
+        <article class="metric">
+          <span>待生效</span>
+          <strong>7</strong>
+        </article>
+        <article class="metric">
+          <span>即期換版</span>
+          <strong>4</strong>
+        </article>
+        <article class="metric">
+          <span>已作廢</span>
+          <strong>21</strong>
+        </article>
+      </section>
+
+      <section class="document-workspace" aria-label="文件維護清單">
+        <document-filter-bar admin></document-filter-bar>
+        <document-table admin></document-table>
+        <pagination-bar></pagination-bar>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="./assets/components.js"></script>
+  <script src="./assets/app.js"></script>
+</body>
+</html>

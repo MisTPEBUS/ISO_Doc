@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>首都集團 ISO 文件管理系統</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./assets/styles.css" />
+</head>
+<body data-page="public">
+  <iso-topbar mode="public"></iso-topbar>
+
+  <main class="public-main">
+    <section class="page-heading" aria-labelledby="page-title">
+      <div>
+        <h1 id="page-title">ISO 文件查閱</h1>
+        <p>依文件編號、名稱、公司或狀態查詢目前可檢視文件。</p>
+      </div>
+      <a class="text-link" href="./admin.html">管理介面</a>
+    </section>
+
+    <section class="document-workspace" aria-label="文件查閱區">
+      <document-filter-bar></document-filter-bar>
+      <document-table></document-table>
+      <pagination-bar></pagination-bar>
+    </section>
+  </main>
+
+  <script src="./assets/components.js"></script>
+  <script src="./assets/app.js"></script>
+</body>
+</html>
