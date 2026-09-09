@@ -9,6 +9,9 @@ using IsoDocument.Api.Features.Depts;
 using IsoDocument.Api.Features.Depts.Dtos;
 using IsoDocument.Api.Features.Depts.Validators;
 using IsoDocument.Api.Features.Health;
+using IsoDocument.Api.Features.Users;
+using IsoDocument.Api.Features.Users.Dtos;
+using IsoDocument.Api.Features.Users.Validators;
 using IsoDocument.Api.Security;
 using IsoDocument.Api.Security.Authorization;
 using IsoDocument.Api.Storage;
@@ -75,6 +78,8 @@ builder.Services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
 builder.Services.AddScoped<IValidator<ChangePasswordRequest>, ChangePasswordRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateDeptRequest>, CreateDeptRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateDeptRequest>, UpdateDeptRequestValidator>();
+builder.Services.AddScoped<IValidator<CreateUserRequest>, CreateUserRequestValidator>();
+builder.Services.AddScoped<IValidator<UpdateUserRequest>, UpdateUserRequestValidator>();
 builder.Services.AddOptions<StorageOptions>()
     .BindConfiguration(StorageOptions.SectionName)
     .Validate(
@@ -97,6 +102,8 @@ builder.Services.AddScoped<IAuthUserStore, EfAuthUserStore>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDeptStore, EfDeptStore>();
 builder.Services.AddScoped<IDeptService, DeptService>();
+builder.Services.AddScoped<IUserStore, EfUserStore>();
+builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IHealthService, HealthService>();
 
 var app = builder.Build();

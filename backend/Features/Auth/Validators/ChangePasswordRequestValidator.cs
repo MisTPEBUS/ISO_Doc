@@ -12,10 +12,8 @@ public sealed class ChangePasswordRequestValidator : AbstractValidator<ChangePas
             .WithMessage("Current password is required.")
             .OverridePropertyName("currentPassword");
         RuleFor(request => request.NewPassword)
-            .NotEmpty()
+            .Must(value => !string.IsNullOrWhiteSpace(value))
             .WithMessage("New password is required.")
-            .MinimumLength(8)
-            .WithMessage("New password must be at least 8 characters.")
             .OverridePropertyName("newPassword");
         RuleFor(request => request.NewPasswordConfirmation)
             .NotEmpty()
