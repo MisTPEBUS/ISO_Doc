@@ -6,6 +6,15 @@ import { fileURLToPath, URL } from "node:url";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: "/ISO/",
+  server: {
+    proxy: {
+      "/api": {
+        target: "https://localhost:7167",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
