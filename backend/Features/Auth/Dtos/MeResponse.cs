@@ -6,5 +6,7 @@ public sealed record MeResponse(
     string Name,
     string Role,
     Guid CompanyId,
+    string CompanyName,
     Guid DeptId,
+    string DeptName,
     bool MustChangePassword);
