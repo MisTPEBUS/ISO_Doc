@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-subtle: #eff6ff;
+  --color-primary-on-shell: #60a5fa;
+  --color-on-primary: #ffffff;
+
+  --color-shell-900: #0f172a;
+  --color-shell-800: #1e293b;
+  --color-shell-700: #334155;
+  --color-on-shell: #ffffff;
+
+  --color-canvas: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-header: #f1f5f9;
+  --color-surface-zebra: #f8fafc;
+  --color-surface-hover: #eff6ff;
+
+  --color-ink: #0f172a;
+  --color-ink-muted: #64748b;
+  --color-ink-faint: #94a3b8;
+  --color-ink-disabled: #cbd5e1;
+
+  --color-state-active: #059669;
+  --color-state-active-subtle: #ecfdf5;
+  --color-state-review: #2563eb;
+  --color-state-review-subtle: #eff6ff;
+  --color-state-expiring: #d97706;
+  --color-state-expiring-subtle: #fffbeb;
+  --color-state-obsolete: #64748b;
+  --color-state-obsolete-subtle: #f1f5f9;
+  --color-state-danger: #dc2626;
+  --color-state-danger-subtle: #fef2f2;
+
+  --color-line: #e2e8f0;
+  --color-line-strong: #cbd5e1;
+
+  --font-sans: "Inter", "Noto Sans TC", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --text-page-title: 1.25rem;
+  --text-page-title--line-height: 1.4;
+  --text-page-title--font-weight: 600;
+  --text-page-title--letter-spacing: -0.2px;
+  --text-section-label: 1rem;
+  --text-section-label--line-height: 1.5;
+  --text-section-label--font-weight: 600;
+  --text-table-header: 0.875rem;
+  --text-table-header--line-height: 1.43;
+  --text-table-header--font-weight: 600;
+  --text-cell: 1rem;
+  --text-cell--line-height: 1.5;
+  --text-cell--letter-spacing: -0.1px;
+  --text-code: 0.9375rem;
+  --text-code--line-height: 1.47;
+  --text-code--font-weight: 500;
+  --text-revision: 0.9375rem;
+  --text-revision--line-height: 1.47;
+  --text-revision--font-weight: 600;
+  --text-label: 0.875rem;
+  --text-label--line-height: 1.43;
+  --text-label--font-weight: 500;
+  --text-control: 1rem;
+  --text-control--line-height: 1.5;
+  --text-control--letter-spacing: -0.1px;
+  --text-meta: 0.875rem;
+  --text-meta--line-height: 1.43;
+  --text-fine: 0.75rem;
+  --text-fine--line-height: 1.33;
+
+  --spacing-header: 56px;
+  --spacing-sidebar: 240px;
+  --spacing-sidebar-collapsed: 56px;
+  --spacing-filter-bar: 104px;
+  --spacing-table-header: 40px;
+  --spacing-row: 44px;
+  --spacing-row-sub: 36px;
+  --spacing-control: 36px;
+  --spacing-control-sm: 32px;
+  --spacing-pagination: 48px;
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+
+  --shadow-sticky-y: 0 1px 0 #e2e8f0, 0 2px 4px rgb(15 23 42 / 0.04);
+  --shadow-sticky-x: 1px 0 0 #e2e8f0, 2px 0 4px rgb(15 23 42 / 0.04);
+  --shadow-float: 0 4px 12px rgb(15 23 42 / 0.12);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    /* 基準字級 16 → 17px；整組 rem 字級階梯與 Tailwind 間距等比放大 */
+    font-size: 106.25%;
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-size: var(--text-cell);
+    line-height: 1.5;
+  }
+
+  button,
+  input {
+    font: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
