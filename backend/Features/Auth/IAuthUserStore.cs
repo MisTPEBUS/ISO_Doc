@@ -8,5 +8,12 @@ public interface IAuthUserStore
 
     Task<User?> FindByIdAsync(Guid userId, CancellationToken cancellationToken);
 
+    Task<AuthOrgNames?> FindOrgNamesAsync(
+        Guid companyId,
+        Guid deptId,
+        CancellationToken cancellationToken);
+
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }
+
+public sealed record AuthOrgNames(string CompanyName, string DeptName);

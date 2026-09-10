@@ -34,8 +34,8 @@ public sealed class ExceptionHandlingMiddleware(
             await WriteProblemAsync(
                 context,
                 StatusCodes.Status500InternalServerError,
-                "Internal Server Error",
-                "An unexpected error occurred while processing the request.");
+                "伺服器發生錯誤",
+                "處理要求時發生未預期的錯誤。");
         }
     }
 
@@ -46,7 +46,7 @@ public sealed class ExceptionHandlingMiddleware(
         return WriteProblemAsync(
             context,
             status,
-            result.Title ?? "Domain Rule Violation",
+            result.Title ?? "違反業務規則",
             result.Detail,
             result.Errors);
     }

@@ -7,6 +7,7 @@ using IsoDocument.Api.Features.Auth.Dtos;
 using IsoDocument.Api.Features.Auth.Validators;
 using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Backup;
+using IsoDocument.Api.Features.Companies;
 using IsoDocument.Api.Features.Depts;
 using IsoDocument.Api.Features.Depts.Dtos;
 using IsoDocument.Api.Features.Depts.Validators;
@@ -45,16 +46,44 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-builder.Services.AddProblemDetails();
+builder.Services.AddProblemDetails(options =>
+    options.CustomizeProblemDetails = context =>
+    {
+        // 將框架自動產生的英文標題（找不到路由的 404、模型繫結失敗的 400 等）改為中文。
+        var localizedTitle = (context.ProblemDetails.Status ?? context.HttpContext.Response.StatusCode) switch
+        {
+            StatusCodes.Status400BadRequest => "輸入資料有誤",
+            StatusCodes.Status401Unauthorized => "尚未登入",
+            StatusCodes.Status403Forbidden => "沒有權限",
+            StatusCodes.Status404NotFound => "找不到資源",
+            StatusCodes.Status405MethodNotAllowed => "不支援的操作",
+            StatusCodes.Status409Conflict => "資料衝突",
+            StatusCodes.Status415UnsupportedMediaType => "不支援的內容格式",
+            StatusCodes.Status429TooManyRequests => "請求過於頻繁",
+            >= 500 => "伺服器發生錯誤",
+            _ => context.ProblemDetails.Title
+        };
+
+        // 只覆寫框架預設標題，服務層自訂的中文標題維持不變。
+        if (localizedTitle is not null && IsFrameworkDefaultTitle(context.ProblemDetails.Title))
+        {
+            context.ProblemDetails.Title = localizedTitle;
+        }
+    });
+
+// 框架預設標題一律是英文（ASCII 開頭）；服務層自訂的中文標題不覆寫。
+static bool IsFrameworkDefaultTitle(string? title) =>
+    string.IsNullOrEmpty(title) || char.IsAscii(title[0]);
+
 builder.Services.AddControllersWithViews(options =>
     options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute()));
 builder.Services.AddAntiforgery(options =>
 {
-        options.HeaderName = "X-XSRF-TOKEN";
-    options.Cookie.Name = "isodocs.antiforgery";
-    options.Cookie.HttpOnly = true;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.HeaderName = "X-XSRF-TOKEN";
+    options.Cookie.SecurePolicy =
+        builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
 });
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -75,6 +104,8 @@ builder.Services.AddAuthorization(options =>
             .AddRequirements(new CompanyScopeRequirement()));
     options.AddPolicy(Policies.DocumentAccess, policy =>
         policy.RequireAuthenticatedUser().AddRequirements(new DocumentAccessRequirement()));
+    options.AddPolicy(Policies.SystemAdmin, policy =>
+        policy.RequireAuthenticatedUser().AddRequirements(new SystemAdminRequirement()));
 });
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ApiCookieAuthenticationEvents>();
@@ -82,6 +113,7 @@ builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddScoped<IAuthSession, CookieAuthSession>();
 builder.Services.AddScoped<IAuthorizationHandler, CompanyScopeHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, DocumentAccessHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, SystemAdminHandler>();
 builder.Services.AddScoped<IDocumentAccessStore, EfDocumentAccessStore>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
@@ -115,6 +147,8 @@ builder.Services.AddDbContext<IsoDbContext>(options =>
     options.UseNpgsql(connectionString));
 builder.Services.AddScoped<IAuthUserStore, EfAuthUserStore>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ICompanyStore, EfCompanyStore>();
+builder.Services.AddScoped<ICompanyService, CompanyService>();
 builder.Services.AddScoped<IDeptStore, EfDeptStore>();
 builder.Services.AddScoped<IDeptService, DeptService>();
 builder.Services.AddScoped<IDocumentStore, EfDocumentStore>();

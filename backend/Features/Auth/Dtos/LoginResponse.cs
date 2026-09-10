@@ -1,3 +1,9 @@
 namespace IsoDocument.Api.Features.Auth.Dtos;
 
-public sealed record LoginResponse(Guid UserId, string Name, string Role, Guid CompanyId);
+public sealed record LoginResponse(
+    Guid UserId,
+    string Name,
+    string Role,
+    Guid CompanyId,
+    string CompanyName,
+    string DeptName);

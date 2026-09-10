@@ -43,22 +43,22 @@ public class Result
 
     public static Result Success() => new(ResultStatus.Success);
 
-    public static Result NotFound(string? detail = null, string title = "Not Found") =>
+    public static Result NotFound(string? detail = null, string title = "找不到資源") =>
         new(ResultStatus.NotFound, title, detail);
 
-    public static Result Conflict(string? detail = null, string title = "Conflict") =>
+    public static Result Conflict(string? detail = null, string title = "資料衝突") =>
         new(ResultStatus.Conflict, title, detail);
 
-    public static Result Forbidden(string? detail = null, string title = "Forbidden") =>
+    public static Result Forbidden(string? detail = null, string title = "沒有權限") =>
         new(ResultStatus.Forbidden, title, detail);
 
     public static Result ValidationFailed(
         Dictionary<string, string[]> errors,
         string? detail = null,
-        string title = "Validation Failed") =>
+        string title = "輸入資料有誤") =>
         new(ResultStatus.ValidationFailed, title, detail, errors);
 
-    public static Result Unauthorized(string? detail = null, string title = "Unauthorized") =>
+    public static Result Unauthorized(string? detail = null, string title = "尚未登入") =>
         new(ResultStatus.Unauthorized, title, detail);
 }
 
@@ -83,22 +83,22 @@ public sealed class Result<T> : Result
 
     public static Result<T> Success(T value) => new(ResultStatus.Success, value);
 
-    public new static Result<T> NotFound(string? detail = null, string title = "Not Found") =>
+    public new static Result<T> NotFound(string? detail = null, string title = "找不到資源") =>
         new(ResultStatus.NotFound, title: title, detail: detail);
 
-    public new static Result<T> Conflict(string? detail = null, string title = "Conflict") =>
+    public new static Result<T> Conflict(string? detail = null, string title = "資料衝突") =>
         new(ResultStatus.Conflict, title: title, detail: detail);
 
-    public new static Result<T> Forbidden(string? detail = null, string title = "Forbidden") =>
+    public new static Result<T> Forbidden(string? detail = null, string title = "沒有權限") =>
         new(ResultStatus.Forbidden, title: title, detail: detail);
 
     public new static Result<T> ValidationFailed(
         Dictionary<string, string[]> errors,
         string? detail = null,
-        string title = "Validation Failed") =>
+        string title = "輸入資料有誤") =>
         new(ResultStatus.ValidationFailed, title: title, detail: detail, errors: errors);
 
-    public new static Result<T> Unauthorized(string? detail = null, string title = "Unauthorized") =>
+    public new static Result<T> Unauthorized(string? detail = null, string title = "尚未登入") =>
         new(ResultStatus.Unauthorized, title: title, detail: detail);
 }
 
@@ -144,12 +144,12 @@ public static class ResultActionExtensions
 
     private static string GetDefaultTitle(ResultStatus status) => status switch
     {
-        ResultStatus.NotFound => "Not Found",
-        ResultStatus.Conflict => "Conflict",
-        ResultStatus.Forbidden => "Forbidden",
-        ResultStatus.ValidationFailed => "Validation Failed",
-        ResultStatus.Unauthorized => "Unauthorized",
-        _ => "Error"
+        ResultStatus.NotFound => "找不到資源",
+        ResultStatus.Conflict => "資料衝突",
+        ResultStatus.Forbidden => "沒有權限",
+        ResultStatus.ValidationFailed => "輸入資料有誤",
+        ResultStatus.Unauthorized => "尚未登入",
+        _ => "發生錯誤"
     };
 }
 
