@@ -1,0 +1,780 @@
+{
+  "info": {
+    "name": "ISO Docs API",
+    "_postman_id": "2c59889e-3054-47a7-828c-18438b37a1a9",
+    "description": "ISO 文件管理系統後端 API。契約見 backend/docs/api.md。\n\n用法：\n1. 匯入本集合與 ISO-Docs-API.postman_environment.json，環境切到「ISO Docs — Local」。\n2. Settings 關閉 SSL certificate verification（本機自簽憑證）。\n3. 先跑 Auth > Login（填 empno / password 環境變數）。\n4. 非 GET 請求會由 collection pre-request script 自動從 cookie jar 取 isodocs.xsrf 塞進 X-XSRF-TOKEN。\n5. Login / Create 類請求的 test script 會把 id 寫回環境變數供後續使用。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost:7167" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// 非 GET 請求：自動帶 CSRF token（讀 isodocs.xsrf cookie -> X-XSRF-TOKEN header）",
+          "const method = (pm.request.method || 'GET').toUpperCase();",
+          "if (['GET', 'HEAD', 'OPTIONS', 'TRACE'].indexOf(method) === -1) {",
+          "  const baseUrl = pm.environment.get('baseUrl') || pm.collectionVariables.get('baseUrl') || 'https://localhost:7167';",
+          "  try {",
+          "    const jar = pm.cookiejar();",
+          "    jar.get(baseUrl, 'isodocs.xsrf', function (err, value) {",
+          "      if (!err && value) {",
+          "        pm.request.headers.upsert({ key: 'X-XSRF-TOKEN', value: value });",
+          "        pm.environment.set('xsrfToken', value);",
+          "      }",
+          "    });",
+          "  } catch (e) {",
+          "    const t = pm.environment.get('xsrfToken');",
+          "    if (t) { pm.request.headers.upsert({ key: 'X-XSRF-TOKEN', value: t }); }",
+          "  }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const b = pm.response.json();",
+                  "  if (b.companyId) pm.environment.set('companyId', b.companyId);",
+                  "  if (b.userId) pm.environment.set('currentUserId', b.userId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"empno\": \"{{empno}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "匿名，不需 X-XSRF-TOKEN。200 -> { userId, name, role, companyId, companyName, deptName }，並種下 isodocs.auth / isodocs.xsrf cookie。400 欄位缺；401 帳密錯誤。"
+          }
+        },
+        {
+          "name": "Get Current User (me)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const b = pm.response.json();",
+                  "  if (b.companyId) pm.environment.set('companyId', b.companyId);",
+                  "  if (b.deptId) pm.environment.set('deptId', b.deptId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "已登入。200 -> MeResponse（含 role / companyId / companyName / deptId / deptName / mustChangePassword）。刷新 isodocs.xsrf。401 未登入。"
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{password}}\",\n  \"newPassword\": \"NewPass123\",\n  \"newPasswordConfirmation\": \"NewPass123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/change-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "change-password"]
+            },
+            "description": "已登入 + CSRF。三欄必填；兩次新密碼一致；新密碼 != 目前密碼。204 成功。400 ValidationProblemDetails（errors.currentPassword / newPassword ...），密碼錯誤是 400 不是 401。"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "已登入 + CSRF。無 body。204 清除認證 cookie。401 未登入。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Antiforgery",
+      "item": [
+        {
+          "name": "Get CSRF Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));",
+                  "try {",
+                  "  const jar = pm.cookiejar();",
+                  "  jar.get(pm.environment.get('baseUrl') || pm.collectionVariables.get('baseUrl'), 'isodocs.xsrf', function (err, value) {",
+                  "    if (!err && value) pm.environment.set('xsrfToken', value);",
+                  "  });",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/antiforgery/token",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "antiforgery", "token"]
+            },
+            "description": "匿名。204，Set-Cookie: isodocs.xsrf。送出非 GET 請求前用來確保有 token。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            },
+            "description": "匿名。200 { status, database } 或 503。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents (User / Browse)",
+      "item": [
+        {
+          "name": "List Available",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const items = (pm.response.json().items) || [];",
+                  "  if (items[0]) {",
+                  "    pm.environment.set('documentId', items[0].documentId);",
+                  "    if (items[0].currentVersion) pm.environment.set('versionId', items[0].currentVersion.versionId);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/available?page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "available"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "20" },
+                { "key": "keyword", "value": "", "disabled": true }
+              ]
+            },
+            "description": "已登入。目前登入者可閱讀的文件。200 PagedResult<AvailableDocumentResponse>。401 未登入 / 無部門。"
+          }
+        },
+        {
+          "name": "Download Document Version (file)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}/versions/{{versionId}}/download",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "{{documentId}}", "versions", "{{versionId}}", "download"]
+            },
+            "description": "DocumentAccess。200 PDF 串流（Content-Disposition）。403 無權限 / USER 讀非 PUBLISHED。404 檔案未上傳。用 Send and Download 存檔。"
+          }
+        },
+        {
+          "name": "Download Attachment (file)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}/versions/{{versionId}}/attachments/{{attachmentId}}/download",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "{{documentId}}", "versions", "{{versionId}}", "attachments", "{{attachmentId}}", "download"]
+            },
+            "description": "DocumentAccess。200 附件串流。403 / 404。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Departments",
+      "item": [
+        {
+          "name": "List Departments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/depts?page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "depts"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "20" },
+                { "key": "companyId", "value": "{{companyId}}", "disabled": true }
+              ]
+            },
+            "description": "CompanyAdminScope。200 PagedResult<DeptResponse>。403（COMPANY_ADMIN 帶非本人 companyId）。"
+          }
+        },
+        {
+          "name": "Create Department",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('deptId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"name\": \"品保部\",\n  \"seq\": 10\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/depts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "depts"]
+            },
+            "description": "name <= 100；seq 選填。201 DeptResponse。400 errors.companyId / errors.name。403。409 同公司同名。"
+          }
+        },
+        {
+          "name": "Get Department",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/depts/{{deptId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "depts", "{{deptId}}"]
+            },
+            "description": "200 DeptResponse。403 / 404。"
+          }
+        },
+        {
+          "name": "Update Department",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"品保部\",\n  \"seq\": 20\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/depts/{{deptId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "depts", "{{deptId}}"]
+            },
+            "description": "200 DeptResponse。400 / 403 / 404 / 409（同名）。"
+          }
+        },
+        {
+          "name": "Delete Department",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/depts/{{deptId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "depts", "{{deptId}}"]
+            },
+            "description": "204。403 / 404。409 仍有在職使用者。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users?page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "20" },
+                { "key": "companyId", "value": "{{companyId}}", "disabled": true },
+                { "key": "deptId", "value": "{{deptId}}", "disabled": true },
+                { "key": "keyword", "value": "", "disabled": true },
+                { "key": "includeInactive", "value": "false", "disabled": true }
+              ]
+            },
+            "description": "CompanyAdminScope。200 PagedResult<UserResponse>。400 deptId 不屬於公司。403。"
+          }
+        },
+        {
+          "name": "Create User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('userId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"empno\": \"EMP100\",\n  \"name\": \"王小明\",\n  \"email\": \"emp100@example.com\",\n  \"companyId\": \"{{companyId}}\",\n  \"deptId\": \"{{deptId}}\",\n  \"role\": \"USER\",\n  \"password\": \"Passw0rd1\",\n  \"passwordConfirmation\": \"Passw0rd1\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"]
+            },
+            "description": "empno <= 30；name <= 100；email 選填；deptId 需屬於 companyId；password 選填（不給則帳號無法登入，此時 passwordConfirmation 須為 null）。201 UserResponse。400 欄位 / errors.deptId / empno 重複。403（無權 / COMPANY_ADMIN 建 SYSTEM_ADMIN）。"
+          }
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{userId}}"]
+            },
+            "description": "200 UserResponse。403 / 404。"
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"王大明\",\n  \"email\": null,\n  \"deptId\": \"{{deptId}}\",\n  \"role\": \"USER\",\n  \"isActive\": true,\n  \"notifyEmailEnabled\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{userId}}"]
+            },
+            "description": "不能改 empno / 密碼。200 UserResponse。400 / 404。403（無權 / COMPANY_ADMIN 動 SYSTEM_ADMIN）。"
+          }
+        },
+        {
+          "name": "Delete User (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{userId}}"]
+            },
+            "description": "軟刪（isActive=false）。204。403 / 404。"
+          }
+        },
+        {
+          "name": "Reset Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) pm.environment.set('temporaryPassword', pm.response.json().temporaryPassword);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{userId}}", "reset-password"]
+            },
+            "description": "無 body + CSRF。200 { temporaryPassword }（12 碼），並設 mustChangePassword=true。403 / 404。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Documents",
+      "item": [
+        {
+          "name": "List Documents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents?page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "20" },
+                { "key": "companyId", "value": "{{companyId}}", "disabled": true },
+                { "key": "keyword", "value": "", "disabled": true }
+              ]
+            },
+            "description": "CompanyAdminScope。200 PagedResult<DocumentResponse>。403。"
+          }
+        },
+        {
+          "name": "Create Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('documentId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"documentNo\": \"HR-Gn-01\",\n  \"name\": \"人事管理辦法\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents"]
+            },
+            "description": "documentNo <= 50，^[A-Za-z0-9]([A-Za-z0-9-]{0,48}[A-Za-z0-9])?$，同公司唯一。name <= 255。201 DocumentResponse。400 errors.documentNo。403。"
+          }
+        },
+        {
+          "name": "Get Document Detail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "{{documentId}}"]
+            },
+            "description": "200 DocumentDetailResponse（含 versions[]）。403 / 404。"
+          }
+        },
+        {
+          "name": "Update Document (name only)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"人事管理辦法\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "{{documentId}}"]
+            },
+            "description": "只能改 name（<= 255）。200 DocumentResponse。400 / 403 / 404。"
+          }
+        },
+        {
+          "name": "Delete Document (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "{{documentId}}"]
+            },
+            "description": "軟刪（isActive=false）。204。403 / 404。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Document Versions",
+      "item": [
+        {
+          "name": "Create Version (multipart)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// effectiveDate 預設為明天（不得早於今天）",
+                  "const d = new Date();",
+                  "d.setUTCDate(d.getUTCDate() + 1);",
+                  "pm.environment.set('effectiveDate', d.toISOString().slice(0, 10));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('versionId', pm.response.json().versionId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "changeType", "value": "MINOR", "type": "text", "description": "MAJOR 或 MINOR" },
+                { "key": "effectiveDate", "value": "{{effectiveDate}}", "type": "text", "description": "yyyy-MM-dd，不得早於今天" },
+                { "key": "pageCount", "value": "1", "type": "text", "description": "選填，> 0" },
+                { "key": "memo", "value": "初版", "type": "text", "description": "選填" },
+                { "key": "file", "type": "file", "src": [], "description": "必填，.pdf，內容前置 %PDF-" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}/versions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "{{documentId}}", "versions"]
+            },
+            "description": "CompanyAdminScope + CSRF。multipart/form-data，file 必填。建立即 PUBLISHED，先前 PUBLISHED 轉 OBSOLETE。201 { versionId, version, status }。400 欄位 / 非 PDF。403。404 文件不存在。409 文件停用 / 併發。\n\n請自行在 file 欄位選一個 PDF 檔。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Attachments",
+      "item": [
+        {
+          "name": "List Attachments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const arr = pm.response.json();",
+                  "  if (Array.isArray(arr) && arr[0]) pm.environment.set('attachmentId', arr[0].attachmentId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}/versions/{{versionId}}/attachments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "{{documentId}}", "versions", "{{versionId}}", "attachments"]
+            },
+            "description": "CompanyAdminScope。200 AttachmentResponse[]（陣列，非分頁）。403 / 404。"
+          }
+        },
+        {
+          "name": "Create Attachments (multipart, batch)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  const created = (pm.response.json().created) || [];",
+                  "  if (created[0]) pm.environment.set('attachmentId', created[0].attachmentId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "items[0].attachmentNo", "value": "ATT-01", "type": "text" },
+                { "key": "items[0].name", "value": "請假申請表", "type": "text" },
+                { "key": "items[0].file", "type": "file", "src": [], "description": "選填。副檔名限 jpg/jpeg/png/pdf/doc/docx/xls/xlsx/odt/ods" },
+                { "key": "items[1].attachmentNo", "value": "ATT-02", "type": "text" },
+                { "key": "items[1].name", "value": "填寫說明（僅中繼資料）", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}/versions/{{versionId}}/attachments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "{{documentId}}", "versions", "{{versionId}}", "attachments"]
+            },
+            "description": "CompanyAdminScope + CSRF。批次全有全無。items[i].attachmentNo（<=50，同版本唯一、同批不重複）、items[i].name（<=255）、items[i].file（選填）。i 從 0 連續。201 { created: [...] }。400 errors[\"items[i].*\"] / errors.attachmentNo。403 / 404。"
+          }
+        },
+        {
+          "name": "Delete Attachment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/attachments/{{attachmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attachments", "{{attachmentId}}"]
+            },
+            "description": "CompanyAdminScope + CSRF。204（實體檔移到 trash）。403 / 404。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Permissions",
+      "item": [
+        {
+          "name": "Get Dept Permissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}/dept-permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "{{documentId}}", "dept-permissions"]
+            },
+            "description": "CompanyAdminScope。200 { deptIds: [...] }（已排序）。403 / 404。"
+          }
+        },
+        {
+          "name": "Update Dept Permissions",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deptIds\": [\"{{deptId}}\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}/dept-permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "{{documentId}}", "dept-permissions"]
+            },
+            "description": "以完整清單覆寫。deptIds 必填、非空，每個須屬於文件所屬公司。200 { deptIds }。400 errors.deptIds。403 / 404。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Backup",
+      "item": [
+        {
+          "name": "Download Company Backup (zip)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/backup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "companies", "{{companyId}}", "backup"]
+            },
+            "description": "CompanyAdminScope（COMPANY_ADMIN 限自己公司）。200 application/zip 串流（Content-Disposition filename*）。403 非本人公司。404 公司不存在。用 Send and Download 存檔。"
+          }
+        }
+      ]
+    }
+  ]
+}
