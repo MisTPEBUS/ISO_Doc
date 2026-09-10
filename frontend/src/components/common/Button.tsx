@@ -11,18 +11,18 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<NonNullable<ButtonProps['variant']>, string> = {
   primary:
-    'border-blue-600 bg-blue-600 text-white hover:border-blue-700 hover:bg-blue-700 focus-visible:outline-blue-600',
+    'border-primary bg-primary text-on-primary hover:border-primary-hover hover:bg-primary-hover focus-visible:outline-primary',
   secondary:
-    'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus-visible:outline-blue-600',
+    'border-line bg-surface text-ink hover:bg-surface-header focus-visible:outline-primary',
   danger:
-    'border-red-600 bg-red-600 text-white hover:border-red-700 hover:bg-red-700 focus-visible:outline-red-600',
+    'border-state-danger bg-state-danger text-on-primary hover:brightness-95 focus-visible:outline-state-danger',
   ghost:
-    'border-transparent bg-transparent text-slate-700 hover:bg-slate-100 focus-visible:outline-blue-600',
+    'border-transparent bg-transparent text-ink-muted hover:bg-surface-header hover:text-primary focus-visible:outline-primary',
 }
 
 const sizeClasses: Record<NonNullable<ButtonProps['size']>, string> = {
-  sm: 'h-8 gap-1.5 px-2.5 text-sm',
-  md: 'h-9 gap-2 px-3.5 text-sm',
+  sm: 'h-control-sm gap-1.5 px-2 text-control',
+  md: 'h-control gap-2 px-3 text-control',
 }
 
 export function Button({
@@ -43,7 +43,7 @@ export function Button({
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={classNames(
-        'inline-flex cursor-pointer items-center justify-center rounded-sm border font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex cursor-pointer items-center justify-center rounded-sm border font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-line disabled:bg-surface-header disabled:text-ink-disabled',
         variantClasses[variant],
         sizeClasses[size],
         className,

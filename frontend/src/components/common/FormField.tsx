@@ -26,10 +26,10 @@ export function FormField({
   return (
     <div className={classNames('space-y-1.5', className)}>
       {label && (
-        <label className="block text-sm font-medium text-slate-700" htmlFor={htmlFor}>
+        <label className="block text-label text-ink" htmlFor={htmlFor}>
           {label}
           {required && (
-            <span className="ml-1 text-red-600" aria-hidden="true">
+            <span className="ml-1 text-state-danger" aria-hidden="true">
               *
             </span>
           )}
@@ -37,12 +37,12 @@ export function FormField({
       )}
       {children}
       {!error && hint && (
-        <p id={hintId} className="text-xs text-slate-500">
+        <p id={hintId} className="text-meta text-ink-muted">
           {hint}
         </p>
       )}
       {error && (
-        <p id={errorId} className="text-xs font-medium text-red-600" role="alert">
+        <p id={errorId} className="text-meta text-state-danger" role="alert">
           {error}
         </p>
       )}

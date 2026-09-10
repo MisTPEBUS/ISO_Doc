@@ -11,8 +11,9 @@ export interface AppHeaderProps {
   companyName?: string
   departmentName?: string
   userName?: string
+  roleLabel?: string
   modeLink?: AppHeaderLink
-  changePasswordHref?: string
+  changePasswordHref?: string | null
   logoutLabel?: string
   onLogout?: () => void
   sticky?: boolean
@@ -25,6 +26,7 @@ export function AppHeader({
   companyName,
   departmentName,
   userName = '使用者',
+  roleLabel,
   modeLink,
   changePasswordHref = '/change-password',
   logoutLabel = '登出',
@@ -37,45 +39,54 @@ export function AppHeader({
   return (
     <header
       className={classNames(
-        'z-30 flex h-14 items-center justify-between gap-4 bg-slate-950 px-4 text-white',
+        'z-30 flex h-header items-center justify-between gap-4 bg-shell-900 px-4 text-on-shell',
         sticky && 'sticky top-0',
         className,
       )}
     >
       <div className="flex min-w-0 items-center gap-2.5 font-semibold">
-        <span className="grid size-6 shrink-0 place-items-center rounded-sm border border-slate-700 text-[10px] text-blue-400">
+        <span className="grid size-7 shrink-0 place-items-center rounded-sm border border-shell-700 font-mono text-fine text-primary-on-shell">
           {brandMark}
         </span>
-        <span className="truncate text-sm sm:text-base">{brand}</span>
+        <span className="truncate text-control">{brand}</span>
       </div>
 
-      <div className="flex shrink-0 items-center gap-3 text-sm">
+      <div className="flex shrink-0 items-center gap-3 text-label">
         {organization && (
-          <span className="text-slate-400 max-md:hidden">{organization}</span>
+          <span className="text-ink-faint max-md:hidden">{organization}</span>
         )}
         {organization && userName && (
-          <span className="text-slate-600 max-md:hidden" aria-hidden="true">
+          <span className="text-shell-700 max-md:hidden" aria-hidden="true">
             /
           </span>
         )}
-        <strong className="font-medium text-white max-sm:hidden">{userName}</strong>
+        <span className="flex items-center gap-1.5 max-sm:hidden">
+          <strong className="font-medium text-on-shell">{userName}</strong>
+          {roleLabel && (
+            <span className="rounded-xs bg-shell-800 px-1.5 py-0.5 text-fine text-ink-faint">
+              {roleLabel}
+            </span>
+          )}
+        </span>
         {modeLink && (
           <a
             href={modeLink.href}
-            className="text-blue-400 hover:text-blue-300 hover:underline focus-visible:rounded-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+            className="text-primary-on-shell hover:text-on-shell hover:underline focus-visible:rounded-xs"
           >
             {modeLink.label}
           </a>
         )}
-        <a
-          href={changePasswordHref}
-          className="text-blue-400 hover:text-blue-300 hover:underline focus-visible:rounded-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
-        >
-          修改密碼
-        </a>
+        {changePasswordHref && (
+          <a
+            href={changePasswordHref}
+            className="text-primary-on-shell hover:text-on-shell hover:underline focus-visible:rounded-xs"
+          >
+            修改密碼
+          </a>
+        )}
         <button
           type="button"
-          className="h-8 rounded-sm px-2 text-blue-400 transition-colors hover:bg-slate-800 hover:text-blue-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+          className="h-control-sm rounded-sm px-2 text-primary-on-shell transition-colors hover:bg-shell-800 hover:text-on-shell"
           onClick={onLogout}
         >
           {logoutLabel}

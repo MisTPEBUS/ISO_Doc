@@ -73,12 +73,12 @@ export function Pagination({
   }
 
   const buttonClasses =
-    'inline-flex size-8 items-center justify-center rounded-sm border text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-40'
+    'inline-flex size-8 items-center justify-center rounded-sm border text-meta font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:border-line disabled:bg-surface-header disabled:text-ink-disabled'
 
   return (
     <nav
       className={classNames(
-        'flex min-h-12 flex-wrap items-center justify-between gap-3 text-sm text-slate-600',
+        'flex min-h-pagination flex-wrap items-center justify-between gap-3 text-meta text-ink-muted',
         className,
       )}
       aria-label="分頁"
@@ -91,7 +91,7 @@ export function Pagination({
           type="button"
           className={classNames(
             buttonClasses,
-            'w-auto border-slate-300 bg-white px-2.5 hover:bg-slate-50',
+            'w-auto border-line bg-surface px-2 hover:bg-surface-header',
           )}
           disabled={currentPage === 1}
           onClick={() => goToPage(currentPage - 1)}
@@ -106,8 +106,8 @@ export function Pagination({
               className={classNames(
                 buttonClasses,
                 item === currentPage
-                  ? 'border-blue-600 bg-blue-600 text-white'
-                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
+                  ? 'border-primary bg-primary text-on-primary'
+                  : 'border-line bg-surface text-ink hover:bg-surface-header',
               )}
               aria-current={item === currentPage ? 'page' : undefined}
               aria-label={`第 ${item} 頁`}
@@ -129,7 +129,7 @@ export function Pagination({
           type="button"
           className={classNames(
             buttonClasses,
-            'w-auto border-slate-300 bg-white px-2.5 hover:bg-slate-50',
+            'w-auto border-line bg-surface px-2 hover:bg-surface-header',
           )}
           disabled={currentPage === totalPages}
           onClick={() => goToPage(currentPage + 1)}

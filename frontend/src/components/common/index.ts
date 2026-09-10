@@ -5,6 +5,7 @@ export { Button, type ButtonProps } from './Button'
 export { FormField, type FormFieldProps } from './FormField'
 export { Input, type InputProps } from './Input'
 export { Modal, type ModalProps } from './Modal'
+export { PageLoading, type PageLoadingProps } from './PageLoading'
 export { Pagination, type PaginationProps } from './Pagination'
 export { Select, type SelectProps } from './Select'
 export {

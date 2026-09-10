@@ -91,12 +91,17 @@ type AttachmentListItem = {
 
 ```ts
 type LoginRequest = { empno: string; password: string };
-type LoginResponse = { userId: string; name: string; role: string; companyId: string };
+type LoginResponse = {
+  userId: string; name: string; role: string;
+  companyId: string; companyName: string; deptName: string;
+};
 
 type MeResponse = {
   userId: string; empno: string; name: string;
   role: 'USER' | 'COMPANY_ADMIN' | 'SYSTEM_ADMIN';
-  companyId: string; deptId: string; mustChangePassword: boolean;
+  companyId: string; companyName: string;
+  deptId: string; deptName: string;
+  mustChangePassword: boolean;
 };
 
 type ChangePasswordRequest = {
@@ -122,7 +127,17 @@ type ChangePasswordRequest = {
 
 ## 管理 API
 
-以下皆未正式確認：
+### 公司搜尋（已確認）
+
+```http
+GET /api/companies?keyword=&page=&pageSize=
+```
+
+- 僅限 `SYSTEM_ADMIN`。
+- `keyword` 比對公司代碼或名稱。
+- 回傳 `PagedResult<{ id, code, name }>`。
+
+以下仍未正式確認：
 
 - Departments
 - Users

@@ -58,7 +58,7 @@ export function Modal({
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
       className={classNames(
-        'm-auto w-[calc(100%-2rem)] rounded-md border border-slate-200 bg-white p-0 text-left text-slate-900 shadow-xl backdrop:bg-slate-950/50',
+        'm-auto w-[calc(100%-2rem)] rounded-md border border-line bg-surface p-0 text-left text-ink shadow-float backdrop:bg-shell-900/50',
         sizeClasses[size],
         className,
       )}
@@ -70,13 +70,13 @@ export function Modal({
         if (closeOnBackdrop && event.target === event.currentTarget) onClose?.()
       }}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+      <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
         <div className="min-w-0">
-          <h2 id={titleId} className="text-base font-semibold text-slate-900">
+          <h2 id={titleId} className="text-section-label text-ink">
             {title}
           </h2>
           {description && (
-            <p id={descriptionId} className="mt-1 text-sm text-slate-500">
+            <p id={descriptionId} className="mt-1 text-meta text-ink-muted">
               {description}
             </p>
           )}
@@ -84,7 +84,7 @@ export function Modal({
         {showCloseButton && (
           <button
             type="button"
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-sm text-xl leading-none text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-sm text-xl leading-none text-ink-muted transition-colors hover:bg-surface-header hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             aria-label="關閉對話框"
             onClick={onClose}
           >
@@ -94,7 +94,7 @@ export function Modal({
       </div>
       <div className="px-5 py-4">{children}</div>
       {footer && (
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-surface-header px-5 py-3">
           {footer}
         </div>
       )}

@@ -88,6 +88,10 @@ IsoDocs.sln
         DeptService.cs
         Dtos/
         Validators/
+      Companies/
+        CompaniesController.cs
+        CompanyService.cs
+        Dtos/
       Users/
         UsersController.cs
         UserService.cs
@@ -246,6 +250,7 @@ CRUD + 密碼重設。刪除一律是 `is_active = false`（軟刪除），理�
 | Home        | GET    | `/api/documents/available`                                                             | 有權限瀏覽的文件清單（分頁）                           |
 | Home        | GET    | `/api/documents/{documentId}/versions/{versionId}/download`                            | 下載主文                                               |
 | Home        | GET    | `/api/documents/{documentId}/versions/{versionId}/attachments/{attachmentId}/download` | 下載附件                                               |
+| Companies   | GET    | `/api/companies`                                                                       | 搜尋公司（限 SYSTEM_ADMIN）                            |
 | Depts       | GET    | `/api/depts`                                                                           | 列表（依角色自動限縮公司範圍）                         |
 | Depts       | POST   | `/api/depts`                                                                           | 新增                                                   |
 | Depts       | GET    | `/api/depts/{id}`                                                                      | 單筆                                                   |
