@@ -10,9 +10,9 @@ public sealed class UpdateDocumentDeptPermissionsRequestValidator
     {
         RuleFor(request => request.DeptIds)
             .NotNull()
-            .WithMessage("Department ids are required.")
+            .WithMessage("請提供部門清單。")
             .NotEmpty()
-            .WithMessage("At least one department id is required.")
+            .WithMessage("至少需要一個部門。")
             .OverridePropertyName("deptIds");
     }
 }

@@ -68,7 +68,7 @@ public sealed class DeptApiTests
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.NotNull(body);
-        Assert.Contains("same name", body.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("相同名稱的部門", body.Detail, StringComparison.Ordinal);
         Assert.Single(factory.DeptStore.Depts, dept => dept.Name == "Quality");
     }
 
@@ -92,7 +92,7 @@ public sealed class DeptApiTests
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.NotNull(body);
-        Assert.Contains("active users", body.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("啟用中的使用者", body.Detail, StringComparison.Ordinal);
         Assert.Contains(factory.DeptStore.Depts, candidate => candidate.Id == dept.Id);
         Assert.Contains(dept.Id, factory.DeptStore.ActiveUserDeptIds);
     }

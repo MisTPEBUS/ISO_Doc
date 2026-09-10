@@ -11,15 +11,15 @@ public sealed class ApiCookieAuthenticationEvents : CookieAuthenticationEvents
         WriteProblemAsync(
             context.HttpContext,
             StatusCodes.Status401Unauthorized,
-            "Unauthorized",
-            "Authentication is required.");
+            "尚未登入",
+            "請先登入後再操作。");
 
     public override Task RedirectToAccessDenied(RedirectContext<CookieAuthenticationOptions> context) =>
         WriteProblemAsync(
             context.HttpContext,
             StatusCodes.Status403Forbidden,
-            "Forbidden",
-            "You do not have permission to access this resource.");
+            "沒有權限",
+            "您沒有存取此資源的權限。");
 
     private static async Task WriteProblemAsync(
         HttpContext context,

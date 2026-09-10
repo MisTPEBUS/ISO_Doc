@@ -58,7 +58,7 @@ public sealed class DocumentPermissionService(
                 new Dictionary<string, string[]>(StringComparer.Ordinal)
                 {
                     ["deptIds"] =
-                    ["Every department id must exist and belong to the document's company."]
+                    ["所有部門都必須存在，且屬於文件所屬的公司。"]
                 });
         }
 
@@ -110,18 +110,18 @@ public sealed class DocumentPermissionService(
         var document = await permissionStore.FindDocumentAsync(documentId, cancellationToken);
         if (document is null)
         {
-            return Result<Document>.NotFound("The document was not found.");
+            return Result<Document>.NotFound("找不到指定的文件。");
         }
 
         if (!currentUser.CanAccessCompany(document.CompanyId))
         {
             return Result<Document>.Forbidden(
-                "You do not have permission to manage this document's department permissions.");
+                "您沒有管理此文件部門權限的權限。");
         }
 
         if (currentUser.UserId is null)
         {
-            return Result<Document>.Unauthorized("Authentication is required.");
+            return Result<Document>.Unauthorized("請先登入後再操作。");
         }
 
         return Result<Document>.Success(document);
@@ -142,11 +142,11 @@ internal static class DocumentResultExtensions
         this Result<Document> result) => result.Status switch
     {
         ResultStatus.NotFound => Result<DocumentDeptPermissionsResponse>.NotFound(
-            result.Detail, result.Title ?? "Not Found"),
+            result.Detail, result.Title ?? "找不到資源"),
         ResultStatus.Forbidden => Result<DocumentDeptPermissionsResponse>.Forbidden(
-            result.Detail, result.Title ?? "Forbidden"),
+            result.Detail, result.Title ?? "沒有權限"),
         ResultStatus.Unauthorized => Result<DocumentDeptPermissionsResponse>.Unauthorized(
-            result.Detail, result.Title ?? "Unauthorized"),
+            result.Detail, result.Title ?? "尚未登入"),
         _ => throw new InvalidOperationException("The document result was not a supported failure.")
     };
 }

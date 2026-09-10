@@ -10,7 +10,7 @@ public sealed class CreateAttachmentsRequestValidator
     {
         RuleFor(request => request.Items)
             .NotEmpty()
-            .WithMessage("At least one attachment is required.")
+            .WithMessage("至少需要一個附件。")
             .OverridePropertyName("items");
         RuleForEach(request => request.Items)
             .SetValidator(new CreateAttachmentItemRequestValidator());
@@ -24,18 +24,18 @@ public sealed class CreateAttachmentItemRequestValidator
     {
         RuleFor(item => item.AttachmentNo)
             .Must(value => !string.IsNullOrWhiteSpace(value))
-            .WithMessage("Attachment number is required.")
+            .WithMessage("請輸入附件編號。")
             .MaximumLength(50)
-            .WithMessage("Attachment number must not exceed 50 characters.");
+            .WithMessage("附件編號不可超過 50 個字元。");
         RuleFor(item => item.Name)
             .Must(value => !string.IsNullOrWhiteSpace(value))
-            .WithMessage("Attachment name is required.")
+            .WithMessage("請輸入附件名稱。")
             .MaximumLength(255)
-            .WithMessage("Attachment name must not exceed 255 characters.");
+            .WithMessage("附件名稱不可超過 255 個字元。");
         RuleFor(item => item.File)
             .Must(file => file is null || AttachmentFileRules.HasAllowedExtension(file.FileName))
-            .WithMessage("The attachment file extension is not allowed.")
+            .WithMessage("不允許的附件檔案類型。")
             .Must(file => file is null || file.FileName.Length <= 255)
-            .WithMessage("The original file name must not exceed 255 characters.");
+            .WithMessage("原始檔名不可超過 255 個字元。");
     }
 }

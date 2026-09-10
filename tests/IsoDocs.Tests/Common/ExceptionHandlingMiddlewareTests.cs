@@ -53,7 +53,7 @@ public sealed class ExceptionHandlingMiddlewareTests
         Assert.DoesNotContain(sensitiveDetail, responseJson, StringComparison.Ordinal);
         Assert.DoesNotContain("InvalidOperationException", responseJson, StringComparison.Ordinal);
         Assert.Equal(
-            "An unexpected error occurred while processing the request.",
+            "處理要求時發生未預期的錯誤。",
             body.RootElement.GetProperty("detail").GetString());
     }
 

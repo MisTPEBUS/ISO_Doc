@@ -22,7 +22,7 @@ public sealed class BackupService(
         var company = await backupStore.FindCompanyAsync(companyId, cancellationToken);
         if (company is null)
         {
-            return Result<CompanyBackup>.NotFound("The company was not found.");
+            return Result<CompanyBackup>.NotFound("找不到指定的公司。");
         }
 
         var sourceFiles = await backupStore.ListSourceFilesAsync(

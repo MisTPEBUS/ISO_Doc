@@ -9,11 +9,11 @@ public sealed class LoginRequestValidator : AbstractValidator<LoginRequest>
     {
         RuleFor(request => request.Empno)
             .NotEmpty()
-            .WithMessage("Employee number is required.")
+            .WithMessage("請輸入員工編號。")
             .OverridePropertyName("empno");
         RuleFor(request => request.Password)
             .NotEmpty()
-            .WithMessage("Password is required.")
+            .WithMessage("請輸入密碼。")
             .OverridePropertyName("password");
     }
 }

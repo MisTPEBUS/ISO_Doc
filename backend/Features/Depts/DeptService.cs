@@ -35,7 +35,7 @@ public sealed class DeptService(
         if (!companyFilter.IsAllowed)
         {
             return Result<PagedResult<DeptResponse>>.Forbidden(
-                "You do not have permission to access departments for this company.");
+                "您沒有檢視這間公司部門資料的權限。");
         }
 
         page = page > 0 ? page : DefaultPage;
@@ -67,7 +67,7 @@ public sealed class DeptService(
         if (!currentUser.CanAccessCompany(request.CompanyId))
         {
             return Result<DeptResponse>.Forbidden(
-                "You do not have permission to create departments for this company.");
+                "您沒有為這間公司建立部門的權限。");
         }
 
         var name = request.Name!.Trim();
@@ -122,13 +122,13 @@ public sealed class DeptService(
         var dept = await deptStore.FindByIdAsync(id, cancellationToken);
         if (dept is null)
         {
-            return Result<DeptResponse>.NotFound("The department was not found.");
+            return Result<DeptResponse>.NotFound("找不到指定的部門。");
         }
 
         return currentUser.CanAccessCompany(dept.CompanyId)
             ? Result<DeptResponse>.Success(ToResponse(dept))
             : Result<DeptResponse>.Forbidden(
-                "You do not have permission to access this department.");
+                "您沒有檢視此部門的權限。");
     }
 
     public async Task<Result<DeptResponse>> UpdateAsync(
@@ -145,13 +145,13 @@ public sealed class DeptService(
         var dept = await deptStore.FindByIdAsync(id, cancellationToken);
         if (dept is null)
         {
-            return Result<DeptResponse>.NotFound("The department was not found.");
+            return Result<DeptResponse>.NotFound("找不到指定的部門。");
         }
 
         if (!currentUser.CanAccessCompany(dept.CompanyId))
         {
             return Result<DeptResponse>.Forbidden(
-                "You do not have permission to update this department.");
+                "您沒有修改此部門的權限。");
         }
 
         var name = request.Name!.Trim();
@@ -198,18 +198,18 @@ public sealed class DeptService(
         var dept = await deptStore.FindByIdAsync(id, cancellationToken);
         if (dept is null)
         {
-            return Result.NotFound("The department was not found.");
+            return Result.NotFound("找不到指定的部門。");
         }
 
         if (!currentUser.CanAccessCompany(dept.CompanyId))
         {
-            return Result.Forbidden("You do not have permission to delete this department.");
+            return Result.Forbidden("您沒有刪除此部門的權限。");
         }
 
         if (await deptStore.HasActiveUsersAsync(id, cancellationToken))
         {
             return Result.Conflict(
-                "The department cannot be deleted because it still has active users.");
+                "此部門仍有啟用中的使用者，無法刪除。");
         }
 
         var oldValue = new { name = dept.Name, seq = dept.Seq };
@@ -227,7 +227,7 @@ public sealed class DeptService(
     }
 
     private static Result<T> DuplicateName<T>() => Result<T>.Conflict(
-        "A department with the same name already exists in this company.");
+        "這間公司已有相同名稱的部門。");
 
     private static bool IsDuplicateNameViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException

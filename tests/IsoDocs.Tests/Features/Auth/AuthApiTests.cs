@@ -35,6 +35,8 @@ public sealed class AuthApiTests
         Assert.Equal(factory.Store.User.Name, body.Name);
         Assert.Equal(factory.Store.User.Role, body.Role);
         Assert.Equal(factory.Store.User.CompanyId, body.CompanyId);
+        Assert.Equal(factory.Store.CompanyName, body.CompanyName);
+        Assert.Equal(factory.Store.DeptName, body.DeptName);
         Assert.NotNull(factory.Store.User.LastLoginAt);
         var cookies = response.Headers.GetValues("Set-Cookie").ToArray();
         Assert.Contains(
@@ -64,7 +66,7 @@ public sealed class AuthApiTests
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.NotNull(body);
-        Assert.Equal("The employee number or password is incorrect.", body.Detail);
+        Assert.Equal("員工編號或密碼錯誤。", body.Detail);
         Assert.DoesNotContain("active", body.Detail, StringComparison.OrdinalIgnoreCase);
         Assert.Null(factory.Store.User.LastLoginAt);
     }
@@ -83,7 +85,7 @@ public sealed class AuthApiTests
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.NotNull(body);
-        Assert.Equal("The employee number or password is incorrect.", body.Detail);
+        Assert.Equal("員工編號或密碼錯誤。", body.Detail);
     }
 
     [Fact]
@@ -172,7 +174,10 @@ public sealed class AuthApiTests
         Assert.NotNull(body);
         Assert.Equal(factory.Store.User.Id, body.UserId);
         Assert.Equal(factory.Store.User.Empno, body.Empno);
+        Assert.Equal(factory.Store.User.CompanyId, body.CompanyId);
+        Assert.Equal(factory.Store.CompanyName, body.CompanyName);
         Assert.Equal(factory.Store.User.DeptId, body.DeptId);
+        Assert.Equal(factory.Store.DeptName, body.DeptName);
         Assert.True(body.MustChangePassword);
     }
 
@@ -304,6 +309,10 @@ internal sealed class FakeAuthUserStore : IAuthUserStore
 
     public User User { get; }
 
+    public string CompanyName { get; } = "測試客運股份有限公司";
+
+    public string DeptName { get; } = "資訊中心";
+
     public Task<User?> FindByEmpnoAsync(string empno, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -314,6 +323,18 @@ internal sealed class FakeAuthUserStore : IAuthUserStore
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult<User?>(User.Id == userId ? User : null);
+    }
+
+    public Task<AuthOrgNames?> FindOrgNamesAsync(
+        Guid companyId,
+        Guid deptId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult<AuthOrgNames?>(
+            companyId == User.CompanyId && deptId == User.DeptId
+                ? new AuthOrgNames(CompanyName, DeptName)
+                : null);
     }
 
     public Task SaveChangesAsync(CancellationToken cancellationToken)

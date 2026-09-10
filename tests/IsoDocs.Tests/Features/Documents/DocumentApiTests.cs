@@ -70,7 +70,7 @@ public sealed class DocumentApiTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.NotNull(body);
         Assert.Contains("documentNo", body.Errors.Keys);
-        Assert.Contains("already in use", body.Errors["documentNo"].Single(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("已使用相同的文件編號", body.Errors["documentNo"].Single(), StringComparison.Ordinal);
     }
 
     [Fact]

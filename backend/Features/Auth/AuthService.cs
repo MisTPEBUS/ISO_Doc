@@ -17,7 +17,7 @@ public sealed class AuthService(
     IValidator<ChangePasswordRequest> changePasswordValidator,
     TimeProvider timeProvider) : IAuthService
 {
-    private const string InvalidCredentialsMessage = "The employee number or password is incorrect.";
+    private const string InvalidCredentialsMessage = "員工編號或密碼錯誤。";
 
     public async Task<Result<LoginResponse>> LoginAsync(
         LoginRequest request,
@@ -34,7 +34,7 @@ public sealed class AuthService(
         {
             return Result<LoginResponse>.ValidationFailed(new Dictionary<string, string[]>
             {
-                ["empno"] = ["Employee number is required."]
+                ["empno"] = ["請輸入員工編號。"]
             });
         }
 
@@ -64,11 +64,14 @@ public sealed class AuthService(
         await userStore.SaveChangesAsync(cancellationToken);
         await authSession.SignInAsync(user);
 
+        var orgNames = await GetOrgNamesAsync(user, cancellationToken);
         return Result<LoginResponse>.Success(new LoginResponse(
             user.Id,
             user.Name,
             user.Role,
-            user.CompanyId));
+            user.CompanyId,
+            orgNames.CompanyName,
+            orgNames.DeptName));
     }
 
     public async Task<Result> LogoutAsync()
@@ -81,23 +84,26 @@ public sealed class AuthService(
     {
         if (currentUser.UserId is not { } userId)
         {
-            return Result<MeResponse>.Unauthorized("Authentication is required.");
+            return Result<MeResponse>.Unauthorized("請先登入後再操作。");
         }
 
         var user = await userStore.FindByIdAsync(userId, cancellationToken);
         if (user is null || !user.IsActive)
         {
-            return Result<MeResponse>.Unauthorized("Authentication is required.");
+            return Result<MeResponse>.Unauthorized("請先登入後再操作。");
         }
 
         authSession.IssueAntiforgeryToken();
+        var orgNames = await GetOrgNamesAsync(user, cancellationToken);
         return Result<MeResponse>.Success(new MeResponse(
             user.Id,
             user.Empno,
             user.Name,
             user.Role,
             user.CompanyId,
+            orgNames.CompanyName,
             user.DeptId,
+            orgNames.DeptName,
             user.MustChangePassword));
     }
 
@@ -113,13 +119,13 @@ public sealed class AuthService(
 
         if (currentUser.UserId is not { } userId)
         {
-            return Result.Unauthorized("Authentication is required.");
+            return Result.Unauthorized("請先登入後再操作。");
         }
 
         var user = await userStore.FindByIdAsync(userId, cancellationToken);
         if (user is null || !user.IsActive || user.PasswordDigest is null)
         {
-            return Result.Unauthorized("Authentication is required.");
+            return Result.Unauthorized("請先登入後再操作。");
         }
 
         var currentPasswordVerification = passwordHasher.VerifyHashedPassword(
@@ -130,7 +136,7 @@ public sealed class AuthService(
         {
             return Result.ValidationFailed(new Dictionary<string, string[]>
             {
-                ["currentPassword"] = ["The current password is incorrect."]
+                ["currentPassword"] = ["目前密碼錯誤。"]
             });
         }
 
@@ -142,7 +148,7 @@ public sealed class AuthService(
         {
             return Result.ValidationFailed(new Dictionary<string, string[]>
             {
-                ["newPassword"] = ["The new password must be different from the current password."]
+                ["newPassword"] = ["新密碼不可與目前密碼相同。"]
             });
         }
 
@@ -153,6 +159,16 @@ public sealed class AuthService(
         await authSession.SignInAsync(user);
 
         return Result.Success();
+    }
+
+    private async Task<AuthOrgNames> GetOrgNamesAsync(
+        User user,
+        CancellationToken cancellationToken)
+    {
+        var orgNames = await userStore.FindOrgNamesAsync(
+            user.CompanyId, user.DeptId, cancellationToken);
+        return orgNames ?? throw new InvalidOperationException(
+            $"使用者 {user.Id} 的公司 ({user.CompanyId}) 或部門 ({user.DeptId}) 資料不存在。");
     }
 
     private static Dictionary<string, string[]> ToErrors(ValidationResult validation) =>

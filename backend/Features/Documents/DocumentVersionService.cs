@@ -37,38 +37,38 @@ public sealed class DocumentVersionService(
         {
             return Result<DocumentVersionResponse>.ValidationFailed(new(StringComparer.Ordinal)
             {
-                ["file"] = ["The document file content is not a valid PDF."]
+                ["file"] = ["文件內容不是有效的 PDF 檔案。"]
             });
         }
 
         var document = await versionStore.FindDocumentAsync(documentId, cancellationToken);
         if (document is null)
         {
-            return Result<DocumentVersionResponse>.NotFound("The document was not found.");
+            return Result<DocumentVersionResponse>.NotFound("找不到指定的文件。");
         }
 
         if (!document.IsActive)
         {
             return Result<DocumentVersionResponse>.Conflict(
-                "A new version cannot be added to an inactive document.");
+                "已停用的文件無法新增版本。");
         }
 
         if (!currentUser.CanAccessCompany(document.CompanyId))
         {
             return Result<DocumentVersionResponse>.Forbidden(
-                "You do not have permission to add versions to this document.");
+                "您沒有為此文件新增版本的權限。");
         }
 
         if (currentUser.UserId is not { } userId)
         {
-            return Result<DocumentVersionResponse>.Unauthorized("Authentication is required.");
+            return Result<DocumentVersionResponse>.Unauthorized("請先登入後再操作。");
         }
 
         var companyCode = await versionStore.FindCompanyCodeAsync(
             document.CompanyId, cancellationToken);
         if (companyCode is null)
         {
-            return Result<DocumentVersionResponse>.NotFound("The document company was not found.");
+            return Result<DocumentVersionResponse>.NotFound("找不到文件所屬的公司。");
         }
 
         string? writtenObjectKey = null;
@@ -157,7 +157,7 @@ public sealed class DocumentVersionService(
             }
 
             return Result<DocumentVersionResponse>.Conflict(
-                "Another version was published concurrently. Reload the document and try again.");
+                "另一個版本已同時發佈，請重新載入文件後再試一次。");
         }
         catch
         {

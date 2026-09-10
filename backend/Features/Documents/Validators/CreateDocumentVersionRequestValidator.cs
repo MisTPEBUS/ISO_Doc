@@ -10,27 +10,27 @@ public sealed class CreateDocumentVersionRequestValidator
     {
         RuleFor(request => request.ChangeType)
             .Must(value => value is "MAJOR" or "MINOR")
-            .WithMessage("Change type must be MAJOR or MINOR.")
+            .WithMessage("變更類型必須是 MAJOR 或 MINOR。")
             .OverridePropertyName("changeType");
         RuleFor(request => request.EffectiveDate)
             .NotNull()
-            .WithMessage("Effective date is required.")
+            .WithMessage("請輸入生效日期。")
             .Must(value => !value.HasValue || value.Value >= Today(timeProvider))
-            .WithMessage("Effective date must not be earlier than the publish date.")
+            .WithMessage("生效日期不可早於發佈日期。")
             .OverridePropertyName("effectiveDate");
         RuleFor(request => request.PageCount)
             .GreaterThan(0)
             .When(request => request.PageCount.HasValue)
-            .WithMessage("Page count must be greater than zero.")
+            .WithMessage("頁數必須大於零。")
             .OverridePropertyName("pageCount");
         RuleFor(request => request.File)
             .NotNull()
-            .WithMessage("A PDF file is required.")
+            .WithMessage("請上傳 PDF 檔案。")
             .Must(file => file is null
                 || file.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
-            .WithMessage("The document file must have a .pdf extension.")
+            .WithMessage("文件檔案的副檔名必須是 .pdf。")
             .Must(file => file is null || file.FileName.Length <= 255)
-            .WithMessage("The original file name must not exceed 255 characters.")
+            .WithMessage("原始檔名不可超過 255 個字元。")
             .OverridePropertyName("file");
     }
 

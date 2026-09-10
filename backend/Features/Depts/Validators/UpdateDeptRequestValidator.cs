@@ -9,9 +9,9 @@ public sealed class UpdateDeptRequestValidator : AbstractValidator<UpdateDeptReq
     {
         RuleFor(request => request.Name)
             .NotEmpty()
-            .WithMessage("Department name is required.")
+            .WithMessage("請輸入部門名稱。")
             .MaximumLength(100)
-            .WithMessage("Department name must not exceed 100 characters.")
+            .WithMessage("部門名稱不可超過 100 個字元。")
             .OverridePropertyName("name");
     }
 }

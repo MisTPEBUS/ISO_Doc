@@ -9,17 +9,17 @@ public sealed class ChangePasswordRequestValidator : AbstractValidator<ChangePas
     {
         RuleFor(request => request.CurrentPassword)
             .NotEmpty()
-            .WithMessage("Current password is required.")
+            .WithMessage("請輸入目前密碼。")
             .OverridePropertyName("currentPassword");
         RuleFor(request => request.NewPassword)
             .Must(value => !string.IsNullOrWhiteSpace(value))
-            .WithMessage("New password is required.")
+            .WithMessage("請輸入新密碼。")
             .OverridePropertyName("newPassword");
         RuleFor(request => request.NewPasswordConfirmation)
             .NotEmpty()
-            .WithMessage("Password confirmation is required.")
+            .WithMessage("請輸入確認密碼。")
             .Equal(request => request.NewPassword)
-            .WithMessage("Password confirmation does not match.")
+            .WithMessage("確認密碼與新密碼不符。")
             .OverridePropertyName("newPasswordConfirmation");
     }
 }

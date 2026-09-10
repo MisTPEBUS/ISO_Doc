@@ -25,7 +25,7 @@ public sealed class DocumentsBrowseService(
         if (currentUser.DeptId is not { } deptId)
         {
             return Result<PagedResult<AvailableDocumentResponse>>.Unauthorized(
-                "Authentication is required.");
+                "請先登入後再操作。");
         }
 
         page = page > 0 ? page : DefaultPage;
@@ -47,13 +47,13 @@ public sealed class DocumentsBrowseService(
             documentId, versionId, cancellationToken);
         if (record is null || !DownloadAccessRules.CanDownload(currentUser.Role, record.VersionStatus))
         {
-            return Result<DownloadFileResponse>.Forbidden("You do not have permission to download this file.");
+            return Result<DownloadFileResponse>.Forbidden("您沒有下載此檔案的權限。");
         }
 
         if (record.FileKey is null
             || !await documentStorage.ExistsAsync(record.FileKey, cancellationToken))
         {
-            return Result<DownloadFileResponse>.NotFound("The document file has not been uploaded.");
+            return Result<DownloadFileResponse>.NotFound("文件檔案尚未上傳。");
         }
 
         var stream = await documentStorage.OpenReadAsync(record.FileKey, cancellationToken);
@@ -75,13 +75,13 @@ public sealed class DocumentsBrowseService(
             documentId, versionId, attachmentId, cancellationToken);
         if (record is null || !DownloadAccessRules.CanDownload(currentUser.Role, record.VersionStatus))
         {
-            return Result<DownloadFileResponse>.Forbidden("You do not have permission to download this file.");
+            return Result<DownloadFileResponse>.Forbidden("您沒有下載此檔案的權限。");
         }
 
         if (record.FileKey is null
             || !await documentStorage.ExistsAsync(record.FileKey, cancellationToken))
         {
-            return Result<DownloadFileResponse>.NotFound("The attachment file has not been uploaded.");
+            return Result<DownloadFileResponse>.NotFound("附件檔案尚未上傳。");
         }
 
         var stream = await documentStorage.OpenReadAsync(record.FileKey, cancellationToken);

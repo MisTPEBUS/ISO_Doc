@@ -12,24 +12,24 @@ public sealed partial class CreateDocumentRequestValidator
         RuleFor(request => request.CompanyId)
             .Cascade(CascadeMode.Stop)
             .NotEmpty()
-            .WithMessage("Company is required.")
+            .WithMessage("請選擇公司。")
             .MustAsync(documentStore.CompanyExistsAsync)
-            .WithMessage("The specified company does not exist.")
+            .WithMessage("指定的公司不存在。")
             .OverridePropertyName("companyId");
         RuleFor(request => request.DocumentNo)
             .Cascade(CascadeMode.Stop)
             .Must(value => !string.IsNullOrWhiteSpace(value))
-            .WithMessage("Document number is required.")
+            .WithMessage("請輸入文件編號。")
             .MaximumLength(50)
-            .WithMessage("Document number must not exceed 50 characters.")
+            .WithMessage("文件編號不可超過 50 個字元。")
             .Must(value => value is not null && DocumentNoPattern().IsMatch(value.Trim()))
-            .WithMessage("Document number may contain only letters, numbers, and hyphens, and must start and end with a letter or number.")
+            .WithMessage("文件編號只能包含英文字母、數字與連字號，且開頭與結尾必須是字母或數字。")
             .OverridePropertyName("documentNo");
         RuleFor(request => request.Name)
             .Must(value => !string.IsNullOrWhiteSpace(value))
-            .WithMessage("Document name is required.")
+            .WithMessage("請輸入文件名稱。")
             .MaximumLength(255)
-            .WithMessage("Document name must not exceed 255 characters.")
+            .WithMessage("文件名稱不可超過 255 個字元。")
             .OverridePropertyName("name");
     }
 

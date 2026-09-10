@@ -78,7 +78,7 @@ public sealed class UserApiTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.NotNull(body);
         Assert.Contains("empno", body.Errors.Keys);
-        Assert.Contains("already in use", body.Errors["empno"].Single(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("已被使用", body.Errors["empno"].Single(), StringComparison.Ordinal);
     }
 
     [Fact]

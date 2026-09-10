@@ -9,9 +9,9 @@ public sealed class UpdateDocumentRequestValidator : AbstractValidator<UpdateDoc
     {
         RuleFor(request => request.Name)
             .Must(value => !string.IsNullOrWhiteSpace(value))
-            .WithMessage("Document name is required.")
+            .WithMessage("請輸入文件名稱。")
             .MaximumLength(255)
-            .WithMessage("Document name must not exceed 255 characters.")
+            .WithMessage("文件名稱不可超過 255 個字元。")
             .OverridePropertyName("name");
     }
 }

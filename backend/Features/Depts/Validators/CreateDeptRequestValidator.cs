@@ -10,16 +10,16 @@ public sealed class CreateDeptRequestValidator : AbstractValidator<CreateDeptReq
         RuleFor(request => request.CompanyId)
             .Cascade(CascadeMode.Stop)
             .NotEmpty()
-            .WithMessage("Company is required.")
+            .WithMessage("請選擇公司。")
             .MustAsync(deptStore.CompanyExistsAsync)
-            .WithMessage("The specified company does not exist.")
+            .WithMessage("指定的公司不存在。")
             .OverridePropertyName("companyId");
 
         RuleFor(request => request.Name)
             .NotEmpty()
-            .WithMessage("Department name is required.")
+            .WithMessage("請輸入部門名稱。")
             .MaximumLength(100)
-            .WithMessage("Department name must not exceed 100 characters.")
+            .WithMessage("部門名稱不可超過 100 個字元。")
             .OverridePropertyName("name");
     }
 }

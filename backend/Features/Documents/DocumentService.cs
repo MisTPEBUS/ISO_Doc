@@ -34,7 +34,7 @@ public sealed class DocumentService(
         if (!companyFilter.IsAllowed)
         {
             return Result<PagedResult<DocumentResponse>>.Forbidden(
-                "You do not have permission to access documents for this company.");
+                "您沒有檢視這間公司文件的權限。");
         }
 
         page = page > 0 ? page : DefaultPage;
@@ -62,12 +62,12 @@ public sealed class DocumentService(
         if (!currentUser.CanAccessCompany(request.CompanyId))
         {
             return Result<DocumentResponse>.Forbidden(
-                "You do not have permission to create documents for this company.");
+                "您沒有為這間公司建立文件的權限。");
         }
 
         if (currentUser.UserId is not { } userId)
         {
-            return Result<DocumentResponse>.Unauthorized("Authentication is required.");
+            return Result<DocumentResponse>.Unauthorized("請先登入後再操作。");
         }
 
         var documentNo = request.DocumentNo!.Trim();
@@ -118,13 +118,13 @@ public sealed class DocumentService(
         var document = await documentStore.FindByIdAsync(id, cancellationToken);
         if (document is null)
         {
-            return Result<DocumentDetailResponse>.NotFound("The document was not found.");
+            return Result<DocumentDetailResponse>.NotFound("找不到指定的文件。");
         }
 
         if (!currentUser.CanAccessCompany(document.CompanyId))
         {
             return Result<DocumentDetailResponse>.Forbidden(
-                "You do not have permission to access this document.");
+                "您沒有檢視此文件的權限。");
         }
 
         var versions = await documentStore.ListVersionsAsync(id, cancellationToken);
@@ -158,13 +158,13 @@ public sealed class DocumentService(
         var document = await documentStore.FindByIdAsync(id, cancellationToken);
         if (document is null)
         {
-            return Result<DocumentResponse>.NotFound("The document was not found.");
+            return Result<DocumentResponse>.NotFound("找不到指定的文件。");
         }
 
         if (!currentUser.CanAccessCompany(document.CompanyId))
         {
             return Result<DocumentResponse>.Forbidden(
-                "You do not have permission to update this document.");
+                "您沒有修改此文件的權限。");
         }
 
         var oldValue = ToAuditValue(document);
@@ -191,12 +191,12 @@ public sealed class DocumentService(
         var document = await documentStore.FindByIdAsync(id, cancellationToken);
         if (document is null)
         {
-            return Result.NotFound("The document was not found.");
+            return Result.NotFound("找不到指定的文件。");
         }
 
         if (!currentUser.CanAccessCompany(document.CompanyId))
         {
-            return Result.Forbidden("You do not have permission to deactivate this document.");
+            return Result.Forbidden("您沒有停用此文件的權限。");
         }
 
         var wasActive = document.IsActive;
@@ -221,7 +221,7 @@ public sealed class DocumentService(
     private static Result<T> DuplicateDocumentNo<T>() => Result<T>.ValidationFailed(
         new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
-            ["documentNo"] = ["The document number is already in use for this company."]
+            ["documentNo"] = ["這間公司已使用相同的文件編號。"]
         });
 
     private static bool IsDuplicateDocumentNoViolation(DbUpdateException exception) =>

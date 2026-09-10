@@ -30,13 +30,13 @@ public sealed class AttachmentService(
         if (context is null)
         {
             return Result<IReadOnlyList<AttachmentResponse>>.NotFound(
-                "The document version was not found.");
+                "找不到指定的文件版本。");
         }
 
         if (!currentUser.CanAccessCompany(context.Document.CompanyId))
         {
             return Result<IReadOnlyList<AttachmentResponse>>.Forbidden(
-                "You do not have permission to access attachments for this document.");
+                "您沒有檢視此文件附件的權限。");
         }
 
         var attachments = await attachmentStore.ListAsync(versionId, cancellationToken);
@@ -61,18 +61,18 @@ public sealed class AttachmentService(
         if (context is null)
         {
             return Result<CreateAttachmentsResponse>.NotFound(
-                "The document version was not found.");
+                "找不到指定的文件版本。");
         }
 
         if (!currentUser.CanAccessCompany(context.Document.CompanyId))
         {
             return Result<CreateAttachmentsResponse>.Forbidden(
-                "You do not have permission to add attachments to this document.");
+                "您沒有為此文件新增附件的權限。");
         }
 
         if (currentUser.UserId is not { } userId)
         {
-            return Result<CreateAttachmentsResponse>.Unauthorized("Authentication is required.");
+            return Result<CreateAttachmentsResponse>.Unauthorized("請先登入後再操作。");
         }
 
         var normalizedNumbers = request.Items
@@ -186,12 +186,12 @@ public sealed class AttachmentService(
             attachmentId, cancellationToken);
         if (context is null)
         {
-            return Result.NotFound("The attachment was not found.");
+            return Result.NotFound("找不到指定的附件。");
         }
 
         if (!currentUser.CanAccessCompany(context.CompanyId))
         {
-            return Result.Forbidden("You do not have permission to delete this attachment.");
+            return Result.Forbidden("您沒有刪除此附件的權限。");
         }
 
         await using var transaction = await attachmentStore.BeginTransactionAsync(cancellationToken);
@@ -243,8 +243,8 @@ public sealed class AttachmentService(
         {
             ["attachmentNo"] =
             [attachmentNo is null
-                ? "An attachment number is already in use for this version."
-                : $"Attachment number '{attachmentNo}' is already in use for this version."]
+                ? "此版本已使用相同的附件編號。"
+                : $"附件編號「{attachmentNo}」已在此版本使用。"]
         });
 
     private static bool IsAttachmentNumberConflict(Exception exception) => exception switch

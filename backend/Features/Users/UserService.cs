@@ -41,7 +41,7 @@ public sealed class UserService(
         if (!companyFilter.IsAllowed)
         {
             return Result<PagedResult<UserResponse>>.Forbidden(
-                "You do not have permission to access users for this company.");
+                "您沒有檢視這間公司使用者資料的權限。");
         }
 
         if (deptId.HasValue && companyFilter.CompanyId.HasValue
@@ -49,7 +49,7 @@ public sealed class UserService(
                 deptId.Value, companyFilter.CompanyId.Value, cancellationToken))
         {
             return Result<PagedResult<UserResponse>>.ValidationFailed(
-                FieldError("deptId", "The specified department does not belong to this company."));
+                FieldError("deptId", "指定的部門不屬於這間公司。"));
         }
 
         page = page > 0 ? page : DefaultPage;
@@ -77,21 +77,21 @@ public sealed class UserService(
         if (!currentUser.CanAccessCompany(request.CompanyId))
         {
             return Result<UserResponse>.Forbidden(
-                "You do not have permission to create users for this company.");
+                "您沒有為這間公司建立使用者的權限。");
         }
 
         var requestedRole = Enum.Parse<UserRole>(request.Role!, ignoreCase: false);
         if (!UserManagementRules.CanCreateRole(currentUser.Role, requestedRole))
         {
             return Result<UserResponse>.Forbidden(
-                "Company administrators cannot create system administrator accounts.");
+                "公司管理員無法建立系統管理員帳號。");
         }
 
         if (!await userStore.DeptBelongsToCompanyAsync(
             request.DeptId, request.CompanyId, cancellationToken))
         {
             return Result<UserResponse>.ValidationFailed(
-                FieldError("deptId", "The specified department does not belong to this company."));
+                FieldError("deptId", "指定的部門不屬於這間公司。"));
         }
 
         var empno = request.Empno!.Trim();
@@ -148,12 +148,12 @@ public sealed class UserService(
         var user = await userStore.FindByIdAsync(id, cancellationToken);
         if (user is null)
         {
-            return Result<UserResponse>.NotFound("The user was not found.");
+            return Result<UserResponse>.NotFound("找不到指定的使用者。");
         }
 
         return currentUser.CanAccessCompany(user.CompanyId)
             ? Result<UserResponse>.Success(ToResponse(user))
-            : Result<UserResponse>.Forbidden("You do not have permission to access this user.");
+            : Result<UserResponse>.Forbidden("您沒有檢視此使用者的權限。");
     }
 
     public async Task<Result<UserResponse>> UpdateAsync(
@@ -170,12 +170,12 @@ public sealed class UserService(
         var user = await userStore.FindByIdAsync(id, cancellationToken);
         if (user is null)
         {
-            return Result<UserResponse>.NotFound("The user was not found.");
+            return Result<UserResponse>.NotFound("找不到指定的使用者。");
         }
 
         if (!currentUser.CanAccessCompany(user.CompanyId))
         {
-            return Result<UserResponse>.Forbidden("You do not have permission to update this user.");
+            return Result<UserResponse>.Forbidden("您沒有修改此使用者的權限。");
         }
 
         var existingRole = Enum.Parse<UserRole>(user.Role, ignoreCase: false);
@@ -183,14 +183,14 @@ public sealed class UserService(
         if (!UserManagementRules.CanUpdateRole(currentUser.Role, existingRole, requestedRole))
         {
             return Result<UserResponse>.Forbidden(
-                "Company administrators cannot create or modify system administrator accounts.");
+                "公司管理員無法建立或修改系統管理員帳號。");
         }
 
         if (!await userStore.DeptBelongsToCompanyAsync(
             request.DeptId, user.CompanyId, cancellationToken))
         {
             return Result<UserResponse>.ValidationFailed(
-                FieldError("deptId", "The specified department does not belong to this company."));
+                FieldError("deptId", "指定的部門不屬於這間公司。"));
         }
 
         var oldValue = ToAuditValue(user);
@@ -222,12 +222,12 @@ public sealed class UserService(
         var user = await userStore.FindByIdAsync(id, cancellationToken);
         if (user is null)
         {
-            return Result.NotFound("The user was not found.");
+            return Result.NotFound("找不到指定的使用者。");
         }
 
         if (!currentUser.CanAccessCompany(user.CompanyId))
         {
-            return Result.Forbidden("You do not have permission to deactivate this user.");
+            return Result.Forbidden("您沒有停用此使用者的權限。");
         }
 
         var wasActive = user.IsActive;
@@ -256,13 +256,13 @@ public sealed class UserService(
         var user = await userStore.FindByIdAsync(id, cancellationToken);
         if (user is null)
         {
-            return Result<ResetPasswordResponse>.NotFound("The user was not found.");
+            return Result<ResetPasswordResponse>.NotFound("找不到指定的使用者。");
         }
 
         if (!currentUser.CanAccessCompany(user.CompanyId))
         {
             return Result<ResetPasswordResponse>.Forbidden(
-                "You do not have permission to reset this user's password.");
+                "您沒有重設此使用者密碼的權限。");
         }
 
         var temporaryPassword = RandomNumberGenerator.GetString(TemporaryPasswordAlphabet, 12);
@@ -284,7 +284,7 @@ public sealed class UserService(
     }
 
     private static Result<T> DuplicateEmpno<T>() => Result<T>.ValidationFailed(
-        FieldError("empno", "The employee number is already in use."));
+        FieldError("empno", "此員工編號已被使用。"));
 
     private static bool IsDuplicateEmpnoViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException
