@@ -272,7 +272,11 @@ export function HomePage() {
               }
             : undefined
         }
-        changePasswordHref={null}
+        changePasswordHref={
+          currentUser.data
+            ? `${import.meta.env.BASE_URL}change-password`
+            : null
+        }
         logoutLabel={logoutMutation.isPending ? "登出中" : "登出"}
         onLogout={handleLogout}
       />

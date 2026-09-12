@@ -9,4 +9,9 @@ public interface IDocumentVersionService
         Guid documentId,
         CreateDocumentVersionRequest request,
         CancellationToken cancellationToken);
+
+    Task<Result> DeleteDraftAsync(
+        Guid documentId,
+        Guid versionId,
+        CancellationToken cancellationToken);
 }

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { ApiError } from '@/api/httpClient'
 
-import { getMe, login, logout } from './api'
+import { changePassword, getMe, login, logout } from './api'
 
 export const authKeys = {
   all: ['auth'] as const,
@@ -45,6 +45,18 @@ export function useLogout() {
     mutationFn: logout,
     onSuccess: () => {
       queryClient.setQueryData(authKeys.me, null)
+    },
+  })
+}
+
+export function useChangePassword() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: changePassword,
+    onSuccess: () => {
+      // 後端已重新簽發登入 cookie 並清除 mustChangePassword，重新取得使用者狀態
+      void queryClient.invalidateQueries({ queryKey: authKeys.me })
     },
   })
 }

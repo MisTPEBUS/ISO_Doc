@@ -5,9 +5,7 @@
     "description": "ISO 文件管理系統後端 API。契約見 backend/docs/api.md。\n\n用法：\n1. 匯入本集合與 ISO-Docs-API.postman_environment.json，環境切到「ISO Docs — Local」。\n2. Settings 關閉 SSL certificate verification（本機自簽憑證）。\n3. 先跑 Auth > Login（填 empno / password 環境變數）。\n4. 非 GET 請求會由 collection pre-request script 自動從 cookie jar 取 isodocs.xsrf 塞進 X-XSRF-TOKEN。\n5. Login / Create 類請求的 test script 會把 id 寫回環境變數供後續使用。",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "variable": [
-    { "key": "baseUrl", "value": "https://localhost:7167" }
-  ],
+  "variable": [{ "key": "baseUrl", "value": "https://localhost:7167" }],
   "event": [
     {
       "listen": "prerequest",
@@ -235,7 +233,14 @@
             "url": {
               "raw": "{{baseUrl}}/api/documents/{{documentId}}/versions/{{versionId}}/download",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "documents", "{{documentId}}", "versions", "{{versionId}}", "download"]
+              "path": [
+                "api",
+                "documents",
+                "{{documentId}}",
+                "versions",
+                "{{versionId}}",
+                "download"
+              ]
             },
             "description": "DocumentAccess。200 PDF 串流（Content-Disposition）。403 無權限 / USER 讀非 PUBLISHED。404 檔案未上傳。用 Send and Download 存檔。"
           }
@@ -248,7 +253,16 @@
             "url": {
               "raw": "{{baseUrl}}/api/documents/{{documentId}}/versions/{{versionId}}/attachments/{{attachmentId}}/download",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "documents", "{{documentId}}", "versions", "{{versionId}}", "attachments", "{{attachmentId}}", "download"]
+              "path": [
+                "api",
+                "documents",
+                "{{documentId}}",
+                "versions",
+                "{{versionId}}",
+                "attachments",
+                "{{attachmentId}}",
+                "download"
+              ]
             },
             "description": "DocumentAccess。200 附件串流。403 / 404。"
           }
@@ -270,7 +284,11 @@
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "pageSize", "value": "20" },
-                { "key": "companyId", "value": "{{companyId}}", "disabled": true }
+                {
+                  "key": "companyId",
+                  "value": "{{companyId}}",
+                  "disabled": true
+                }
               ]
             },
             "description": "CompanyAdminScope。200 PagedResult<DeptResponse>。403（COMPANY_ADMIN 帶非本人 companyId）。"
@@ -367,7 +385,11 @@
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "pageSize", "value": "20" },
-                { "key": "companyId", "value": "{{companyId}}", "disabled": true },
+                {
+                  "key": "companyId",
+                  "value": "{{companyId}}",
+                  "disabled": true
+                },
                 { "key": "deptId", "value": "{{deptId}}", "disabled": true },
                 { "key": "keyword", "value": "", "disabled": true },
                 { "key": "includeInactive", "value": "false", "disabled": true }
@@ -395,7 +417,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"empno\": \"EMP100\",\n  \"name\": \"王小明\",\n  \"email\": \"emp100@example.com\",\n  \"companyId\": \"{{companyId}}\",\n  \"deptId\": \"{{deptId}}\",\n  \"role\": \"USER\",\n  \"password\": \"Passw0rd1\",\n  \"passwordConfirmation\": \"Passw0rd1\"\n}",
+              "raw": "{\n  \"empno\": \"EMP100\",\n  \"name\": \"Lobinda\",\n  \"email\": \"emp100@example.com\",\n  \"companyId\": \"{{companyId}}\",\n  \"deptId\": \"{{deptId}}\",\n  \"role\": \"USER\",\n  \"password\": \"Passw0rd1\",\n  \"passwordConfirmation\": \"Passw0rd1\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -492,7 +514,11 @@
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "pageSize", "value": "20" },
-                { "key": "companyId", "value": "{{companyId}}", "disabled": true },
+                {
+                  "key": "companyId",
+                  "value": "{{companyId}}",
+                  "disabled": true
+                },
                 { "key": "keyword", "value": "", "disabled": true }
               ]
             },
@@ -621,11 +647,36 @@
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "changeType", "value": "MINOR", "type": "text", "description": "MAJOR 或 MINOR" },
-                { "key": "effectiveDate", "value": "{{effectiveDate}}", "type": "text", "description": "yyyy-MM-dd，不得早於今天" },
-                { "key": "pageCount", "value": "1", "type": "text", "description": "選填，> 0" },
-                { "key": "memo", "value": "初版", "type": "text", "description": "選填" },
-                { "key": "file", "type": "file", "src": [], "description": "必填，.pdf，內容前置 %PDF-" }
+                {
+                  "key": "changeType",
+                  "value": "MINOR",
+                  "type": "text",
+                  "description": "MAJOR 或 MINOR"
+                },
+                {
+                  "key": "effectiveDate",
+                  "value": "{{effectiveDate}}",
+                  "type": "text",
+                  "description": "yyyy-MM-dd，不得早於今天"
+                },
+                {
+                  "key": "pageCount",
+                  "value": "1",
+                  "type": "text",
+                  "description": "選填，> 0"
+                },
+                {
+                  "key": "memo",
+                  "value": "初版",
+                  "type": "text",
+                  "description": "選填"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "必填，.pdf，內容前置 %PDF-"
+                }
               ]
             },
             "url": {
@@ -664,7 +715,14 @@
             "url": {
               "raw": "{{baseUrl}}/api/documents/{{documentId}}/versions/{{versionId}}/attachments",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "documents", "{{documentId}}", "versions", "{{versionId}}", "attachments"]
+              "path": [
+                "api",
+                "documents",
+                "{{documentId}}",
+                "versions",
+                "{{versionId}}",
+                "attachments"
+              ]
             },
             "description": "CompanyAdminScope。200 AttachmentResponse[]（陣列，非分頁）。403 / 404。"
           }
@@ -692,17 +750,45 @@
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "items[0].attachmentNo", "value": "ATT-01", "type": "text" },
-                { "key": "items[0].name", "value": "請假申請表", "type": "text" },
-                { "key": "items[0].file", "type": "file", "src": [], "description": "選填。副檔名限 jpg/jpeg/png/pdf/doc/docx/xls/xlsx/odt/ods" },
-                { "key": "items[1].attachmentNo", "value": "ATT-02", "type": "text" },
-                { "key": "items[1].name", "value": "填寫說明（僅中繼資料）", "type": "text" }
+                {
+                  "key": "items[0].attachmentNo",
+                  "value": "ATT-01",
+                  "type": "text"
+                },
+                {
+                  "key": "items[0].name",
+                  "value": "請假申請表",
+                  "type": "text"
+                },
+                {
+                  "key": "items[0].file",
+                  "type": "file",
+                  "src": [],
+                  "description": "選填。副檔名限 jpg/jpeg/png/pdf/doc/docx/xls/xlsx/odt/ods"
+                },
+                {
+                  "key": "items[1].attachmentNo",
+                  "value": "ATT-02",
+                  "type": "text"
+                },
+                {
+                  "key": "items[1].name",
+                  "value": "填寫說明（僅中繼資料）",
+                  "type": "text"
+                }
               ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/documents/{{documentId}}/versions/{{versionId}}/attachments",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "documents", "{{documentId}}", "versions", "{{versionId}}", "attachments"]
+              "path": [
+                "api",
+                "documents",
+                "{{documentId}}",
+                "versions",
+                "{{versionId}}",
+                "attachments"
+              ]
             },
             "description": "CompanyAdminScope + CSRF。批次全有全無。items[i].attachmentNo（<=50，同版本唯一、同批不重複）、items[i].name（<=255）、items[i].file（選填）。i 從 0 連續。201 { created: [...] }。400 errors[\"items[i].*\"] / errors.attachmentNo。403 / 404。"
           }

@@ -170,6 +170,72 @@ public sealed class DocumentVersionService(
         }
     }
 
+    public async Task<Result> DeleteDraftAsync(
+        Guid documentId,
+        Guid versionId,
+        CancellationToken cancellationToken)
+    {
+        var version = await versionStore.FindVersionAsync(versionId, cancellationToken);
+        if (version is null || version.DocumentId != documentId)
+        {
+            return Result.NotFound("找不到指定的文件版本。");
+        }
+
+        var document = await versionStore.FindDocumentAsync(documentId, cancellationToken);
+        if (document is null)
+        {
+            return Result.NotFound("找不到指定的文件。");
+        }
+
+        if (!currentUser.CanAccessCompany(document.CompanyId))
+        {
+            return Result.Forbidden("您沒有刪除此文件版本的權限。");
+        }
+
+        if (currentUser.UserId is null)
+        {
+            return Result.Unauthorized("請先登入後再操作。");
+        }
+
+        // 僅限 DRAFT 狀態可硬刪除。
+        if (version.Status != "DRAFT")
+        {
+            return Result.Conflict("只有草稿版本可以刪除。");
+        }
+
+        if (await versionStore.HasAttachmentsAsync(versionId, cancellationToken))
+        {
+            return Result.Conflict("請先移除此版本的附件，再刪除版本。");
+        }
+
+        await using var transaction = await versionStore.BeginTransactionAsync(cancellationToken);
+        if (version.FileKey is { } fileKey)
+        {
+            await documentStorage.MoveToTrashAsync(fileKey, cancellationToken);
+        }
+
+        versionStore.Remove(version);
+        await versionStore.SaveChangesAsync(cancellationToken);
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                document.CompanyId,
+                AuditActions.DeleteDocumentVersion,
+                AuditResourceTypes.DocumentVersion,
+                version.Id,
+                new
+                {
+                    old_value = new
+                    {
+                        document_id = documentId,
+                        version = version.Version,
+                        status = version.Status
+                    }
+                }),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return Result.Success();
+    }
+
     private async Task TryMoveToTrashAsync(string objectKey)
     {
         try

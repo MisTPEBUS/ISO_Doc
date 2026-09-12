@@ -10,5 +10,8 @@ public interface IAttachmentService
     Task<Result<CreateAttachmentsResponse>> CreateAsync(
         Guid documentId, Guid versionId, CreateAttachmentsRequest request,
         CancellationToken cancellationToken);
+    Task<Result<UploadAttachmentFileResponse>> UploadFileAsync(
+        Guid attachmentId, UploadAttachmentFileRequest request,
+        CancellationToken cancellationToken);
     Task<Result> DeleteAsync(Guid attachmentId, CancellationToken cancellationToken);
 }

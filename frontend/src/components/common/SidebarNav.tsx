@@ -72,6 +72,7 @@ export function SidebarNav({
             <div className="space-y-0.5">
               {group.items.map((item) => {
                 const active = item.href === activeHref
+                  || activeHref?.startsWith(`${item.href}/`) === true
 
                 return (
                   <a

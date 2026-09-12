@@ -29,6 +29,51 @@ public sealed class EfAttachmentStore(IsoDbContext dbContext) : IAttachmentStore
          select new AttachmentContext(attachment, document.CompanyId))
         .SingleOrDefaultAsync(cancellationToken);
 
+    public async Task<AttachmentUploadContext?> FindAttachmentUploadContextAsync(
+        Guid attachmentId,
+        CancellationToken cancellationToken)
+    {
+        var row = await (
+            from attachment in dbContext.Attachments
+            join version in dbContext.DocumentVersions
+                on attachment.DocumentVersionId equals version.Id
+            join document in dbContext.Documents on version.DocumentId equals document.Id
+            join company in dbContext.Companies on document.CompanyId equals company.Id
+            where attachment.Id == attachmentId
+            select new
+            {
+                Attachment = attachment,
+                document.CompanyId,
+                CompanyCode = company.Code,
+                document.DocumentNo,
+                version.Version,
+                VersionId = version.Id
+            }).SingleOrDefaultAsync(cancellationToken);
+
+        if (row is null)
+        {
+            return null;
+        }
+
+        // seq 取「同版本附件依 attachment_no 排序後，本附件的 1-based 序位」。
+        var siblingNumbers = await dbContext.Attachments
+            .Where(attachment => attachment.DocumentVersionId == row.VersionId)
+            .Select(attachment => attachment.AttachmentNo)
+            .ToListAsync(cancellationToken);
+        var sequence = siblingNumbers
+            .OrderBy(number => number, StringComparer.Ordinal)
+            .ToList()
+            .IndexOf(row.Attachment.AttachmentNo) + 1;
+
+        return new AttachmentUploadContext(
+            row.Attachment,
+            row.CompanyId,
+            row.CompanyCode,
+            row.DocumentNo,
+            row.Version,
+            sequence);
+    }
+
     public async Task<IReadOnlyList<Attachment>> ListAsync(
         Guid versionId,
         CancellationToken cancellationToken) =>

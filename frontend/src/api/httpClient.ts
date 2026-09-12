@@ -87,9 +87,9 @@ function readErrors(value: unknown): Record<string, string[]> | undefined {
   return Object.fromEntries(entries);
 }
 
-function toApiError(error: AxiosError): ApiError {
+function toApiError(error: AxiosError, responseBody?: unknown): ApiError {
   const response = error.response;
-  const body = response?.data;
+  const body = responseBody ?? response?.data;
   const problem = isRecord(body) ? body : {};
   const status =
     typeof problem.status === "number"
@@ -157,5 +157,50 @@ axiosInstance.interceptors.response.use(
 );
 
 export const httpClient = axiosInstance as HttpClient;
+
+export interface HttpFileResponse {
+  blob: Blob;
+  contentDisposition?: string;
+}
+
+export async function getFileResponse(url: string): Promise<HttpFileResponse> {
+  try {
+    const response = await axios.get<Blob>(url, {
+      baseURL: env.apiBaseUrl,
+      withCredentials: true,
+      responseType: "blob",
+    });
+
+    const contentDisposition = response.headers["content-disposition"];
+    return {
+      blob: response.data,
+      contentDisposition:
+        typeof contentDisposition === "string" ? contentDisposition : undefined,
+    };
+  } catch (error: unknown) {
+    if (!axios.isAxiosError(error)) {
+      throw error;
+    }
+
+    if (error.response?.status === 401) {
+      window.dispatchEvent(new CustomEvent(AUTH_UNAUTHORIZED_EVENT));
+    }
+
+    if (!isProblemResponse(error)) {
+      throw error;
+    }
+
+    let responseBody: unknown = error.response?.data;
+    if (responseBody instanceof Blob) {
+      try {
+        responseBody = JSON.parse(await responseBody.text());
+      } catch {
+        throw error;
+      }
+    }
+
+    throw toApiError(error, responseBody);
+  }
+}
 
 export default httpClient;

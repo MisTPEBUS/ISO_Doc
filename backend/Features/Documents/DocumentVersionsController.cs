@@ -29,4 +29,12 @@ public sealed class DocumentVersionsController(
             : null;
         return result.ToCreatedResult(this, location);
     }
+
+    [HttpDelete("{versionId:guid}")]
+    public async Task<IActionResult> Delete(
+        Guid documentId,
+        Guid versionId,
+        CancellationToken cancellationToken) =>
+        (await documentVersionService.DeleteDraftAsync(documentId, versionId, cancellationToken))
+        .ToNoContentResult(this);
 }

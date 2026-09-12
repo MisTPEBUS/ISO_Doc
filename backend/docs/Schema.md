@@ -57,7 +57,7 @@
 |---|---|---:|---|---|---|
 | `id` | uuid | 否 | `gen_random_uuid()` | PK | 使用者識別碼 |
 | `dept_id` | uuid | 否 | — | FK、INDEX | 所屬部門 |
-| `empno` | varchar(50) | 否 | — | INDEX | 員工編號 |
+| `empno` | varchar(50) | 否 | — | INDEX | 員工編號 / 帳號 |
 | `name` | varchar(100) | 否 | — | — | 員工姓名 |
 | `email` | varchar(255) | 是 | `NULL` | INDEX | 電子郵件 |
 | `password_hash` | varchar(255) | 否 | — | — | 密碼雜湊 |

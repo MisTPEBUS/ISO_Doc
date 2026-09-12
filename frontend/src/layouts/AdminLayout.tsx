@@ -39,7 +39,7 @@ export function AdminLayout() {
         userName={user?.name ?? '使用者'}
         roleLabel={user ? USER_ROLE_LABEL[user.role] : undefined}
         modeLink={{ label: '前台查閱', href: import.meta.env.BASE_URL }}
-        changePasswordHref={null}
+        changePasswordHref={`${import.meta.env.BASE_URL}change-password`}
         logoutLabel={logoutMutation.isPending ? '登出中' : '登出'}
         onLogout={handleLogout}
       />

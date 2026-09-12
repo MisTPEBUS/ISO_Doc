@@ -8,6 +8,8 @@ public interface ICurrentUser
 
     Guid? UserId { get; }
 
+    string? Name { get; }
+
     Guid? CompanyId { get; }
 
     Guid? DeptId { get; }
@@ -26,6 +28,8 @@ public sealed class CurrentUser(IHttpContextAccessor httpContextAccessor) : ICur
     public bool IsAuthenticated => Principal?.Identity?.IsAuthenticated == true;
 
     public Guid? UserId => ReadGuidClaim(ClaimTypes.NameIdentifier);
+
+    public string? Name => Principal?.FindFirstValue(ClaimTypes.Name);
 
     public Guid? CompanyId => ReadGuidClaim(AuthClaimTypes.CompanyId);
 

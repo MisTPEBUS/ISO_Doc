@@ -124,7 +124,9 @@ builder.Services.AddScoped<IValidator<CreateDocumentRequest>, CreateDocumentRequ
 builder.Services.AddScoped<IValidator<UpdateDocumentRequest>, UpdateDocumentRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateDocumentVersionRequest>, CreateDocumentVersionRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateAttachmentsRequest>, CreateAttachmentsRequestValidator>();
+builder.Services.AddScoped<IValidator<UploadAttachmentFileRequest>, UploadAttachmentFileRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateDocumentDeptPermissionsRequest>, UpdateDocumentDeptPermissionsRequestValidator>();
+builder.Services.AddScoped<IValidator<UpdateDocumentPermissionMatrixRequest>, UpdateDocumentPermissionMatrixRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateUserRequest>, CreateUserRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateUserRequest>, UpdateUserRequestValidator>();
 builder.Services.AddOptions<StorageOptions>()
@@ -159,6 +161,7 @@ builder.Services.AddScoped<IAttachmentStore, EfAttachmentStore>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
 builder.Services.AddScoped<IDocumentPermissionStore, EfDocumentPermissionStore>();
 builder.Services.AddScoped<IDocumentPermissionService, DocumentPermissionService>();
+builder.Services.AddScoped<IDocumentPermissionMatrixService, DocumentPermissionMatrixService>();
 builder.Services.AddScoped<IAuditLogStore, EfAuditLogStore>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IUserStore, EfUserStore>();

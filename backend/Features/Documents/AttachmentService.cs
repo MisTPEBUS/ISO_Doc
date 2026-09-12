@@ -17,6 +17,7 @@ public sealed class AttachmentService(
     StorageKeyBuilder storageKeyBuilder,
     ICurrentUser currentUser,
     IValidator<CreateAttachmentsRequest> validator,
+    IValidator<UploadAttachmentFileRequest> uploadFileValidator,
     IOperationAuditLogService auditLogService,
     TimeProvider timeProvider) : IAttachmentService
 {
@@ -174,6 +175,95 @@ public sealed class AttachmentService(
         catch
         {
             await MoveWrittenFilesToTrashAsync(writtenKeys);
+            throw;
+        }
+    }
+
+    public async Task<Result<UploadAttachmentFileResponse>> UploadFileAsync(
+        Guid attachmentId,
+        UploadAttachmentFileRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await uploadFileValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return Result<UploadAttachmentFileResponse>.ValidationFailed(ToErrors(validation));
+        }
+
+        var context = await attachmentStore.FindAttachmentUploadContextAsync(
+            attachmentId, cancellationToken);
+        if (context is null)
+        {
+            return Result<UploadAttachmentFileResponse>.NotFound("找不到指定的附件。");
+        }
+
+        if (!currentUser.CanAccessCompany(context.CompanyId))
+        {
+            return Result<UploadAttachmentFileResponse>.Forbidden("您沒有為此附件補檔的權限。");
+        }
+
+        if (currentUser.UserId is null)
+        {
+            return Result<UploadAttachmentFileResponse>.Unauthorized("請先登入後再操作。");
+        }
+
+        // 版本狀態不限制（比照 DeleteAsync）；已有檔案不可重複補檔。
+        if (context.Attachment.FileKey is not null)
+        {
+            return Result<UploadAttachmentFileResponse>.Conflict("此附件已經有檔案，無法重複補檔。");
+        }
+
+        var file = request.File!;
+        string? writtenKey = null;
+        try
+        {
+            await using var transaction = await attachmentStore.BeginTransactionAsync(cancellationToken);
+
+            var objectKey = storageKeyBuilder.BuildAttachmentKey(
+                context.CompanyCode,
+                context.DocumentNo,
+                context.Version,
+                context.Sequence,
+                Guid.NewGuid(),
+                file.FileName);
+            await using var stream = file.OpenReadStream();
+            var writeResult = await documentStorage.WriteAsync(objectKey, stream, cancellationToken);
+            writtenKey = objectKey;
+
+            var attachment = context.Attachment;
+            attachment.FileKey = objectKey;
+            attachment.OriginalFileName = file.FileName;
+            attachment.ContentType = AttachmentFileRules.GetContentType(file.FileName);
+            attachment.FileSize = writeResult.FileSize;
+            attachment.Checksum = writeResult.Checksum;
+            await attachmentStore.SaveChangesAsync(cancellationToken);
+
+            await auditLogService.WriteAsync(
+                new AuditLogWriteRequest(
+                    context.CompanyId,
+                    AuditActions.UploadAttachment,
+                    AuditResourceTypes.Attachment,
+                    attachment.Id,
+                    new
+                    {
+                        document_version_id = attachment.DocumentVersionId,
+                        attachment_no = attachment.AttachmentNo,
+                        name = attachment.Name,
+                        original_file_name = attachment.OriginalFileName
+                    }),
+                cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return Result<UploadAttachmentFileResponse>.Success(
+                new UploadAttachmentFileResponse(attachment.Id, HasFile: true));
+        }
+        catch
+        {
+            if (writtenKey is not null)
+            {
+                await MoveWrittenFilesToTrashAsync([writtenKey]);
+            }
+
             throw;
         }
     }

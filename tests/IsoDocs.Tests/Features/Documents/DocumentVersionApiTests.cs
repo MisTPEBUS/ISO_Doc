@@ -139,6 +139,71 @@ public sealed class DocumentVersionApiTests
         Assert.Empty(factory.Audit.Entries);
     }
 
+    [Fact]
+    public async Task DeleteDraftVersion_HardDeletesRowAndMovesFileToTrash()
+    {
+        await using var factory = new DocumentVersionWebApplicationFactory();
+        var draft = factory.VersionStore.AddVersionSeed(2, 0, "DRAFT");
+        draft.FileKey = "store/COMPANYA/ISO-001/v2.0/main/draft.pdf";
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/api/documents/{factory.Document.Id}/versions/{draft.Id}");
+        request.Headers.Add("X-XSRF-TOKEN", token);
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.DoesNotContain(factory.VersionStore.Versions, version => version.Id == draft.Id);
+        Assert.Contains(draft.FileKey, factory.Storage.TrashedKeys);
+        Assert.True(factory.VersionStore.TransactionCommitted);
+        var audit = Assert.Single(factory.Audit.Entries);
+        Assert.Equal(AuditActions.DeleteDocumentVersion, audit.Action);
+        Assert.Equal(draft.Id, audit.ResourceId);
+    }
+
+    [Fact]
+    public async Task DeleteVersion_WhenNotDraft_ReturnsConflict()
+    {
+        await using var factory = new DocumentVersionWebApplicationFactory();
+        var published = factory.VersionStore.AddVersionSeed(1, 0, "PUBLISHED");
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/api/documents/{factory.Document.Id}/versions/{published.Id}");
+        request.Headers.Add("X-XSRF-TOKEN", token);
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains(factory.VersionStore.Versions, version => version.Id == published.Id);
+        Assert.Empty(factory.Audit.Entries);
+    }
+
+    [Fact]
+    public async Task DeleteDraftVersion_WhenVersionHasAttachments_ReturnsConflict()
+    {
+        await using var factory = new DocumentVersionWebApplicationFactory();
+        var draft = factory.VersionStore.AddVersionSeed(2, 0, "DRAFT");
+        factory.VersionStore.AttachedVersionIds.Add(draft.Id);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/api/documents/{factory.Document.Id}/versions/{draft.Id}");
+        request.Headers.Add("X-XSRF-TOKEN", token);
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains(factory.VersionStore.Versions, version => version.Id == draft.Id);
+    }
+
     private static byte[] ValidPdf() => "%PDF-1.7\nmock"u8.ToArray();
 
     private static DateOnly UtcToday() => DateOnly.FromDateTime(DateTime.UtcNow);
@@ -253,6 +318,7 @@ internal sealed class FakeDocumentVersionStore(
     private List<(DocumentVersion Version, string Status, DateOnly? ExpiredDate)>? _snapshot;
 
     public List<DocumentVersion> Versions { get; } = [];
+    public HashSet<Guid> AttachedVersionIds { get; } = [];
     public bool ThrowPublishedConflict { get; set; }
     public bool TransactionStarted { get; private set; }
     public bool TransactionCommitted { get; private set; }
@@ -288,6 +354,20 @@ internal sealed class FakeDocumentVersionStore(
         return Task.FromResult<string?>(document.CompanyId == companyId ? companyCode : null);
     }
 
+    public Task<DocumentVersion?> FindVersionAsync(
+        Guid versionId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Versions.SingleOrDefault(version => version.Id == versionId));
+    }
+
+    public Task<bool> HasAttachmentsAsync(Guid versionId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(AttachedVersionIds.Contains(versionId));
+    }
+
     public Task<DocumentVersion?> FindLatestVersionAsync(
         Guid documentId,
         CancellationToken cancellationToken)
@@ -312,6 +392,8 @@ internal sealed class FakeDocumentVersionStore(
     }
 
     public void Add(DocumentVersion version) => Versions.Add(version);
+
+    public void Remove(DocumentVersion version) => Versions.Remove(version);
 
     public Task SaveChangesAsync(CancellationToken cancellationToken)
     {

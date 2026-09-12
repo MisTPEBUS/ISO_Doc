@@ -11,8 +11,8 @@ export function isManagedUserRole(value: string): value is ManagedUserRole {
 }
 
 export const MANAGED_USER_ROLE_LABEL: Record<ManagedUserRole, string> = {
-  [MANAGED_USER_ROLE.User]: '一般使用者',
-  [MANAGED_USER_ROLE.CompanyAdmin]: '公司管理員',
+  [MANAGED_USER_ROLE.User]: '使用者',
+  [MANAGED_USER_ROLE.CompanyAdmin]: '文件管理員',
   [MANAGED_USER_ROLE.SystemAdmin]: '系統管理員',
 }
 

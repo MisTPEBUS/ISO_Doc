@@ -11,4 +11,8 @@ public interface IDocumentPermissionService
         Guid documentId,
         UpdateDocumentDeptPermissionsRequest request,
         CancellationToken cancellationToken);
+
+    Task<Result<UpdateDocumentPermissionMatrixResponse>> UpdateMatrixAsync(
+        UpdateDocumentPermissionMatrixRequest request,
+        CancellationToken cancellationToken);
 }

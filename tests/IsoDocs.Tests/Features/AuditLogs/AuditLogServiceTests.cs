@@ -170,6 +170,7 @@ internal sealed class AuditCurrentUser : ICurrentUser
 {
     public bool IsAuthenticated => UserId.HasValue;
     public Guid? UserId { get; set; }
+    public string? Name { get; set; }
     public Guid? CompanyId { get; set; }
     public Guid? DeptId { get; set; }
     public string? Empno { get; set; }

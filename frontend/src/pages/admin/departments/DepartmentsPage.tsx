@@ -27,7 +27,7 @@ import {
 } from '@/features/departments/schemas'
 import type { DeptResponse } from '@/features/departments/types'
 
-const PAGE_SIZE = 10
+const DEFAULT_PAGE_SIZE = 10
 const EMPTY_FORM: DeptFormValues = { name: '', seq: '' }
 
 type FieldErrors = Partial<Record<keyof DeptFormValues, string>>
@@ -51,6 +51,7 @@ export function DepartmentsPage() {
     currentUser.data?.companyId ?? '',
   )
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [editingDepartment, setEditingDepartment] = useState<DeptResponse>()
   const [formOpen, setFormOpen] = useState(false)
   const [formValues, setFormValues] = useState<DeptFormValues>(EMPTY_FORM)
@@ -64,7 +65,12 @@ export function DepartmentsPage() {
   const companyId = isSystemAdmin
     ? (selectedCompanyId || undefined)
     : currentUser.data?.companyId
-  const departments = useDepts({ companyId, page, pageSize: PAGE_SIZE })
+  const departments = useDepts({ companyId, page, pageSize })
+
+  function handlePageSizeChange(nextPageSize: number) {
+    setPageSize(nextPageSize)
+    setPage(1)
+  }
   const createDepartment = useCreateDept()
   const updateDepartment = useUpdateDept()
   const deleteDepartment = useDeleteDept()
@@ -332,9 +338,10 @@ export function DepartmentsPage() {
         <Pagination
           className="border-t border-line px-4"
           page={departments.data?.page ?? page}
-          pageSize={departments.data?.pageSize ?? PAGE_SIZE}
+          pageSize={pageSize}
           totalCount={departments.data?.totalCount ?? 0}
           onPageChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
         />
       </div>
 

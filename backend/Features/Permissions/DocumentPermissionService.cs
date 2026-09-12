@@ -13,6 +13,7 @@ public sealed class DocumentPermissionService(
     IAuditLogService auditLogService,
     ICurrentUser currentUser,
     IValidator<UpdateDocumentDeptPermissionsRequest> validator,
+    IValidator<UpdateDocumentPermissionMatrixRequest> matrixValidator,
     TimeProvider timeProvider) : IDocumentPermissionService
 {
     public async Task<Result<DocumentDeptPermissionsResponse>> GetAsync(
@@ -103,6 +104,164 @@ public sealed class DocumentPermissionService(
         return Result<DocumentDeptPermissionsResponse>.Success(new(requestedDeptIds));
     }
 
+    public async Task<Result<UpdateDocumentPermissionMatrixResponse>> UpdateMatrixAsync(
+        UpdateDocumentPermissionMatrixRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await matrixValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return Result<UpdateDocumentPermissionMatrixResponse>.ValidationFailed(
+                ToMatrixErrors(validation));
+        }
+
+        if (currentUser.UserId is not { } operatorUserId)
+        {
+            return Result<UpdateDocumentPermissionMatrixResponse>.Unauthorized("請先登入後再操作。");
+        }
+
+        var items = request.Items;
+        var documentIds = items.Select(item => item.DocumentId).ToArray();
+
+        // 2. 文件存在
+        var documentsById = await permissionStore.FindDocumentsAsync(documentIds, cancellationToken);
+        var missingDocumentIds = documentIds.Where(id => !documentsById.ContainsKey(id)).ToArray();
+        if (missingDocumentIds.Length > 0)
+        {
+            return Result<UpdateDocumentPermissionMatrixResponse>.NotFound(
+                $"找不到指定的文件：{missingDocumentIds[0]}。");
+        }
+
+        // 3. 公司範圍：COMPANY_ADMIN 限自己公司；SYSTEM_ADMIN 不限，但下一步的部門檢查仍會鎖住各自公司。
+        var inaccessibleDocument = documentsById.Values
+            .FirstOrDefault(document => !currentUser.CanAccessCompany(document.CompanyId));
+        if (inaccessibleDocument is not null)
+        {
+            return Result<UpdateDocumentPermissionMatrixResponse>.Forbidden(
+                $"您沒有修改文件 {inaccessibleDocument.Id} 權限的權限。");
+        }
+
+        // 4. 部門合法性：每個 item 的 departmentIds 都必須屬於「該 item 文件所屬公司」。
+        //    同一批次通常集中在同一間公司，因此按 companyId 分組、每間公司只查一次，避免逐 item 查詢。
+        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var validDeptIdsByCompany = new Dictionary<Guid, IReadOnlySet<Guid>>();
+        for (var index = 0; index < items.Count; index++)
+        {
+            var item = items[index];
+            var companyId = documentsById[item.DocumentId].CompanyId;
+            var requestedDeptIds = item.DepartmentIds.Distinct().ToArray();
+            if (requestedDeptIds.Length == 0)
+            {
+                continue;
+            }
+
+            if (!validDeptIdsByCompany.TryGetValue(companyId, out var companyDeptIds))
+            {
+                var requestedForCompany = items
+                    .Where(candidate => documentsById[candidate.DocumentId].CompanyId == companyId)
+                    .SelectMany(candidate => candidate.DepartmentIds)
+                    .Distinct()
+                    .ToArray();
+                companyDeptIds = await permissionStore.FindCompanyDeptIdsAsync(
+                    companyId, requestedForCompany, cancellationToken);
+                validDeptIdsByCompany[companyId] = companyDeptIds;
+            }
+
+            if (requestedDeptIds.Any(deptId => !companyDeptIds.Contains(deptId)))
+            {
+                errors[$"items[{index}].departmentIds"] =
+                    ["所有部門必須存在，且屬於文件所屬的公司。"];
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            return Result<UpdateDocumentPermissionMatrixResponse>.ValidationFailed(errors);
+        }
+
+        // 5-6. 撈現況、逐 item 計算 diff（toAdd / toRemove），彙總成整批的寫入清單。
+        var currentPermissionsByDocument = await permissionStore.ListPermissionsAsync(
+            documentIds, cancellationToken);
+        var now = timeProvider.GetUtcNow();
+        var toAddAll = new List<DocumentDeptPermission>();
+        var toRemoveAll = new List<DocumentDeptPermission>();
+        var results = new List<DocumentPermissionMatrixUpdateResult>(items.Count);
+
+        foreach (var item in items)
+        {
+            var document = documentsById[item.DocumentId];
+            var requestedDeptIds = item.DepartmentIds.Distinct().Order().ToArray();
+            var currentPermissions = currentPermissionsByDocument.GetValueOrDefault(
+                item.DocumentId, Array.Empty<DocumentDeptPermission>());
+            var currentDeptIds = currentPermissions.Select(p => p.DeptId).ToHashSet();
+            var requestedSet = requestedDeptIds.ToHashSet();
+
+            var toRemove = currentPermissions
+                .Where(p => !requestedSet.Contains(p.DeptId))
+                .ToArray();
+            var toAdd = requestedDeptIds
+                .Where(deptId => !currentDeptIds.Contains(deptId))
+                .Select(deptId => new DocumentDeptPermission
+                {
+                    Id = Guid.NewGuid(),
+                    DocumentId = item.DocumentId,
+                    DeptId = deptId,
+                    GrantedBy = operatorUserId,
+                    CreatedAt = now
+                })
+                .ToArray();
+
+            toAddAll.AddRange(toAdd);
+            toRemoveAll.AddRange(toRemove);
+            results.Add(new DocumentPermissionMatrixUpdateResult(
+                document.Id,
+                document.DocumentNo,
+                requestedDeptIds,
+                toAdd.Select(p => p.DeptId).ToArray(),
+                toRemove.Select(p => p.DeptId).ToArray()));
+        }
+
+        var updatedBy = new UpdatedByResponse(operatorUserId, currentUser.Name ?? currentUser.Empno ?? string.Empty);
+
+        // 沒有任何一份文件實際變動：不開 transaction、不寫 audit（比照單文件端點的既有行為）。
+        if (toAddAll.Count == 0 && toRemoveAll.Count == 0)
+        {
+            return Result<UpdateDocumentPermissionMatrixResponse>.Success(
+                new UpdateDocumentPermissionMatrixResponse(results, updatedBy, now));
+        }
+
+        // 7-9. 整批寫入，全部在同一個 transaction 內；任一步驟失敗即整批 rollback。
+        await using var transaction = await permissionStore.BeginTransactionAsync(cancellationToken);
+        permissionStore.RemoveRange(toRemoveAll);
+        permissionStore.AddRange(toAddAll);
+        await permissionStore.SaveChangesAsync(cancellationToken);
+
+        foreach (var result in results)
+        {
+            if (result.AddedDepartmentIds.Count == 0 && result.RemovedDepartmentIds.Count == 0)
+            {
+                continue;
+            }
+
+            var document = documentsById[result.DocumentId];
+            var oldDeptIds = currentPermissionsByDocument
+                .GetValueOrDefault(result.DocumentId, Array.Empty<DocumentDeptPermission>())
+                .Select(p => p.DeptId)
+                .ToArray();
+            await auditLogService.WriteDocumentDeptPermissionsChangedAsync(
+                document.CompanyId,
+                result.DocumentId,
+                oldDeptIds,
+                result.DepartmentIds,
+                cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return Result<UpdateDocumentPermissionMatrixResponse>.Success(
+            new UpdateDocumentPermissionMatrixResponse(results, updatedBy, now));
+    }
+
     private async Task<Result<Document>> FindAccessibleDocumentAsync(
         Guid documentId,
         CancellationToken cancellationToken)
@@ -134,6 +293,19 @@ public sealed class DocumentPermissionService(
                 group => group.Key,
                 group => group.Select(error => error.ErrorMessage).ToArray(),
                 StringComparer.Ordinal);
+
+    private static Dictionary<string, string[]> ToMatrixErrors(ValidationResult validation) =>
+        validation.Errors
+            .GroupBy(error => ToCamelCasePath(error.PropertyName), StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(error => error.ErrorMessage).ToArray(),
+                StringComparer.Ordinal);
+
+    private static string ToCamelCasePath(string path) => path
+        .Replace("Items", "items", StringComparison.Ordinal)
+        .Replace("DocumentId", "documentId", StringComparison.Ordinal)
+        .Replace("DepartmentIds", "departmentIds", StringComparison.Ordinal);
 }
 
 internal static class DocumentResultExtensions

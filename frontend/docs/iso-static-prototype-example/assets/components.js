@@ -171,7 +171,7 @@ class IsoTopbar extends HTMLElement {
         <div class="identity">
           <span class="meta">首都客運 / 資訊部</span>
           <span class="divider">/</span>
-          <strong>王小明</strong>
+          <strong>Lobinda</strong>
           ${mode === "admin"
             ? '<a class="topbar-link" href="./index.html">前台查閱</a>'
             : '<a class="topbar-link" href="./admin.html">管理</a>'}

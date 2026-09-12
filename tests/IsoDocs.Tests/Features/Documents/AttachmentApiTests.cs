@@ -191,6 +191,139 @@ public sealed class AttachmentApiTests
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task UploadFile_ForMetadataOnlyAttachment_StoresFileAndReturnsHasFile()
+    {
+        await using var factory = new AttachmentWebApplicationFactory();
+        var attachment = factory.AttachmentStore.AddSeed("ATT-01", "Form", fileKey: null);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateUploadFileRequest(
+            attachment.Id, token, "form.PDF", "%PDF-attachment"u8.ToArray());
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<UploadAttachmentFileResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal(attachment.Id, body.AttachmentId);
+        Assert.True(body.HasFile);
+
+        var objectKey = Assert.Single(factory.Storage.WrittenKeys);
+        Assert.Contains("/v1.0/att/01_", objectKey, StringComparison.Ordinal);
+        Assert.EndsWith("_form.pdf", objectKey, StringComparison.Ordinal);
+        Assert.True(await factory.Storage.ExistsAsync(objectKey));
+
+        var stored = Assert.Single(factory.AttachmentStore.Attachments);
+        Assert.Equal(objectKey, stored.FileKey);
+        Assert.Equal("form.PDF", stored.OriginalFileName);
+        Assert.Equal("application/pdf", stored.ContentType);
+        Assert.NotNull(stored.FileSize);
+        Assert.NotNull(stored.Checksum);
+        Assert.True(factory.AttachmentStore.TransactionCommitted);
+
+        var audit = Assert.Single(factory.Audit.Entries);
+        Assert.Equal(AuditActions.UploadAttachment, audit.Action);
+        Assert.Equal(AuditResourceTypes.Attachment, audit.ResourceType);
+        Assert.Equal(attachment.Id, audit.ResourceId);
+    }
+
+    [Fact]
+    public async Task UploadFile_WhenAttachmentAlreadyHasFile_ReturnsConflictWithoutWriting()
+    {
+        await using var factory = new AttachmentWebApplicationFactory();
+        var attachment = factory.AttachmentStore.AddSeed(
+            "ATT-01", "Form", "store/COMPANYA/ISO-001/v1.0/att/01_file_form.pdf");
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateUploadFileRequest(
+            attachment.Id, token, "replacement.pdf", "%PDF-new"u8.ToArray());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(factory.Storage.WrittenKeys);
+        Assert.Empty(factory.Audit.Entries);
+    }
+
+    [Fact]
+    public async Task UploadFile_WithDisallowedExtension_ReturnsBadRequestWithoutWriting()
+    {
+        await using var factory = new AttachmentWebApplicationFactory();
+        var attachment = factory.AttachmentStore.AddSeed("ATT-01", "Form", fileKey: null);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateUploadFileRequest(
+            attachment.Id, token, "malware.exe", "invalid"u8.ToArray());
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Contains("file", body.Errors.Keys);
+        Assert.Empty(factory.Storage.WrittenKeys);
+
+        var stored = Assert.Single(factory.AttachmentStore.Attachments);
+        Assert.Null(stored.FileKey);
+        Assert.Null(stored.OriginalFileName);
+        Assert.Null(stored.ContentType);
+        Assert.Null(stored.FileSize);
+        Assert.Null(stored.Checksum);
+    }
+
+    [Fact]
+    public async Task UploadFile_WhenDatabaseFails_MovesFileToTrashAndLeavesAttachmentUnchanged()
+    {
+        await using var factory = new AttachmentWebApplicationFactory();
+        var attachment = factory.AttachmentStore.AddSeed("ATT-01", "Form", fileKey: null);
+        factory.AttachmentStore.SaveChangesShouldThrow = true;
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateUploadFileRequest(
+            attachment.Id, token, "form.pdf", "%PDF-attachment"u8.ToArray());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var written = Assert.Single(factory.Storage.WrittenKeys);
+        Assert.Contains(written, factory.Storage.TrashedKeys);
+
+        var stored = Assert.Single(factory.AttachmentStore.Attachments);
+        Assert.Null(stored.FileKey);
+        Assert.Null(stored.OriginalFileName);
+        Assert.Null(stored.ContentType);
+        Assert.Null(stored.FileSize);
+        Assert.Null(stored.Checksum);
+        Assert.False(factory.AttachmentStore.TransactionCommitted);
+        Assert.Empty(factory.Audit.Entries);
+    }
+
+    private static HttpRequestMessage CreateUploadFileRequest(
+        Guid attachmentId,
+        string token,
+        string fileName,
+        byte[] content)
+    {
+        var multipart = new MultipartFormDataContent();
+        var file = new ByteArrayContent(content);
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        multipart.Add(file, "file", fileName);
+
+        var request = new HttpRequestMessage(
+            HttpMethod.Put,
+            $"/api/attachments/{attachmentId}/file")
+        {
+            Content = multipart
+        };
+        request.Headers.Add("X-XSRF-TOKEN", token);
+        return request;
+    }
+
     private static HttpRequestMessage CreateUploadRequest(
         AttachmentWebApplicationFactory factory,
         string token,
@@ -322,6 +455,7 @@ internal sealed class FakeAttachmentStore(
     public List<Attachment> Attachments { get; } = [];
     public bool TransactionStarted { get; private set; }
     public bool TransactionCommitted { get; private set; }
+    public bool SaveChangesShouldThrow { get; set; }
 
     public Attachment AddSeed(string attachmentNo, string name, string? fileKey)
     {
@@ -366,6 +500,32 @@ internal sealed class FakeAttachmentStore(
             : new AttachmentContext(attachment, document.CompanyId));
     }
 
+    public Task<AttachmentUploadContext?> FindAttachmentUploadContextAsync(
+        Guid attachmentId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var attachment = Attachments.SingleOrDefault(item => item.Id == attachmentId);
+        if (attachment is null)
+        {
+            return Task.FromResult<AttachmentUploadContext?>(null);
+        }
+
+        var sequence = Attachments
+            .Where(item => item.DocumentVersionId == attachment.DocumentVersionId)
+            .OrderBy(item => item.AttachmentNo, StringComparer.Ordinal)
+            .ToList()
+            .FindIndex(item => item.Id == attachmentId) + 1;
+
+        return Task.FromResult<AttachmentUploadContext?>(new AttachmentUploadContext(
+            attachment,
+            document.CompanyId,
+            companyCode,
+            document.DocumentNo,
+            version.Version,
+            sequence));
+    }
+
     public Task<IReadOnlyList<Attachment>> ListAsync(
         Guid versionId,
         CancellationToken cancellationToken)
@@ -400,6 +560,11 @@ internal sealed class FakeAttachmentStore(
     public Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (SaveChangesShouldThrow)
+        {
+            throw new InvalidOperationException("Simulated database failure.");
+        }
+
         return Task.CompletedTask;
     }
 
@@ -408,9 +573,24 @@ internal sealed class FakeAttachmentStore(
         cancellationToken.ThrowIfCancellationRequested();
         TransactionStarted = true;
         TransactionCommitted = false;
-        _snapshot = [.. Attachments];
+        _snapshot = Attachments.Select(CloneAttachment).ToList();
         return Task.FromResult<IAttachmentTransaction>(new Transaction(this));
     }
+
+    private static Attachment CloneAttachment(Attachment source) => new()
+    {
+        Id = source.Id,
+        DocumentVersionId = source.DocumentVersionId,
+        AttachmentNo = source.AttachmentNo,
+        Name = source.Name,
+        FileKey = source.FileKey,
+        OriginalFileName = source.OriginalFileName,
+        ContentType = source.ContentType,
+        FileSize = source.FileSize,
+        Checksum = source.Checksum,
+        CreatedBy = source.CreatedBy,
+        CreatedAt = source.CreatedAt
+    };
 
     private sealed class Transaction(FakeAttachmentStore store) : IAttachmentTransaction
     {

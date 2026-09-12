@@ -109,6 +109,9 @@ IsoDocs.sln
       Permissions/
         DocumentPermissionsController.cs
         DocumentPermissionService.cs
+        DocumentPermissionMatrixController.cs
+        DocumentPermissionMatrixService.cs
+        DocumentStatusCatalog.cs
         Dtos/
       Backup/
         BackupController.cs
@@ -274,8 +277,11 @@ CRUD + 密碼重設。刪除一律是 `is_active = false`（軟刪除），理�
 | Attachments | POST   | `/api/documents/{documentId}/versions/{versionId}/attachments`                         | 批次建立／上傳附件（multipart，1..N 筆，全有全無）     |
 | Attachments | PUT    | `/api/attachments/{id}/file`                                                           | 為未補檔的附件上傳檔案                                 |
 | Attachments | DELETE | `/api/attachments/{id}`                                                                | 刪除附件（限同一版本尚可編輯時）                       |
+| Versions    | DELETE | `/api/documents/{documentId}/versions/{versionId}`                                     | 硬刪除草稿版本（僅 DRAFT）                             |
 | Permissions | GET    | `/api/documents/{documentId}/dept-permissions`                                         | 目前可觀看部門清單                                     |
 | Permissions | PUT    | `/api/documents/{documentId}/dept-permissions`                                         | 覆寫可觀看部門清單                                     |
+| Permissions | GET    | `/api/documents/permission-matrix`                                                     | 文件×部門權限矩陣（分頁、含文件狀態）                  |
+| Permissions | PUT    | `/api/documents/permission-matrix`                                                     | 矩陣批次儲存（多份文件一次覆寫，全有全無）             |
 | Backup      | GET    | `/api/companies/{companyId}/backup`                                                    | 觸發備份並串流回傳 zip                                 |
 | Health      | GET    | `/api/health`                                                                          | 匿名檢查 API 與 PostgreSQL 可用狀態                    |
 

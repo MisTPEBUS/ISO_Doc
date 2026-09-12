@@ -75,9 +75,9 @@
   --spacing-sidebar-collapsed: 56px;
   --spacing-filter-bar: 104px;
   --spacing-table-header: 40px;
-  --spacing-row: 44px;
+  --spacing-row: 46px;
   --spacing-row-sub: 36px;
-  --spacing-control: 36px;
+  --spacing-control: 38px;
   --spacing-control-sm: 32px;
   --spacing-pagination: 48px;
 
@@ -97,8 +97,8 @@
 
   html {
     font-family: var(--font-sans);
-    /* 基準字級 16 → 17px；整組 rem 字級階梯與 Tailwind 間距等比放大 */
-    font-size: 106.25%;
+    /* 基準字級 16 → 18px；整組 rem 字級階梯與 Tailwind 間距等比放大 */
+    font-size: 112.5%;
   }
 
   body {

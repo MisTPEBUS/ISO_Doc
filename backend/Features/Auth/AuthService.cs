@@ -17,7 +17,7 @@ public sealed class AuthService(
     IValidator<ChangePasswordRequest> changePasswordValidator,
     TimeProvider timeProvider) : IAuthService
 {
-    private const string InvalidCredentialsMessage = "員工編號或密碼錯誤。";
+    private const string InvalidCredentialsMessage = "員工編號或帳號密碼錯誤。";
 
     public async Task<Result<LoginResponse>> LoginAsync(
         LoginRequest request,
@@ -34,7 +34,7 @@ public sealed class AuthService(
         {
             return Result<LoginResponse>.ValidationFailed(new Dictionary<string, string[]>
             {
-                ["empno"] = ["請輸入員工編號。"]
+                ["empno"] = ["請輸入帳號。"]
             });
         }
 

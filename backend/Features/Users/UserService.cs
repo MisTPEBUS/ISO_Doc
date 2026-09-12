@@ -284,7 +284,7 @@ public sealed class UserService(
     }
 
     private static Result<T> DuplicateEmpno<T>() => Result<T>.ValidationFailed(
-        FieldError("empno", "此員工編號已被使用。"));
+        FieldError("empno", "此帳號已被使用。"));
 
     private static bool IsDuplicateEmpnoViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException

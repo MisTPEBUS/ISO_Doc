@@ -5,9 +5,14 @@ export interface PaginationProps {
   pageSize?: number
   totalCount?: number
   siblingCount?: number
+  /** 每頁筆數選單的選項，預設 10 / 15 / 20；只有提供 onPageSizeChange 時才顯示 */
+  pageSizeOptions?: ReadonlyArray<number>
   onPageChange?: (page: number) => void
+  onPageSizeChange?: (pageSize: number) => void
   className?: string
 }
+
+const DEFAULT_PAGE_SIZE_OPTIONS: ReadonlyArray<number> = [10, 15, 20]
 
 type PaginationItem = number | 'ellipsis-start' | 'ellipsis-end'
 
@@ -55,7 +60,9 @@ export function Pagination({
   pageSize = 10,
   totalCount = 0,
   siblingCount = 1,
+  pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
   onPageChange,
+  onPageSizeChange,
   className,
 }: PaginationProps) {
   const safePageSize = Math.max(1, pageSize)
@@ -83,9 +90,29 @@ export function Pagination({
       )}
       aria-label="分頁"
     >
-      <p>
-        顯示 {startItem}–{endItem} 筆，共 {totalCount} 筆
-      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p>
+          顯示 {startItem}–{endItem} 筆，共 {totalCount} 筆
+        </p>
+        {onPageSizeChange && (
+          <label className="flex items-center gap-1.5">
+            <span>每頁</span>
+            <select
+              className="h-control-sm rounded-sm border border-line bg-surface px-2 text-meta text-ink transition-colors focus:border-primary focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              value={safePageSize}
+              aria-label="每頁筆數"
+              onChange={(event) => onPageSizeChange(Number(event.target.value))}
+            >
+              {pageSizeOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <span>筆</span>
+          </label>
+        )}
+      </div>
       <div className="flex items-center gap-1">
         <button
           type="button"

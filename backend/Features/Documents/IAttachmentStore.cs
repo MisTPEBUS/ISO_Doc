@@ -11,11 +11,21 @@ public sealed record AttachmentContext(
     Attachment Attachment,
     Guid CompanyId);
 
+public sealed record AttachmentUploadContext(
+    Attachment Attachment,
+    Guid CompanyId,
+    string CompanyCode,
+    string DocumentNo,
+    string Version,
+    int Sequence);
+
 public interface IAttachmentStore
 {
     Task<AttachmentVersionContext?> FindVersionContextAsync(
         Guid documentId, Guid versionId, CancellationToken cancellationToken);
     Task<AttachmentContext?> FindAttachmentContextAsync(
+        Guid attachmentId, CancellationToken cancellationToken);
+    Task<AttachmentUploadContext?> FindAttachmentUploadContextAsync(
         Guid attachmentId, CancellationToken cancellationToken);
     Task<IReadOnlyList<Attachment>> ListAsync(
         Guid versionId, CancellationToken cancellationToken);

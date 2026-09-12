@@ -67,7 +67,7 @@ export function LoginPage() {
           });
           setFormError(
             error.status === 401
-              ? "員工編號或密碼不正確，請重新輸入。"
+              ? "帳號或密碼不正確，請重新輸入。"
               : (error.detail ?? "登入失敗，請稍後再試。"),
           );
           return;
@@ -185,7 +185,7 @@ export function LoginPage() {
 
             <form className="space-y-5" noValidate onSubmit={handleSubmit}>
               <FormField
-                label="員工編號"
+                label="帳號"
                 htmlFor="empno"
                 error={fieldErrors.empno}
                 required

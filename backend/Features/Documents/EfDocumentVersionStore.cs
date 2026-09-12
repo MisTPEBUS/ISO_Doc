@@ -23,6 +23,20 @@ public sealed class EfDocumentVersionStore(IsoDbContext dbContext) : IDocumentVe
             .Select(company => company.Code)
             .SingleOrDefaultAsync(cancellationToken);
 
+    public Task<DocumentVersion?> FindVersionAsync(
+        Guid versionId,
+        CancellationToken cancellationToken) =>
+        dbContext.DocumentVersions.SingleOrDefaultAsync(
+            version => version.Id == versionId,
+            cancellationToken);
+
+    public Task<bool> HasAttachmentsAsync(
+        Guid versionId,
+        CancellationToken cancellationToken) =>
+        dbContext.Attachments.AnyAsync(
+            attachment => attachment.DocumentVersionId == versionId,
+            cancellationToken);
+
     public Task<DocumentVersion?> FindLatestVersionAsync(
         Guid documentId,
         CancellationToken cancellationToken) =>
@@ -40,6 +54,8 @@ public sealed class EfDocumentVersionStore(IsoDbContext dbContext) : IDocumentVe
             .ToListAsync(cancellationToken);
 
     public void Add(DocumentVersion version) => dbContext.DocumentVersions.Add(version);
+
+    public void Remove(DocumentVersion version) => dbContext.DocumentVersions.Remove(version);
 
     public Task SaveChangesAsync(CancellationToken cancellationToken) =>
         dbContext.SaveChangesAsync(cancellationToken);

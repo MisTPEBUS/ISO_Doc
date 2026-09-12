@@ -287,6 +287,31 @@ internal sealed class FakeDocumentPermissionStore(
         return Task.FromResult<Document?>(document.Id == documentId ? document : null);
     }
 
+    public Task<IReadOnlyDictionary<Guid, Document>> FindDocumentsAsync(
+        IReadOnlyCollection<Guid> documentIds,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        IReadOnlyDictionary<Guid, Document> result = documentIds.Contains(document.Id)
+            ? new Dictionary<Guid, Document> { [document.Id] = document }
+            : new Dictionary<Guid, Document>();
+        return Task.FromResult(result);
+    }
+
+    public Task<IReadOnlyDictionary<Guid, IReadOnlyList<DocumentDeptPermission>>> ListPermissionsAsync(
+        IReadOnlyCollection<Guid> documentIds,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        IReadOnlyDictionary<Guid, IReadOnlyList<DocumentDeptPermission>> result = Permissions
+            .Where(permission => documentIds.Contains(permission.DocumentId))
+            .GroupBy(permission => permission.DocumentId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<DocumentDeptPermission>)group.ToArray());
+        return Task.FromResult(result);
+    }
+
     public Task<IReadOnlyList<DocumentDeptPermission>> ListPermissionsAsync(
         Guid documentId,
         CancellationToken cancellationToken)

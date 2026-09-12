@@ -16,6 +16,14 @@ public sealed class EfDocumentPermissionStore(IsoDbContext dbContext)
             document => document.Id == documentId,
             cancellationToken);
 
+    public async Task<IReadOnlyDictionary<Guid, Document>> FindDocumentsAsync(
+        IReadOnlyCollection<Guid> documentIds,
+        CancellationToken cancellationToken) =>
+        (await dbContext.Documents
+            .Where(document => documentIds.Contains(document.Id))
+            .ToListAsync(cancellationToken))
+        .ToDictionary(document => document.Id);
+
     public async Task<IReadOnlyList<DocumentDeptPermission>> ListPermissionsAsync(
         Guid documentId,
         CancellationToken cancellationToken) =>
@@ -23,6 +31,20 @@ public sealed class EfDocumentPermissionStore(IsoDbContext dbContext)
             .Where(permission => permission.DocumentId == documentId)
             .OrderBy(permission => permission.DeptId)
             .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<DocumentDeptPermission>>> ListPermissionsAsync(
+        IReadOnlyCollection<Guid> documentIds,
+        CancellationToken cancellationToken)
+    {
+        var permissions = await dbContext.DocumentDeptPermissions
+            .Where(permission => documentIds.Contains(permission.DocumentId))
+            .ToListAsync(cancellationToken);
+        return permissions
+            .GroupBy(permission => permission.DocumentId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<DocumentDeptPermission>)group.ToArray());
+    }
 
     public async Task<IReadOnlySet<Guid>> FindCompanyDeptIdsAsync(
         Guid companyId,

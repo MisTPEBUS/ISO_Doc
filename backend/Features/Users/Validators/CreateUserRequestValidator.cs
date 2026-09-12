@@ -10,9 +10,9 @@ public sealed class CreateUserRequestValidator : AbstractValidator<CreateUserReq
     {
         RuleFor(request => request.Empno)
             .Must(value => !string.IsNullOrWhiteSpace(value))
-            .WithMessage("請輸入員工編號。")
+            .WithMessage("請輸入帳號。")
             .MaximumLength(30)
-            .WithMessage("員工編號不可超過 30 個字元。")
+            .WithMessage("帳號不可超過 30 個字元。")
             .OverridePropertyName("empno");
         RuleFor(request => request.Name)
             .Must(value => !string.IsNullOrWhiteSpace(value))

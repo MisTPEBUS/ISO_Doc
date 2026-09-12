@@ -13,6 +13,18 @@ export const adminNavGroups: ReadonlyArray<SidebarNavGroup> = [
         href: `${baseUrl}admin/documents`,
         icon: '文',
       },
+      {
+        key: 'permissions',
+        label: '權限維護',
+        href: `${baseUrl}admin/permissions`,
+        icon: '權',
+      },
+      {
+        key: 'backup',
+        label: 'ISO 文件備份',
+        href: `${baseUrl}admin/backup`,
+        icon: '備',
+      },
     ],
   },
   {

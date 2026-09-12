@@ -118,7 +118,7 @@
 
 - `200`：`{ "userId", "name", "role", "companyId", "companyName", "deptName" }`，並 `Set-Cookie` `isodocs.auth`（HttpOnly）＋ `isodocs.xsrf`。
 - `400`：`empno` / `password` 未填。
-- `401`：帳號不存在 / 停用 / 未設密碼 / 密碼錯誤 → `detail = "員工編號或密碼錯誤。"`
+- `401`：帳號不存在 / 停用 / 未設密碼 / 密碼錯誤 → `detail = "帳號或密碼錯誤。"`
 
 ### `POST /api/auth/logout`
 已登入，需 `X-XSRF-TOKEN`。無 body。→ `204`（清除認證 cookie）。`401` 未登入。
@@ -257,7 +257,7 @@ Query：`companyId?`、`deptId?`、`keyword?`（empno / name / email）、`inclu
 ```jsonc
 {
   "empno": "EMP100",         // ≤ 30
-  "name": "王小明",           // ≤ 100
+  "name": "Lobinda",           // ≤ 100
   "email": "a@b.com",        // 選填，email 格式，≤ 255
   "companyId": "...",
   "deptId": "...",           // 需屬於 companyId
@@ -364,7 +364,14 @@ Query：`companyId?`、`keyword?`（documentNo / name）、`page`、`pageSize`�
 - `400`：`errors.changeType` / `effectiveDate` / `pageCount` / `file`；或 `errors.file = ["The document file content is not a valid PDF."]`。
 - `403`：非同公司。
 - `404`：文件不存在 / 公司不存在。
-- `409`：文件已停用（`"A new version cannot be added to an inactive document."`）；併發發佈（`"Another version was published concurrently. Reload the document and try again."`）。
+- `409`：文件已停用（`"已停用的文件無法新增版本。"`）；併發發佈（`"另一個版本已同時發佈，請重新載入文件後再試一次。"`）。
+
+### `DELETE /api/documents/{documentId}/versions/{versionId}`（`CompanyAdminScope`）
+需 `X-XSRF-TOKEN`。硬刪除**草稿版本**。
+
+- `204`：成功（有主檔則搬 trash，記 audit `DELETE_DOCUMENT_VERSION`）。
+- `404`：版本不存在，或不屬於該文件。
+- `409`：版本非 `DRAFT`（`"只有草稿版本可以刪除。"`）；或該版本仍有附件（`"請先移除此版本的附件，再刪除版本。"`）。
 
 ---
 
@@ -391,8 +398,20 @@ Query：`companyId?`、`keyword?`（documentNo / name）、`page`、`pageSize`�
 （`i` 從 0 連續。至少 1 項。）
 
 - `201`：`{ "created": [ { "attachmentId", "attachmentNo", "hasFile" } ] }`。
-- `400`：`errors["items[0].attachmentNo"]` 等欄位錯；或 `errors.attachmentNo`（請求內重複 / 與現有版本衝突），例 `["Attachment number 'ATT-01' is already in use for this version."]`。
+- `400`：`errors["items[0].attachmentNo"]` 等欄位錯；或 `errors.attachmentNo`（請求內重複 / 與現有版本衝突），例 `["附件編號「ATT-01」已在此版本使用。"]`。
 - `403` / `404`。
+
+### `PUT /api/attachments/{id}/file`（`CompanyAdminScope`）
+`multipart/form-data`，需 `X-XSRF-TOKEN`。為「僅中繼資料」的附件（`hasFile: false`）補上實體檔案。
+
+| 欄位 | 型別 | 必填 | 說明 |
+| --- | --- | --- | --- |
+| `file` | file | ✔ | 副檔名限 `.jpg .jpeg .png .pdf .doc .docx .xls .xlsx .odt .ods`，檔名 ≤ 255。與 `POST` 一致，不驗 magic bytes；`contentType` 依副檔名推導 |
+
+- `200`：`{ "attachmentId", "hasFile": true }`。寫入 `file_key` / `original_file_name` / `content_type` / `file_size` / `checksum` 五欄（全有全無）。
+- `400`：`errors.file`（未附檔 / 副檔名不允許 / 檔名超長）。
+- `403` / `404`（附件不存在）。
+- `409`：附件已有檔案（`"此附件已經有檔案，無法重複補檔。"`）。不限制附件所屬版本狀態（PUBLISHED / OBSOLETE / DRAFT 皆可補檔，比照 `DELETE`）。
 
 ### `DELETE /api/attachments/{id}`（`CompanyAdminScope`）
 需 `X-XSRF-TOKEN`。→ `204`（實體檔移到 trash）/ `403` / `404`。
@@ -414,6 +433,88 @@ Query：`companyId?`、`keyword?`（documentNo / name）、`page`、`pageSize`�
 - `200`：`{ "deptIds": [...] }`（套用後）。
 - `400`：`errors.deptIds`（空清單 / 有 deptId 不屬於該公司）。
 - `403` / `404`。
+
+### `GET /api/documents/permission-matrix`（`CompanyAdminScope`）
+文件 × 部門權限矩陣（清單型，供權限維護頁一次載入部門選項 + 分頁文件列 + 每份文件的授權部門）。
+
+Query：`companyId?`、`companyCode?`（`companies.code`；僅在未帶 `companyId` 時採用，會先解析為 `companyId`，不分大小寫；查不到則回空結果）、`keyword?`（比對 documentNo / name，不分大小寫）、`page`（預設 1）、`pageSize`（預設 20，上限 100）。
+
+**授權範圍一律由登入身分決定**，不信任 query 傳入的公司參數：
+- `COMPANY_ADMIN`：強制自己公司，帶的 `companyId` / `companyCode` 直接忽略（**不回 403**）。
+- `SYSTEM_ADMIN`：可用 `companyId` 或 `companyCode` 篩選，不帶則查全部公司。
+
+→ `200`：
+
+```jsonc
+{
+  "departments": [ { "id", "name", "seq": 1 } ],          // 範圍內公司的部門，依 company_id、seq
+  "items": [
+    {
+      "documentId", "documentCode", "documentName",
+      "version": "1.0",                                    // 代表版本；無版本時為 null
+      "companyId",
+      "status": {
+        "mainDocument": { "code": "NORMAL|ERROR|MISSING", "label", "hasError": false },
+        "attachment":   { "code": "NORMAL|ERROR|MISSING|NONE", "label", "hasError": false },
+        "effective":    { "code": "DRAFT|SCHEDULED|EFFECTIVE|EXPIRED|CANCELLED", "label" }
+      },
+      "departmentIds": [ "dept-uuid", ... ]                // 無授權時為 []，不會是 null
+    }
+  ],
+  "pagination": { "page": 1, "pageSize": 20, "totalCount": 135, "totalPages": 7 }
+}
+```
+
+- `status` 由後端計算（見下）。`hasError` = `code == "ERROR"`。
+- **代表版本**：`PUBLISHED` → 否則 `DRAFT` → 都沒有則視同空 `DRAFT`。
+- `mainDocument` / `attachment` 的 `ERROR` 由 `IDocumentStorage.ExistsAsync` 對**當頁**文件即時檢查（實體檔遺失），不做背景快取；`attachment` 的 `ERROR` 優先於 `MISSING`。
+- `effective`：`is_active=false` → `CANCELLED`（最優先）；`PUBLISHED` 且 `effectiveDate` 未到 → `SCHEDULED`，已到 → `EFFECTIVE`；其餘 → `DRAFT`。`EXPIRED` 目前不會產生。
+- `403`：僅在無法判斷公司範圍時（理論上不會發生，policy 已限縮角色）。
+
+### `PUT /api/documents/permission-matrix`（`CompanyAdminScope`）
+矩陣**批次**儲存：一次送出多份文件各自完整的 `departmentIds`（整批覆蓋，非 diff 語意的 request——但後端內部仍用 diff 方式寫入，見下）。跟上面單文件的 `PUT .../dept-permissions` **並存、互不取代**：矩陣頁用這支，未來若有單文件詳情頁要單獨改權限，用那支。
+
+```jsonc
+// Request
+{
+  "items": [
+    { "documentId": "7c263c91-...", "departmentIds": ["e91fa832-...", "8a032317-..."] },
+    { "documentId": "a2b3c4d5-...", "departmentIds": [] }   // 空陣列 = 清空這份文件的所有部門權限
+  ]
+}
+```
+
+- `items`：至少 1 筆；`documentId` 不可重複。
+- 單一 item 的 `departmentIds`：可為 `[]`（清空）；不可有重複 UUID；不可為 `null`（省略時視為 `[]`）。
+
+**驗證（全部通過才寫入，任一步失敗 → 整批 400/403/404，不寫入任何一筆，全有全無）**：
+1. 格式：`items` 空 / `documentId` 重複 / 某 item 的 `departmentIds` 重複 → `400`。
+2. 每個 `documentId` 必須存在 → 否則 `404`。
+3. 每份文件須在使用者的公司範圍：`COMPANY_ADMIN` 限自己公司；`SYSTEM_ADMIN` 不限公司 → 不符 `403`。
+4. 每個 item 的 `departmentIds` 必須全部存在且屬於**該文件所屬公司** → 不符 `400`，`errors["items[<i>].departmentIds"]`。
+
+**寫入方式**：對每個 item 各自算 `toAdd`（requested − current）/`toRemove`（current − requested），只 `INSERT`/`DELETE` 差異的部分（未變動的權限列保留原本 `granted_by` / `created_at`），所有 item 在同一個 transaction 內一次提交。整批完全無變動時不開 transaction、不寫 audit。
+
+**Audit**：只對「實際有變動」的文件各寫一筆既有的 `document_dept_permissions` 異動紀錄（沿用單文件端點同一個 action，不新增名稱）。
+
+→ `200`：
+
+```jsonc
+{
+  "items": [
+    {
+      "documentId", "documentCode",
+      "departmentIds": ["e91fa832-...", "8a032317-..."],
+      "addedDepartmentIds": ["8a032317-..."],
+      "removedDepartmentIds": []
+    }
+  ],
+  "updatedBy": { "id", "name" },
+  "updatedAt"   // 這次操作當下時間；非持久化欄位（document_dept_permissions 沒有 updated_at）
+}
+```
+
+- `400` / `403` / `404`：見上方驗證規則。
 
 ---
 
@@ -452,9 +553,13 @@ Query：`companyId?`、`keyword?`（documentNo / name）、`page`、`pageSize`�
 | GET / POST | `/api/documents` | CompanyAdminScope (+CSRF) | 200 / 201 |
 | GET / PUT / DELETE | `/api/documents/{id}` | CompanyAdminScope (+CSRF) | 200 / 200 / 204 |
 | POST | `/api/documents/{documentId}/versions` | CompanyAdminScope + CSRF | 201（multipart） |
+| DELETE | `/api/documents/{documentId}/versions/{versionId}` | CompanyAdminScope + CSRF | 204（僅 DRAFT） |
 | GET / POST | `/api/documents/{d}/versions/{v}/attachments` | CompanyAdminScope (+CSRF) | 200 / 201 |
+| PUT | `/api/attachments/{id}/file` | CompanyAdminScope + CSRF | 200（multipart 補檔） |
 | DELETE | `/api/attachments/{id}` | CompanyAdminScope + CSRF | 204 |
 | GET / PUT | `/api/documents/{documentId}/dept-permissions` | CompanyAdminScope (+CSRF) | 200 |
+| GET | `/api/documents/permission-matrix` | CompanyAdminScope | 200（權限矩陣） |
+| PUT | `/api/documents/permission-matrix` | CompanyAdminScope + CSRF | 200（批次儲存） |
 | GET | `/api/companies/{companyId}/backup` | CompanyAdminScope | 200（zip） |
 
 ---

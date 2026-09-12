@@ -16,6 +16,7 @@ import {
   type TableColumn,
   type SidebarNavGroup,
 } from '../components/common'
+import { IsoDocumentPermissionMatrix } from '../components/uikit/IsoDocumentPermissionMatrix'
 
 interface PreviewSectionProps {
   title: string
@@ -455,6 +456,13 @@ export default function ComponentPreview() {
             onPageChange={setPage}
             className="mt-2"
           />
+        </PreviewSection>
+
+        <PreviewSection
+          title="ISO 文件權限矩陣"
+          description="公司切換、動態部門欄位、sticky 主文欄與 local state 勾選範例。"
+        >
+          <IsoDocumentPermissionMatrix />
         </PreviewSection>
 
         <div className="grid gap-5 lg:grid-cols-2">

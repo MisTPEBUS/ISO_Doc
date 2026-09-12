@@ -5,8 +5,12 @@ namespace IsoDocument.Api.Features.Permissions;
 public interface IDocumentPermissionStore
 {
     Task<Document?> FindDocumentAsync(Guid documentId, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<Guid, Document>> FindDocumentsAsync(
+        IReadOnlyCollection<Guid> documentIds, CancellationToken cancellationToken);
     Task<IReadOnlyList<DocumentDeptPermission>> ListPermissionsAsync(
         Guid documentId, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<Guid, IReadOnlyList<DocumentDeptPermission>>> ListPermissionsAsync(
+        IReadOnlyCollection<Guid> documentIds, CancellationToken cancellationToken);
     Task<IReadOnlySet<Guid>> FindCompanyDeptIdsAsync(
         Guid companyId, IReadOnlyCollection<Guid> deptIds,
         CancellationToken cancellationToken);
