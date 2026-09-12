@@ -9,6 +9,8 @@ public interface IUserService
         Guid? companyId, Guid? deptId, string? keyword, bool includeInactive,
         int page, int pageSize, CancellationToken cancellationToken);
     Task<Result<UserResponse>> CreateAsync(CreateUserRequest request, CancellationToken cancellationToken);
+    Task<Result<BatchCreateUsersResponse>> BatchCreateAsync(
+        BatchCreateUsersRequest request, CancellationToken cancellationToken);
     Task<Result<UserResponse>> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<Result<UserResponse>> UpdateAsync(Guid id, UpdateUserRequest request, CancellationToken cancellationToken);
     Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);

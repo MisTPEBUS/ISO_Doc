@@ -23,5 +23,6 @@ public interface IUserStore
         CancellationToken cancellationToken);
     Task<User?> FindByIdAsync(Guid id, CancellationToken cancellationToken);
     void Add(User user);
+    void Detach(User user);
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }

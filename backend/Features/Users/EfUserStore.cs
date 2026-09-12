@@ -48,6 +48,8 @@ public sealed class EfUserStore(IsoDbContext dbContext) : IUserStore
 
     public void Add(User user) => dbContext.Users.Add(user);
 
+    public void Detach(User user) => dbContext.Entry(user).State = EntityState.Detached;
+
     public Task SaveChangesAsync(CancellationToken cancellationToken) =>
         dbContext.SaveChangesAsync(cancellationToken);
 

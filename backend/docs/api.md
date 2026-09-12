@@ -271,6 +271,43 @@ Query：`companyId?`、`deptId?`、`keyword?`（empno / name / email）、`inclu
 - `400`：欄位驗證；`errors.deptId`（不屬於公司）；`errors.empno = ["The employee number is already in use."]`。
 - `403`：無權操作該公司；或 `COMPANY_ADMIN` 建立 `SYSTEM_ADMIN` → `"Company administrators cannot create system administrator accounts."`
 
+### `POST /api/users/batch`
+批次新增使用者，單筆項目格式同 `POST /api/users`（見上）。單筆失敗不會中斷其他筆，全部處理完後一次回傳結果，恆為 `200`（除非整包請求本身不合法）。
+
+```jsonc
+// Request
+{
+  "users": [
+    { "empno": "EMP101", "name": "王一", "companyId": "...", "deptId": "...", "role": "USER" },
+    { "empno": "EMP102", "name": "王二", "companyId": "...", "deptId": "...", "role": "USER" }
+    // ... 最多 200 筆
+  ]
+}
+```
+
+```jsonc
+// 200 Response
+{
+  "total": 10,
+  "successCount": 8,
+  "failureCount": 2,
+  "succeeded": [
+    { "index": 1, "user": { /* UserResponse */ } }
+    // ...
+  ],
+  "failed": [
+    { "index": 4, "originalData": { /* 該筆原始 request 內容 */ }, "errors": { "empno": ["此帳號已被使用。"] } },
+    { "index": 9, "originalData": { /* ... */ }, "errors": { "_error": ["您沒有為這間公司建立使用者的權限。"] } }
+  ]
+}
+```
+
+- `index` 為 1-based，對應 `users` 陣列中的第幾筆。
+- `errors` 格式同單筆新增的 `400` 驗證錯誤（欄位名為 key）；非欄位性錯誤（權限不足、角色不可建立）歸在 `"_error"` key。
+- 員編重複同時檢查「批次內彼此重複」與「資料庫已存在」。
+- `400`：`users` 為空陣列，或超過 200 筆上限（`errors.users`）。
+- 不會回傳 `403`：跨公司或無權限的項目會列在 `failed` 裡，不影響其他筆。
+
 ### `GET /api/users/{id}` → `200` `UserResponse` / `403` / `404`
 
 ### `PUT /api/users/{id}`
@@ -548,6 +585,7 @@ Query：`companyId?`、`companyCode?`（`companies.code`；僅在未帶 `company
 | GET / POST | `/api/depts` | CompanyAdminScope (+CSRF) | 200 / 201 |
 | GET / PUT / DELETE | `/api/depts/{id}` | CompanyAdminScope (+CSRF) | 200 / 200 / 204 |
 | GET / POST | `/api/users` | CompanyAdminScope (+CSRF) | 200 / 201 |
+| POST | `/api/users/batch` | CompanyAdminScope + CSRF | 200 |
 | GET / PUT / DELETE | `/api/users/{id}` | CompanyAdminScope (+CSRF) | 200 / 200 / 204 |
 | POST | `/api/users/{id}/reset-password` | CompanyAdminScope + CSRF | 200 |
 | GET / POST | `/api/documents` | CompanyAdminScope (+CSRF) | 200 / 201 |

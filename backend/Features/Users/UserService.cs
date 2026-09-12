@@ -24,6 +24,7 @@ public sealed class UserService(
     private const int DefaultPage = 1;
     private const int DefaultPageSize = 20;
     private const int MaximumPageSize = 100;
+    private const int MaximumBatchSize = 200;
     private const string TemporaryPasswordAlphabet =
         "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 
@@ -141,6 +142,80 @@ public sealed class UserService(
             cancellationToken);
 
         return Result<UserResponse>.Success(ToResponse(user));
+    }
+
+    public async Task<Result<BatchCreateUsersResponse>> BatchCreateAsync(
+        BatchCreateUsersRequest request,
+        CancellationToken cancellationToken)
+    {
+        var items = request.Users;
+        if (items is null || items.Count == 0)
+        {
+            return Result<BatchCreateUsersResponse>.ValidationFailed(
+                FieldError("users", "請至少提供一筆使用者資料。"));
+        }
+
+        if (items.Count > MaximumBatchSize)
+        {
+            return Result<BatchCreateUsersResponse>.ValidationFailed(
+                FieldError("users", $"一次最多可新增 {MaximumBatchSize} 筆使用者。"));
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var reservedEmpnos = new HashSet<string>(StringComparer.Ordinal);
+        var succeeded = new List<BatchCreateUserSuccess>();
+        var failed = new List<BatchCreateUserFailure>();
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            var index = i + 1;
+            var item = items[i];
+            var (user, errors) = await BuildBatchUserAsync(
+                item, reservedEmpnos, now, cancellationToken);
+            if (user is null)
+            {
+                failed.Add(new BatchCreateUserFailure(index, item, errors!));
+                continue;
+            }
+
+            userStore.Add(user);
+            try
+            {
+                await userStore.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (IsDuplicateEmpnoViolation(exception))
+            {
+                userStore.Detach(user);
+                failed.Add(new BatchCreateUserFailure(index, item, DuplicateEmpnoError()));
+                continue;
+            }
+
+            await auditLogService.WriteAsync(
+                new AuditLogWriteRequest(
+                    user.CompanyId,
+                    AuditActions.CreateUser,
+                    AuditResourceTypes.User,
+                    user.Id,
+                    new { new_value = ToAuditValue(user) }),
+                cancellationToken);
+
+            succeeded.Add(new BatchCreateUserSuccess(index, ToResponse(user)));
+        }
+
+        if (succeeded.Count > 0)
+        {
+            await auditLogService.WriteAsync(
+                new AuditLogWriteRequest(
+                    null,
+                    AuditActions.BatchCreateUsers,
+                    AuditResourceTypes.User,
+                    null,
+                    new { total = items.Count, success_count = succeeded.Count, failure_count = failed.Count }),
+                cancellationToken);
+        }
+
+        return Result<BatchCreateUsersResponse>.Success(new BatchCreateUsersResponse(
+            items.Count, succeeded.Count, failed.Count, succeeded, failed));
     }
 
     public async Task<Result<UserResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -283,8 +358,77 @@ public sealed class UserService(
         return Result<ResetPasswordResponse>.Success(new(temporaryPassword));
     }
 
+    private async Task<(User? User, Dictionary<string, string[]>? Errors)> BuildBatchUserAsync(
+        CreateUserRequest request,
+        HashSet<string> reservedEmpnos,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var validation = await createValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return (null, ToErrors(validation));
+        }
+
+        if (!currentUser.CanAccessCompany(request.CompanyId))
+        {
+            return (null, GeneralError("您沒有為這間公司建立使用者的權限。"));
+        }
+
+        var requestedRole = Enum.Parse<UserRole>(request.Role!, ignoreCase: false);
+        if (!UserManagementRules.CanCreateRole(currentUser.Role, requestedRole))
+        {
+            return (null, GeneralError("公司管理員無法建立系統管理員帳號。"));
+        }
+
+        if (!await userStore.DeptBelongsToCompanyAsync(
+            request.DeptId, request.CompanyId, cancellationToken))
+        {
+            return (null, FieldError("deptId", "指定的部門不屬於這間公司。"));
+        }
+
+        var empno = request.Empno!.Trim();
+        if (!reservedEmpnos.Add(empno))
+        {
+            return (null, FieldError("empno", "此帳號與批次中其他筆資料重複。"));
+        }
+
+        if (await userStore.EmpnoExistsAsync(empno, cancellationToken))
+        {
+            return (null, DuplicateEmpnoError());
+        }
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = request.CompanyId,
+            DeptId = request.DeptId,
+            Empno = empno,
+            Name = request.Name!.Trim(),
+            Email = NormalizeOptional(request.Email),
+            Role = requestedRole.ToString(),
+            IsActive = true,
+            MustChangePassword = false,
+            NotifyEmailEnabled = true,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        if (request.Password is not null)
+        {
+            user.PasswordDigest = passwordHasher.HashPassword(user, request.Password);
+        }
+
+        return (user, null);
+    }
+
     private static Result<T> DuplicateEmpno<T>() => Result<T>.ValidationFailed(
         FieldError("empno", "此帳號已被使用。"));
+
+    private static Dictionary<string, string[]> DuplicateEmpnoError() =>
+        FieldError("empno", "此帳號已被使用。");
+
+    private static Dictionary<string, string[]> GeneralError(string message) =>
+        new(StringComparer.Ordinal) { ["_error"] = [message] };
 
     private static bool IsDuplicateEmpnoViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException

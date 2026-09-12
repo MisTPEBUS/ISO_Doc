@@ -20,6 +20,7 @@ public static class AuditActions
     public const string UpdateDept = "UPDATE_DEPT";
     public const string DeleteDept = "DELETE_DEPT";
     public const string CreateUser = "CREATE_USER";
+    public const string BatchCreateUsers = "BATCH_CREATE_USERS";
     public const string UpdateUser = "UPDATE_USER";
     public const string DeleteUser = "DELETE_USER";
     public const string ResetUserPassword = "RESET_USER_PASSWORD";

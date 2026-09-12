@@ -50,6 +50,12 @@ public sealed class UsersController(
         return result.ToCreatedResult(this, location);
     }
 
+    [HttpPost("batch")]
+    public async Task<IActionResult> BatchCreate(
+        BatchCreateUsersRequest request,
+        CancellationToken cancellationToken) =>
+        (await userService.BatchCreateAsync(request, cancellationToken)).ToOkResult(this);
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken) =>
         (await userService.GetAsync(id, cancellationToken)).ToOkResult(this);
