@@ -111,7 +111,7 @@ public sealed class DocumentVersionApiTests
         {
             Id = Guid.NewGuid(), AttachmentId = Guid.NewGuid(), Version = "1.0",
             VersionMajor = 1, VersionMinor = 0, Status = "PUBLISHED",
-            PublishDate = new DateOnly(2026, 1, 2), EffectiveDate = new DateOnly(2026, 1, 5),
+            EffectiveDate = new DateOnly(2026, 1, 5),
             CreatedBy = factory.Document.CreatedBy, CreatedAt = DateTimeOffset.UtcNow
         };
         factory.VersionStore.IndependentAttachmentVersions.Add(attachmentVersion);
@@ -126,7 +126,6 @@ public sealed class DocumentVersionApiTests
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal("PUBLISHED", attachmentVersion.Status);
         Assert.Null(attachmentVersion.ExpiredDate);
-        Assert.Equal(new DateOnly(2026, 1, 2), attachmentVersion.PublishDate);
         Assert.Equal(new DateOnly(2026, 1, 5), attachmentVersion.EffectiveDate);
     }
 
