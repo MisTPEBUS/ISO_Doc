@@ -251,16 +251,14 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/documents/{{documentId}}/versions/{{versionId}}/attachments/{{attachmentId}}/download",
+              "raw": "{{baseUrl}}/api/attachments/{{attachmentId}}/versions/{{versionId}}/download",
               "host": ["{{baseUrl}}"],
               "path": [
                 "api",
-                "documents",
-                "{{documentId}}",
-                "versions",
-                "{{versionId}}",
                 "attachments",
                 "{{attachmentId}}",
+                "versions",
+                "{{versionId}}",
                 "download"
               ]
             },
@@ -713,22 +711,20 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/documents/{{documentId}}/versions/{{versionId}}/attachments",
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}/attachments",
               "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "documents",
                 "{{documentId}}",
-                "versions",
-                "{{versionId}}",
                 "attachments"
               ]
             },
-            "description": "CompanyAdminScope。200 AttachmentResponse[]（陣列，非分頁）。403 / 404。"
+            "description": "CompanyAdminScope。200 啟用中的附件身份陣列（不含版本歷程）。403 / 404。"
           }
         },
         {
-          "name": "Create Attachments (multipart, batch)",
+          "name": "Create Attachment Identity",
           "event": [
             {
               "listen": "test",
@@ -737,8 +733,7 @@
                 "exec": [
                   "pm.test('status 201', () => pm.response.to.have.status(201));",
                   "if (pm.response.code === 201) {",
-                  "  const created = (pm.response.json().created) || [];",
-                  "  if (created[0]) pm.environment.set('attachmentId', created[0].attachmentId);",
+                  "  pm.environment.set('attachmentId', pm.response.json().attachmentId);",
                   "}"
                 ]
               }
@@ -748,49 +743,21 @@
             "method": "POST",
             "header": [],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "items[0].attachmentNo",
-                  "value": "ATT-01",
-                  "type": "text"
-                },
-                {
-                  "key": "items[0].name",
-                  "value": "請假申請表",
-                  "type": "text"
-                },
-                {
-                  "key": "items[0].file",
-                  "type": "file",
-                  "src": [],
-                  "description": "選填。副檔名限 jpg/jpeg/png/pdf/doc/docx/xls/xlsx/odt/ods"
-                },
-                {
-                  "key": "items[1].attachmentNo",
-                  "value": "ATT-02",
-                  "type": "text"
-                },
-                {
-                  "key": "items[1].name",
-                  "value": "填寫說明（僅中繼資料）",
-                  "type": "text"
-                }
-              ]
+              "mode": "raw",
+              "raw": "{\n  \"attachmentNo\": \"ATT-01\",\n  \"name\": \"請假申請表\"\n}",
+              "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/documents/{{documentId}}/versions/{{versionId}}/attachments",
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}/attachments",
               "host": ["{{baseUrl}}"],
               "path": [
                 "api",
                 "documents",
                 "{{documentId}}",
-                "versions",
-                "{{versionId}}",
                 "attachments"
               ]
             },
-            "description": "CompanyAdminScope + CSRF。批次全有全無。items[i].attachmentNo（<=50，同版本唯一、同批不重複）、items[i].name（<=255）、items[i].file（選填）。i 從 0 連續。201 { created: [...] }。400 errors[\"items[i].*\"] / errors.attachmentNo。403 / 404。"
+            "description": "CompanyAdminScope + CSRF。只建立附件身份，不建立版本或檔案。201 { attachmentId, attachmentNo, name, isActive }。400 / 403 / 404。"
           }
         },
         {
@@ -799,11 +766,11 @@
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/attachments/{{attachmentId}}",
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}/attachments/{{attachmentId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "attachments", "{{attachmentId}}"]
+              "path": ["api", "documents", "{{documentId}}", "attachments", "{{attachmentId}}"]
             },
-            "description": "CompanyAdminScope + CSRF。204（實體檔移到 trash）。403 / 404。"
+            "description": "CompanyAdminScope + CSRF。204（附件身份軟刪除，版本歷程保留）。403 / 404。"
           }
         }
       ]

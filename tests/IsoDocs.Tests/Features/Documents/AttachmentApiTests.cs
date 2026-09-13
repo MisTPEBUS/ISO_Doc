@@ -26,329 +26,197 @@ namespace IsoDocs.Tests.Features.Documents;
 public sealed class AttachmentApiTests
 {
     [Fact]
-    public async Task UploadBatch_CreatesFileAndMetadataOnlyAttachments()
+    public async Task IdentityCrud_CreatesListsDetailsAndSoftDeletesAttachment()
     {
         await using var factory = new AttachmentWebApplicationFactory();
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
         var token = await GetAntiforgeryTokenAsync(client);
-        using var request = CreateUploadRequest(
-            factory,
-            token,
-            [
-                new UploadItem("ATT-01", "Form", "form.PDF", "%PDF-attachment"u8.ToArray()),
-                new UploadItem("ATT-02", "Instructions", null, null)
-            ]);
+        using var create = WithXsrf(HttpMethod.Post,
+            $"/api/documents/{factory.Document.Id}/attachments", token,
+            JsonContent.Create(new CreateAttachmentRequest("ATT-A", "附件 A")));
+
+        var createResponse = await client.SendAsync(create);
+        var created = await createResponse.Content.ReadFromJsonAsync<AttachmentResponse>();
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        Assert.NotNull(created);
+        Assert.True(created.IsActive);
+        Assert.Single((await client.GetFromJsonAsync<IReadOnlyList<AttachmentResponse>>(
+            $"/api/documents/{factory.Document.Id}/attachments"))!);
+        var detail = await client.GetFromJsonAsync<AttachmentDetailResponse>(
+            $"/api/documents/{factory.Document.Id}/attachments/{created.AttachmentId}");
+        Assert.Empty(detail!.Versions);
+
+        using var delete = WithXsrf(HttpMethod.Delete,
+            $"/api/documents/{factory.Document.Id}/attachments/{created.AttachmentId}", token);
+        var deleteResponse = await client.SendAsync(delete);
+
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+        Assert.False(factory.Store.Attachments.Single().IsActive);
+        Assert.Empty((await client.GetFromJsonAsync<IReadOnlyList<AttachmentResponse>>(
+            $"/api/documents/{factory.Document.Id}/attachments"))!);
+    }
+
+    [Fact]
+    public async Task CreateIdentity_WithDuplicateNumber_ReturnsValidationProblem()
+    {
+        await using var factory = new AttachmentWebApplicationFactory();
+        factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "Existing");
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = WithXsrf(HttpMethod.Post,
+            $"/api/documents/{factory.Document.Id}/attachments", token,
+            JsonContent.Create(new CreateAttachmentRequest("ATT-A", "Duplicate")));
 
         var response = await client.SendAsync(request);
-        var body = await response.Content.ReadFromJsonAsync<CreateAttachmentsResponse>();
+        var problem = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("attachmentNo", problem!.Errors.Keys);
+    }
+
+    [Fact]
+    public async Task CreateVersion_Minor_PreservesHistoryAndDoesNotChangeMainVersion()
+    {
+        await using var factory = new AttachmentWebApplicationFactory();
+        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "附件 A");
+        var oldPublishDate = new DateOnly(2026, 1, 2);
+        var oldEffectiveDate = new DateOnly(2026, 1, 5);
+        var oldVersion = factory.VersionStore.AddVersion(
+            attachment.Id, 1, 0, "PUBLISHED", oldPublishDate, oldEffectiveDate);
+        var mainStatus = factory.MainVersion.Status;
+        var mainExpiredDate = factory.MainVersion.ExpiredDate;
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        var effectiveDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        using var request = CreateVersionRequest(
+            attachment.Id, token, "MINOR", effectiveDate, "form.pdf", "%PDF-new"u8.ToArray());
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<AttachmentVersionResponse>();
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        Assert.NotNull(body);
-        Assert.Equal(2, body.Created.Count);
-        Assert.True(body.Created.Single(item => item.AttachmentNo == "ATT-01").HasFile);
-        Assert.False(body.Created.Single(item => item.AttachmentNo == "ATT-02").HasFile);
-        Assert.Equal(2, factory.AttachmentStore.Attachments.Count);
-        var objectKey = Assert.Single(factory.Storage.WrittenKeys);
-        Assert.Contains("/v1.0/att/01_", objectKey, StringComparison.Ordinal);
-        Assert.EndsWith("_form.pdf", objectKey, StringComparison.Ordinal);
-        Assert.Collection(
-            factory.Audit.Entries,
-            entry =>
-            {
-                Assert.Equal(AuditActions.UploadAttachment, entry.Action);
-                Assert.Equal(AuditResourceTypes.Attachment, entry.ResourceType);
-                Assert.NotNull(entry.Detail);
-            },
-            entry =>
-            {
-                Assert.Equal(AuditActions.CreateAttachmentMetadata, entry.Action);
-                Assert.Equal(AuditResourceTypes.Attachment, entry.ResourceType);
-                Assert.NotNull(entry.Detail);
-            });
+        Assert.Equal("1.1", body!.Version);
+        Assert.Equal("OBSOLETE", oldVersion.Status);
+        Assert.Equal(effectiveDate, oldVersion.ExpiredDate);
+        Assert.Equal(oldPublishDate, oldVersion.PublishDate);
+        Assert.Equal(oldEffectiveDate, oldVersion.EffectiveDate);
+        Assert.Equal(mainStatus, factory.MainVersion.Status);
+        Assert.Equal(mainExpiredDate, factory.MainVersion.ExpiredDate);
+        Assert.Contains("/att/ATT-A/v1.1/", Assert.Single(factory.Storage.WrittenKeys));
     }
 
     [Fact]
-    public async Task UploadBatch_WhenAnyExtensionIsNotAllowed_RejectsEntireBatchWithoutWrites()
+    public async Task CreateVersion_WhenContentDoesNotMatchExtension_RejectsWithoutWriteOrRow()
     {
         await using var factory = new AttachmentWebApplicationFactory();
+        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "附件 A");
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
-        var token = await GetAntiforgeryTokenAsync(client);
-        using var request = CreateUploadRequest(
-            factory,
-            token,
-            [
-                new UploadItem("ATT-01", "Valid", "valid.pdf", "%PDF-valid"u8.ToArray()),
-                new UploadItem("ATT-02", "Invalid", "malware.exe", "invalid"u8.ToArray())
-            ]);
+        var token = await GetAntiferyTokenAsync(client);
+        using var request = CreateVersionRequest(attachment.Id, token, "MAJOR",
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), "form.pdf", "not-pdf"u8.ToArray());
 
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Empty(factory.Storage.WrittenKeys);
-        Assert.Empty(factory.AttachmentStore.Attachments);
-        Assert.False(factory.AttachmentStore.TransactionStarted);
+        Assert.Empty(factory.VersionStore.Versions);
     }
 
     [Fact]
-    public async Task UploadBatch_WithDuplicateNumberInVersion_ReturnsValidationError()
+    public async Task BulkImportDocuments_ContinuesAfterDuplicateAndReportsCounts()
     {
         await using var factory = new AttachmentWebApplicationFactory();
-        factory.AttachmentStore.AddSeed("ATT-01", "Existing", fileKey: null);
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
         var token = await GetAntiforgeryTokenAsync(client);
-        using var request = CreateUploadRequest(
-            factory,
-            token,
-            [new UploadItem("ATT-01", "Duplicate", "duplicate.pdf", "%PDF-valid"u8.ToArray())]);
+        var items = Enumerable.Range(1, 10).Select(index => new BulkImportDocumentItem
+        {
+            DocumentNo = index == 4 ? factory.Document.DocumentNo : $"ISO-{index:000}",
+            Name = $"Document {index}"
+        }).ToArray();
+        using var request = WithXsrf(HttpMethod.Post, "/api/documents/bulk-import", token,
+            JsonContent.Create(new BulkImportDocumentsRequest
+            {
+                CompanyId = factory.Document.CompanyId, Items = items
+            }));
 
         var response = await client.SendAsync(request);
-        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.NotNull(body);
-        Assert.Contains("attachmentNo", body.Errors.Keys);
-        Assert.Empty(factory.Storage.WrittenKeys);
-        Assert.Single(factory.AttachmentStore.Attachments);
-    }
-
-    [Fact]
-    public async Task Delete_WithStoredFile_MovesFileToTrashAndRemovesAttachment()
-    {
-        await using var factory = new AttachmentWebApplicationFactory();
-        var attachment = factory.AttachmentStore.AddSeed(
-            "ATT-01",
-            "Form",
-            "store/COMPANYA/ISO-001/v1.0/att/01_file_form.pdf");
-        using var client = factory.CreateSecureClient();
-        await LoginAsync(client);
-        var token = await GetAntiforgeryTokenAsync(client);
-        using var request = new HttpRequestMessage(
-            HttpMethod.Delete,
-            $"/api/attachments/{attachment.Id}");
-        request.Headers.Add("X-XSRF-TOKEN", token);
-
-        var response = await client.SendAsync(request);
-
-        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.DoesNotContain(factory.AttachmentStore.Attachments, item => item.Id == attachment.Id);
-        Assert.Contains(attachment.FileKey!, factory.Storage.TrashedKeys);
-        Assert.True(factory.AttachmentStore.TransactionCommitted);
-        var audit = Assert.Single(factory.Audit.Entries);
-        Assert.Equal(AuditActions.DeleteAttachment, audit.Action);
-        Assert.Equal(AuditResourceTypes.Attachment, audit.ResourceType);
-        Assert.Equal(attachment.Id, audit.ResourceId);
-        Assert.NotNull(audit.Detail);
-    }
-
-    [Fact]
-    public async Task List_ReturnsAttachmentsForSpecifiedVersion()
-    {
-        await using var factory = new AttachmentWebApplicationFactory();
-        factory.AttachmentStore.AddSeed("ATT-01", "Form", fileKey: null);
-        using var client = factory.CreateSecureClient();
-        await LoginAsync(client);
-
-        var response = await client.GetAsync(
-            $"/api/documents/{factory.Document.Id}/versions/{factory.Version.Id}/attachments");
-        var body = await response.Content.ReadFromJsonAsync<IReadOnlyList<AttachmentResponse>>();
+        var body = await response.Content.ReadFromJsonAsync<BulkImportDocumentsResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var attachment = Assert.Single(body!);
-        Assert.Equal("ATT-01", attachment.AttachmentNo);
-        Assert.False(attachment.HasFile);
+        Assert.Equal(10, body!.Total);
+        Assert.Equal(9, body.SuccessCount);
+        Assert.Equal(1, body.FailureCount);
+        Assert.Equal(4, Assert.Single(body.Failed).Index);
     }
 
     [Fact]
-    public async Task List_WithVersionFromAnotherDocument_ReturnsNotFound()
-    {
-        await using var factory = new AttachmentWebApplicationFactory();
-        using var client = factory.CreateSecureClient();
-        await LoginAsync(client);
-
-        var response = await client.GetAsync(
-            $"/api/documents/{Guid.NewGuid()}/versions/{factory.Version.Id}/attachments");
-
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task Delete_WithUnknownAttachment_ReturnsNotFound()
+    public async Task BulkImportAttachments_MissingDocumentFailsOnlyThatItem()
     {
         await using var factory = new AttachmentWebApplicationFactory();
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
         var token = await GetAntiforgeryTokenAsync(client);
-        using var request = new HttpRequestMessage(
-            HttpMethod.Delete,
-            $"/api/attachments/{Guid.NewGuid()}");
-        request.Headers.Add("X-XSRF-TOKEN", token);
+        using var request = WithXsrf(HttpMethod.Post, "/api/attachments/bulk-import", token,
+            JsonContent.Create(new BulkImportAttachmentsRequest
+            {
+                CompanyId = factory.Document.CompanyId,
+                Items =
+                [
+                    new() { DocumentNo = "MISSING", AttachmentNo = "ATT-X", Name = "Missing" },
+                    new() { DocumentNo = factory.Document.DocumentNo, AttachmentNo = "ATT-A", Name = "Valid" }
+                ]
+            }));
 
         var response = await client.SendAsync(request);
-
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task UploadFile_ForMetadataOnlyAttachment_StoresFileAndReturnsHasFile()
-    {
-        await using var factory = new AttachmentWebApplicationFactory();
-        var attachment = factory.AttachmentStore.AddSeed("ATT-01", "Form", fileKey: null);
-        using var client = factory.CreateSecureClient();
-        await LoginAsync(client);
-        var token = await GetAntiforgeryTokenAsync(client);
-        using var request = CreateUploadFileRequest(
-            attachment.Id, token, "form.PDF", "%PDF-attachment"u8.ToArray());
-
-        var response = await client.SendAsync(request);
-        var body = await response.Content.ReadFromJsonAsync<UploadAttachmentFileResponse>();
+        var body = await response.Content.ReadFromJsonAsync<BulkImportAttachmentsResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(body);
-        Assert.Equal(attachment.Id, body.AttachmentId);
-        Assert.True(body.HasFile);
-
-        var objectKey = Assert.Single(factory.Storage.WrittenKeys);
-        Assert.Contains("/v1.0/att/01_", objectKey, StringComparison.Ordinal);
-        Assert.EndsWith("_form.pdf", objectKey, StringComparison.Ordinal);
-        Assert.True(await factory.Storage.ExistsAsync(objectKey));
-
-        var stored = Assert.Single(factory.AttachmentStore.Attachments);
-        Assert.Equal(objectKey, stored.FileKey);
-        Assert.Equal("form.PDF", stored.OriginalFileName);
-        Assert.Equal("application/pdf", stored.ContentType);
-        Assert.NotNull(stored.FileSize);
-        Assert.NotNull(stored.Checksum);
-        Assert.True(factory.AttachmentStore.TransactionCommitted);
-
-        var audit = Assert.Single(factory.Audit.Entries);
-        Assert.Equal(AuditActions.UploadAttachment, audit.Action);
-        Assert.Equal(AuditResourceTypes.Attachment, audit.ResourceType);
-        Assert.Equal(attachment.Id, audit.ResourceId);
+        Assert.Equal(2, body!.Total);
+        Assert.Equal(1, body.SuccessCount);
+        Assert.Equal(1, body.FailureCount);
+        Assert.Equal(1, Assert.Single(body.Failed).Index);
+        Assert.Equal("ATT-A", Assert.Single(body.Succeeded).Attachment.AttachmentNo);
     }
 
     [Fact]
-    public async Task UploadFile_WhenAttachmentAlreadyHasFile_ReturnsConflictWithoutWriting()
+    public async Task BulkImport_WhenItemsEmpty_ReturnsBadRequest()
     {
         await using var factory = new AttachmentWebApplicationFactory();
-        var attachment = factory.AttachmentStore.AddSeed(
-            "ATT-01", "Form", "store/COMPANYA/ISO-001/v1.0/att/01_file_form.pdf");
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
         var token = await GetAntiforgeryTokenAsync(client);
-        using var request = CreateUploadFileRequest(
-            attachment.Id, token, "replacement.pdf", "%PDF-new"u8.ToArray());
+        using var request = WithXsrf(HttpMethod.Post, "/api/attachments/bulk-import", token,
+            JsonContent.Create(new BulkImportAttachmentsRequest
+            {
+                CompanyId = factory.Document.CompanyId, Items = []
+            }));
 
-        var response = await client.SendAsync(request);
-
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Empty(factory.Storage.WrittenKeys);
-        Assert.Empty(factory.Audit.Entries);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.SendAsync(request)).StatusCode);
     }
 
-    [Fact]
-    public async Task UploadFile_WithDisallowedExtension_ReturnsBadRequestWithoutWriting()
-    {
-        await using var factory = new AttachmentWebApplicationFactory();
-        var attachment = factory.AttachmentStore.AddSeed("ATT-01", "Form", fileKey: null);
-        using var client = factory.CreateSecureClient();
-        await LoginAsync(client);
-        var token = await GetAntiforgeryTokenAsync(client);
-        using var request = CreateUploadFileRequest(
-            attachment.Id, token, "malware.exe", "invalid"u8.ToArray());
-
-        var response = await client.SendAsync(request);
-        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.NotNull(body);
-        Assert.Contains("file", body.Errors.Keys);
-        Assert.Empty(factory.Storage.WrittenKeys);
-
-        var stored = Assert.Single(factory.AttachmentStore.Attachments);
-        Assert.Null(stored.FileKey);
-        Assert.Null(stored.OriginalFileName);
-        Assert.Null(stored.ContentType);
-        Assert.Null(stored.FileSize);
-        Assert.Null(stored.Checksum);
-    }
-
-    [Fact]
-    public async Task UploadFile_WhenDatabaseFails_MovesFileToTrashAndLeavesAttachmentUnchanged()
-    {
-        await using var factory = new AttachmentWebApplicationFactory();
-        var attachment = factory.AttachmentStore.AddSeed("ATT-01", "Form", fileKey: null);
-        factory.AttachmentStore.SaveChangesShouldThrow = true;
-        using var client = factory.CreateSecureClient();
-        await LoginAsync(client);
-        var token = await GetAntiforgeryTokenAsync(client);
-        using var request = CreateUploadFileRequest(
-            attachment.Id, token, "form.pdf", "%PDF-attachment"u8.ToArray());
-
-        var response = await client.SendAsync(request);
-
-        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
-        var written = Assert.Single(factory.Storage.WrittenKeys);
-        Assert.Contains(written, factory.Storage.TrashedKeys);
-
-        var stored = Assert.Single(factory.AttachmentStore.Attachments);
-        Assert.Null(stored.FileKey);
-        Assert.Null(stored.OriginalFileName);
-        Assert.Null(stored.ContentType);
-        Assert.Null(stored.FileSize);
-        Assert.Null(stored.Checksum);
-        Assert.False(factory.AttachmentStore.TransactionCommitted);
-        Assert.Empty(factory.Audit.Entries);
-    }
-
-    private static HttpRequestMessage CreateUploadFileRequest(
-        Guid attachmentId,
-        string token,
-        string fileName,
-        byte[] content)
+    private static HttpRequestMessage CreateVersionRequest(
+        Guid attachmentId, string token, string changeType, DateOnly effectiveDate,
+        string fileName, byte[] content)
     {
         var multipart = new MultipartFormDataContent();
+        multipart.Add(new StringContent(changeType), "changeType");
+        multipart.Add(new StringContent(effectiveDate.ToString("yyyy-MM-dd")), "effectiveDate");
         var file = new ByteArrayContent(content);
         file.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         multipart.Add(file, "file", fileName);
-
-        var request = new HttpRequestMessage(
-            HttpMethod.Put,
-            $"/api/attachments/{attachmentId}/file")
-        {
-            Content = multipart
-        };
-        request.Headers.Add("X-XSRF-TOKEN", token);
-        return request;
+        return WithXsrf(HttpMethod.Post, $"/api/attachments/{attachmentId}/versions", token, multipart);
     }
 
-    private static HttpRequestMessage CreateUploadRequest(
-        AttachmentWebApplicationFactory factory,
-        string token,
-        IReadOnlyList<UploadItem> items)
+    private static HttpRequestMessage WithXsrf(
+        HttpMethod method, string uri, string token, HttpContent? content = null)
     {
-        var multipart = new MultipartFormDataContent();
-        for (var index = 0; index < items.Count; index++)
-        {
-            var item = items[index];
-            multipart.Add(new StringContent(item.AttachmentNo), $"items[{index}].attachmentNo");
-            multipart.Add(new StringContent(item.Name), $"items[{index}].name");
-            if (item.FileName is not null && item.Content is not null)
-            {
-                var file = new ByteArrayContent(item.Content);
-                file.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-                multipart.Add(file, $"items[{index}].file", item.FileName);
-            }
-        }
-
-        var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/api/documents/{factory.Document.Id}/versions/{factory.Version.Id}/attachments")
-        {
-            Content = multipart
-        };
+        var request = new HttpRequestMessage(method, uri) { Content = content };
         request.Headers.Add("X-XSRF-TOKEN", token);
         return request;
     }
@@ -356,10 +224,12 @@ public sealed class AttachmentApiTests
     private static async Task LoginAsync(HttpClient client)
     {
         var response = await client.PostAsJsonAsync(
-            "/api/auth/login",
-            new LoginRequest("EMP001", AuthWebApplicationFactory.InitialPassword));
+            "/api/auth/login", new LoginRequest("EMP001", AuthWebApplicationFactory.InitialPassword));
         response.EnsureSuccessStatusCode();
     }
+
+    private static Task<string> GetAntiferyTokenAsync(HttpClient client) =>
+        GetAntiforgeryTokenAsync(client);
 
     private static async Task<string> GetAntiforgeryTokenAsync(HttpClient client)
     {
@@ -367,15 +237,8 @@ public sealed class AttachmentApiTests
         response.EnsureSuccessStatusCode();
         var cookie = response.Headers.GetValues("Set-Cookie")
             .Single(value => value.StartsWith("isodocs.xsrf=", StringComparison.Ordinal));
-        return Uri.UnescapeDataString(
-            cookie["isodocs.xsrf=".Length..cookie.IndexOf(';')]);
+        return Uri.UnescapeDataString(cookie["isodocs.xsrf=".Length..cookie.IndexOf(';')]);
     }
-
-    private sealed record UploadItem(
-        string AttachmentNo,
-        string Name,
-        string? FileName,
-        byte[]? Content);
 }
 
 internal sealed class AttachmentWebApplicationFactory : WebApplicationFactory<Program>
@@ -387,42 +250,34 @@ internal sealed class AttachmentWebApplicationFactory : WebApplicationFactory<Pr
         Document = new Document
         {
             Id = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
-            CompanyId = AuthStore.User.CompanyId,
-            DocumentNo = "ISO-001",
-            Name = "Quality Manual",
-            IsActive = true,
-            CreatedBy = AuthStore.User.Id,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
+            CompanyId = AuthStore.User.CompanyId, DocumentNo = "ISO-BASE", Name = "Quality Manual",
+            IsActive = true, CreatedBy = AuthStore.User.Id,
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
         };
-        Version = new DocumentVersion
+        MainVersion = new DocumentVersion
         {
-            Id = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
-            DocumentId = Document.Id,
-            Version = "1.0",
-            VersionMajor = 1,
-            VersionMinor = 0,
-            Status = "PUBLISHED",
-            CreatedBy = AuthStore.User.Id,
-            CreatedAt = DateTimeOffset.UtcNow
+            Id = Guid.NewGuid(), DocumentId = Document.Id, Version = "1.0",
+            VersionMajor = 1, VersionMinor = 0, Status = "PUBLISHED",
+            PublishDate = new DateOnly(2026, 1, 1), EffectiveDate = new DateOnly(2026, 1, 2),
+            CreatedBy = AuthStore.User.Id, CreatedAt = DateTimeOffset.UtcNow
         };
-        AttachmentStore = new FakeAttachmentStore(Document, Version, "COMPANYA", AuthStore.User.Id);
+        Store = new FakeAttachmentDocumentStore(Document, AuthStore.User.Id);
+        VersionStore = new FakeAttachmentVersionStore(Document, Store, AuthStore.User.Id);
         Storage = new FakeDocumentStorage();
         Audit = new RecordingOperationAuditLogService();
     }
 
     public FakeAuthUserStore AuthStore { get; }
     public Document Document { get; }
-    public DocumentVersion Version { get; }
-    public FakeAttachmentStore AttachmentStore { get; }
+    public DocumentVersion MainVersion { get; }
+    public FakeAttachmentDocumentStore Store { get; }
+    public FakeAttachmentVersionStore VersionStore { get; }
     public FakeDocumentStorage Storage { get; }
     public RecordingOperationAuditLogService Audit { get; }
 
     public HttpClient CreateSecureClient() => CreateClient(new WebApplicationFactoryClientOptions
     {
-        BaseAddress = new Uri("https://localhost"),
-        HandleCookies = true,
-        AllowAutoRedirect = false
+        BaseAddress = new Uri("https://localhost"), HandleCookies = true, AllowAutoRedirect = false
     });
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -434,8 +289,12 @@ internal sealed class AttachmentWebApplicationFactory : WebApplicationFactory<Pr
             services.AddDataProtection().UseEphemeralDataProtectionProvider();
             services.RemoveAll<IAuthUserStore>();
             services.AddSingleton<IAuthUserStore>(AuthStore);
+            services.RemoveAll<IDocumentStore>();
+            services.AddSingleton<IDocumentStore>(Store);
             services.RemoveAll<IAttachmentStore>();
-            services.AddSingleton<IAttachmentStore>(AttachmentStore);
+            services.AddSingleton<IAttachmentStore>(Store);
+            services.RemoveAll<IAttachmentVersionStore>();
+            services.AddSingleton<IAttachmentVersionStore>(VersionStore);
             services.RemoveAll<IDocumentStorage>();
             services.AddSingleton<IDocumentStorage>(Storage);
             services.RemoveAll<IOperationAuditLogService>();
@@ -444,175 +303,116 @@ internal sealed class AttachmentWebApplicationFactory : WebApplicationFactory<Pr
     }
 }
 
-internal sealed class FakeAttachmentStore(
-    Document document,
-    DocumentVersion version,
-    string companyCode,
-    Guid userId) : IAttachmentStore
+internal sealed class FakeAttachmentDocumentStore(Document seed, Guid userId)
+    : IAttachmentStore, IDocumentStore
 {
-    private List<Attachment>? _snapshot;
-
+    public List<Document> Documents { get; } = [seed];
     public List<Attachment> Attachments { get; } = [];
-    public bool TransactionStarted { get; private set; }
-    public bool TransactionCommitted { get; private set; }
-    public bool SaveChangesShouldThrow { get; set; }
 
-    public Attachment AddSeed(string attachmentNo, string name, string? fileKey)
+    public Attachment AddAttachment(Guid documentId, string attachmentNo, string name)
     {
+        var now = DateTimeOffset.UtcNow;
         var attachment = new Attachment
         {
-            Id = Guid.NewGuid(),
-            DocumentVersionId = version.Id,
-            AttachmentNo = attachmentNo,
-            Name = name,
-            FileKey = fileKey,
-            OriginalFileName = fileKey is null ? null : "form.pdf",
-            ContentType = fileKey is null ? null : "application/pdf",
-            FileSize = fileKey is null ? null : 10,
-            Checksum = fileKey is null ? null : "checksum",
-            CreatedBy = userId,
-            CreatedAt = DateTimeOffset.UtcNow
+            Id = Guid.NewGuid(), DocumentId = documentId, AttachmentNo = attachmentNo,
+            Name = name, IsActive = true, CreatedBy = userId, CreatedAt = now, UpdatedAt = now
         };
         Attachments.Add(attachment);
         return attachment;
     }
 
-    public Task<AttachmentVersionContext?> FindVersionContextAsync(
-        Guid documentId,
-        Guid versionId,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var context = document.Id == documentId && version.Id == versionId
-            ? new AttachmentVersionContext(document, version, companyCode)
-            : null;
-        return Task.FromResult(context);
-    }
+    public Task<bool> CompanyExistsAsync(Guid companyId, CancellationToken ct) =>
+        Task.FromResult(Documents.Any(x => x.CompanyId == companyId));
+    public Task<bool> DocumentNoExistsAsync(Guid companyId, string documentNo, CancellationToken ct) =>
+        Task.FromResult(Documents.Any(x => x.CompanyId == companyId && x.DocumentNo == documentNo));
+    public Task<int> CountAsync(Guid? companyId, string? keyword, CancellationToken ct) =>
+        Task.FromResult(Documents.Count(x => !companyId.HasValue || x.CompanyId == companyId));
+    public Task<IReadOnlyList<Document>> ListAsync(
+        Guid? companyId, string? keyword, int skip, int take, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<Document>>(Documents
+            .Where(x => !companyId.HasValue || x.CompanyId == companyId).Skip(skip).Take(take).ToArray());
+    public Task<Document?> FindByIdAsync(Guid id, CancellationToken ct) =>
+        Task.FromResult(Documents.SingleOrDefault(x => x.Id == id));
+    public Task<IReadOnlyList<DocumentVersion>> ListVersionsAsync(Guid documentId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<DocumentVersion>>([]);
+    public void Add(Document document) => Documents.Add(document);
+    public void Add(DocumentVersion version) { }
+    public void Detach(Document document) => Documents.Remove(document);
+    public void Detach(DocumentVersion version) { }
+    public Task<IDocumentTransaction> BeginTransactionAsync(CancellationToken ct) =>
+        Task.FromResult<IDocumentTransaction>(new DocumentTransaction());
 
-    public Task<AttachmentContext?> FindAttachmentContextAsync(
-        Guid attachmentId,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var attachment = Attachments.SingleOrDefault(item => item.Id == attachmentId);
-        return Task.FromResult(attachment is null
-            ? null
-            : new AttachmentContext(attachment, document.CompanyId));
-    }
+    public Task<Document?> FindDocumentAsync(Guid documentId, CancellationToken ct) =>
+        Task.FromResult(Documents.SingleOrDefault(x => x.Id == documentId));
+    public Task<Document?> FindDocumentByNoAsync(Guid companyId, string documentNo, CancellationToken ct) =>
+        Task.FromResult(Documents.SingleOrDefault(x => x.CompanyId == companyId && x.DocumentNo == documentNo));
+    public Task<bool> AttachmentNoExistsAsync(Guid documentId, string attachmentNo, CancellationToken ct) =>
+        Task.FromResult(Attachments.Any(x => x.DocumentId == documentId && x.AttachmentNo == attachmentNo));
+    public Task<IReadOnlyList<Attachment>> ListAsync(Guid documentId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<Attachment>>(Attachments
+            .Where(x => x.DocumentId == documentId && x.IsActive).ToArray());
+    Task<Attachment?> IAttachmentStore.FindByIdAsync(Guid attachmentId, CancellationToken ct) =>
+        Task.FromResult(Attachments.SingleOrDefault(x => x.Id == attachmentId));
+    Task<IReadOnlyList<AttachmentVersion>> IAttachmentStore.ListVersionsAsync(Guid attachmentId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<AttachmentVersion>>([]);
+    public void Add(Attachment attachment) => Attachments.Add(attachment);
+    public void Detach(Attachment attachment) => Attachments.Remove(attachment);
+    public Task SaveChangesAsync(CancellationToken ct) => Task.CompletedTask;
 
-    public Task<AttachmentUploadContext?> FindAttachmentUploadContextAsync(
-        Guid attachmentId,
-        CancellationToken cancellationToken)
+    private sealed class DocumentTransaction : IDocumentTransaction
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        var attachment = Attachments.SingleOrDefault(item => item.Id == attachmentId);
-        if (attachment is null)
+        public Task CommitAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+}
+
+internal sealed class FakeAttachmentVersionStore(
+    Document document, FakeAttachmentDocumentStore attachmentStore, Guid userId)
+    : IAttachmentVersionStore
+{
+    public List<AttachmentVersion> Versions { get; } = [];
+
+    public AttachmentVersion AddVersion(
+        Guid attachmentId, int major, int minor, string status,
+        DateOnly publishDate, DateOnly effectiveDate)
+    {
+        var version = new AttachmentVersion
         {
-            return Task.FromResult<AttachmentUploadContext?>(null);
-        }
-
-        var sequence = Attachments
-            .Where(item => item.DocumentVersionId == attachment.DocumentVersionId)
-            .OrderBy(item => item.AttachmentNo, StringComparer.Ordinal)
-            .ToList()
-            .FindIndex(item => item.Id == attachmentId) + 1;
-
-        return Task.FromResult<AttachmentUploadContext?>(new AttachmentUploadContext(
-            attachment,
-            document.CompanyId,
-            companyCode,
-            document.DocumentNo,
-            version.Version,
-            sequence));
+            Id = Guid.NewGuid(), AttachmentId = attachmentId, Version = $"{major}.{minor}",
+            VersionMajor = major, VersionMinor = minor, Status = status,
+            PublishDate = publishDate, EffectiveDate = effectiveDate,
+            FileKey = "store/existing", OriginalFileName = "old.pdf",
+            ContentType = "application/pdf", FileSize = 10, Checksum = "checksum",
+            CreatedBy = userId, CreatedAt = DateTimeOffset.UtcNow
+        };
+        Versions.Add(version);
+        return version;
     }
 
-    public Task<IReadOnlyList<Attachment>> ListAsync(
-        Guid versionId,
-        CancellationToken cancellationToken)
+    public Task<AttachmentVersionCreateContext?> FindCreateContextAsync(Guid attachmentId, CancellationToken ct)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        IReadOnlyList<Attachment> result = Attachments
-            .Where(attachment => attachment.DocumentVersionId == versionId)
-            .OrderBy(attachment => attachment.AttachmentNo)
-            .ToArray();
-        return Task.FromResult(result);
+        var attachment = attachmentStore.Attachments.SingleOrDefault(x => x.Id == attachmentId);
+        return Task.FromResult(attachment is null ? null : new AttachmentVersionCreateContext(
+            attachment.Id, attachment.AttachmentNo, attachment.IsActive, document.Id,
+            document.CompanyId, document.DocumentNo, "COMPANYA"));
     }
 
-    public Task<IReadOnlySet<string>> FindExistingAttachmentNumbersAsync(
-        Guid versionId,
-        IReadOnlyCollection<string> attachmentNumbers,
-        CancellationToken cancellationToken)
+    public Task<AttachmentVersion?> FindLatestVersionAsync(Guid attachmentId, CancellationToken ct) =>
+        Task.FromResult(Versions.Where(x => x.AttachmentId == attachmentId)
+            .OrderByDescending(x => x.VersionMajor).ThenByDescending(x => x.VersionMinor).FirstOrDefault());
+    public Task<IReadOnlyList<AttachmentVersion>> ListPublishedVersionsAsync(Guid attachmentId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<AttachmentVersion>>(Versions
+            .Where(x => x.AttachmentId == attachmentId && x.Status == "PUBLISHED").ToArray());
+    public Task<AttachmentVersion?> FindVersionAsync(Guid versionId, CancellationToken ct) =>
+        Task.FromResult(Versions.SingleOrDefault(x => x.Id == versionId));
+    public void Add(AttachmentVersion version) => Versions.Add(version);
+    public Task SaveChangesAsync(CancellationToken ct) => Task.CompletedTask;
+    public Task<IAttachmentVersionTransaction> BeginTransactionAsync(CancellationToken ct) =>
+        Task.FromResult<IAttachmentVersionTransaction>(new Transaction());
+
+    private sealed class Transaction : IAttachmentVersionTransaction
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        IReadOnlySet<string> result = Attachments
-            .Where(attachment => attachment.DocumentVersionId == versionId
-                && attachmentNumbers.Contains(attachment.AttachmentNo))
-            .Select(attachment => attachment.AttachmentNo)
-            .ToHashSet(StringComparer.Ordinal);
-        return Task.FromResult(result);
-    }
-
-    public void AddRange(IEnumerable<Attachment> attachments) =>
-        Attachments.AddRange(attachments);
-
-    public void Remove(Attachment attachment) => Attachments.Remove(attachment);
-
-    public Task SaveChangesAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (SaveChangesShouldThrow)
-        {
-            throw new InvalidOperationException("Simulated database failure.");
-        }
-
-        return Task.CompletedTask;
-    }
-
-    public Task<IAttachmentTransaction> BeginTransactionAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        TransactionStarted = true;
-        TransactionCommitted = false;
-        _snapshot = Attachments.Select(CloneAttachment).ToList();
-        return Task.FromResult<IAttachmentTransaction>(new Transaction(this));
-    }
-
-    private static Attachment CloneAttachment(Attachment source) => new()
-    {
-        Id = source.Id,
-        DocumentVersionId = source.DocumentVersionId,
-        AttachmentNo = source.AttachmentNo,
-        Name = source.Name,
-        FileKey = source.FileKey,
-        OriginalFileName = source.OriginalFileName,
-        ContentType = source.ContentType,
-        FileSize = source.FileSize,
-        Checksum = source.Checksum,
-        CreatedBy = source.CreatedBy,
-        CreatedAt = source.CreatedAt
-    };
-
-    private sealed class Transaction(FakeAttachmentStore store) : IAttachmentTransaction
-    {
-        private bool _committed;
-
-        public Task CommitAsync(CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            _committed = true;
-            store.TransactionCommitted = true;
-            return Task.CompletedTask;
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            if (!_committed && store._snapshot is not null)
-            {
-                store.Attachments.Clear();
-                store.Attachments.AddRange(store._snapshot);
-            }
-
-            return ValueTask.CompletedTask;
-        }
+        public Task CommitAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

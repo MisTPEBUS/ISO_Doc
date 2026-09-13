@@ -10,6 +10,5 @@ public interface IDocumentsBrowseService
     Task<Result<DownloadFileResponse>> DownloadDocumentAsync(
         Guid documentId, Guid versionId, CancellationToken cancellationToken);
     Task<Result<DownloadFileResponse>> DownloadAttachmentAsync(
-        Guid documentId, Guid versionId, Guid attachmentId,
-        CancellationToken cancellationToken);
+        Guid attachmentId, Guid versionId, CancellationToken cancellationToken);
 }

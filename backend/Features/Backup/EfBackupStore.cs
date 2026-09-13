@@ -34,17 +34,17 @@ public sealed class EfBackupStore(IsoDbContext dbContext) : IBackupStore
 
         var attachments = await (
             from document in dbContext.Documents.AsNoTracking()
-            join version in dbContext.DocumentVersions.AsNoTracking()
-                on document.Id equals version.DocumentId
             join attachment in dbContext.Attachments.AsNoTracking()
-                on version.Id equals attachment.DocumentVersionId
-            where document.CompanyId == companyId
+                on document.Id equals attachment.DocumentId
+            join version in dbContext.AttachmentVersions.AsNoTracking()
+                on attachment.Id equals version.AttachmentId
+            where document.CompanyId == companyId && attachment.IsActive
             select new BackupSourceFile(
                 document.DocumentNo,
                 version.Version,
                 version.Status,
-                attachment.FileKey,
-                attachment.OriginalFileName,
+                version.FileKey,
+                version.OriginalFileName,
                 attachment.AttachmentNo))
             .ToListAsync(cancellationToken);
 

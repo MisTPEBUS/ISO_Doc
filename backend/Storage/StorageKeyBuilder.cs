@@ -26,27 +26,23 @@ public sealed partial class StorageKeyBuilder
         ValidateIdentifier(documentNo, nameof(documentNo));
         ValidateVersion(version);
 
-        return $"store/{companyCode}/{documentNo}/v{version}/main/{fileId:N}_{ToSafeName(originalFileName)}";
+        return $"store/{companyCode}/{documentNo}/main/v{version}/{fileId:N}_{ToSafeName(originalFileName)}";
     }
 
     public string BuildAttachmentKey(
         string companyCode,
         string documentNo,
+        string attachmentNo,
         string version,
-        int sequence,
         Guid fileId,
         string originalFileName)
     {
         ValidateIdentifier(companyCode, nameof(companyCode));
         ValidateIdentifier(documentNo, nameof(documentNo));
+        ValidateIdentifier(attachmentNo, nameof(attachmentNo));
         ValidateVersion(version);
 
-        if (sequence < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(sequence), "Attachment sequence must be positive.");
-        }
-
-        return $"store/{companyCode}/{documentNo}/v{version}/att/{sequence:D2}_{fileId:N}_{ToSafeName(originalFileName)}";
+        return $"store/{companyCode}/{documentNo}/att/{attachmentNo}/v{version}/{fileId:N}_{ToSafeName(originalFileName)}";
     }
 
     public string ToSafeName(string originalFileName)

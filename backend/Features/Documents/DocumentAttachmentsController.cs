@@ -7,27 +7,63 @@ using Microsoft.AspNetCore.Mvc;
 namespace IsoDocument.Api.Features.Documents;
 
 [ApiController]
-[Route("api/documents/{documentId:guid}/versions/{versionId:guid}/attachments")]
+[Route("api/documents/{documentId:guid}/attachments")]
 [Authorize(Policy = Policies.CompanyAdminScope)]
-public sealed class DocumentAttachmentsController(IAttachmentService attachmentService)
+public sealed class DocumentAttachmentsController(
+    IAttachmentService attachmentService,
+    IAuthorizationService authorizationService)
     : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List(
         Guid documentId,
-        Guid versionId,
         CancellationToken cancellationToken) =>
-        (await attachmentService.ListAsync(documentId, versionId, cancellationToken))
-        .ToOkResult(this);
+        (await attachmentService.ListAsync(documentId, cancellationToken)).ToOkResult(this);
 
     [HttpPost]
-    [Consumes("multipart/form-data")]
     public async Task<IActionResult> Create(
         Guid documentId,
-        Guid versionId,
-        [FromForm] CreateAttachmentsRequest request,
+        CreateAttachmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await attachmentService.CreateAsync(documentId, request, cancellationToken);
+        var location = result.IsSuccess && result.Value is { } attachment
+            ? Url.ActionLink(nameof(Get), values: new { documentId, attachmentId = attachment.AttachmentId })
+            : null;
+        return result.ToCreatedResult(this, location);
+    }
+
+    [HttpGet("{attachmentId:guid}")]
+    public async Task<IActionResult> Get(
+        Guid documentId,
+        Guid attachmentId,
         CancellationToken cancellationToken) =>
-        (await attachmentService.CreateAsync(
-            documentId, versionId, request, cancellationToken))
-        .ToCreatedResult(this);
+        (await attachmentService.GetAsync(documentId, attachmentId, cancellationToken))
+        .ToOkResult(this);
+
+    [HttpDelete("{attachmentId:guid}")]
+    public async Task<IActionResult> Delete(
+        Guid documentId,
+        Guid attachmentId,
+        CancellationToken cancellationToken) =>
+        (await attachmentService.DeleteAsync(documentId, attachmentId, cancellationToken))
+        .ToNoContentResult(this);
+
+    [HttpPost("/api/attachments/bulk-import")]
+    public async Task<IActionResult> BulkImport(
+        BulkImportAttachmentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var authorization = await authorizationService.AuthorizeAsync(
+            User,
+            new CompanyScopeResource(request.CompanyId),
+            Policies.CompanyAdminScope);
+        if (!authorization.Succeeded)
+        {
+            return Forbid();
+        }
+
+        return (await attachmentService.BulkImportAsync(request, cancellationToken))
+            .ToOkResult(this);
+    }
 }

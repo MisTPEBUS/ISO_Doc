@@ -7,7 +7,6 @@ public interface IDocumentVersionStore
     Task<Document?> FindDocumentAsync(Guid documentId, CancellationToken cancellationToken);
     Task<string?> FindCompanyCodeAsync(Guid companyId, CancellationToken cancellationToken);
     Task<DocumentVersion?> FindVersionAsync(Guid versionId, CancellationToken cancellationToken);
-    Task<bool> HasAttachmentsAsync(Guid versionId, CancellationToken cancellationToken);
     Task<DocumentVersion?> FindLatestVersionAsync(
         Guid documentId, CancellationToken cancellationToken);
     Task<IReadOnlyList<DocumentVersion>> ListPublishedVersionsAsync(

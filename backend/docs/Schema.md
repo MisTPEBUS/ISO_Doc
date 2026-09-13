@@ -8,7 +8,7 @@
 - 時間欄位統一使用 `timestamptz`
 - 資料表與欄位名稱統一使用 `snake_case`
 - ISO 主文件與附件皆採版本化管理
-- 檔案實體儲存於 MinIO，資料庫僅保存 Object Key 與檔案 Metadata
+- 檔案實體透過 `IDocumentStorage` 儲存於 local filesystem / NAS bind mount，資料庫僅保存 Object Key 與檔案 Metadata
 - 已發布版本原則上不進行 Hard Delete
 - 使用者透過部門取得公司歸屬，不在 `users` 重複保存 `company_id`
 - ISO 主文件版本與附件皆支援「先建立中繼資料、稍後補檔」：未補檔前檔案欄位可為 NULL / 版本維持 `DRAFT`
@@ -164,6 +164,7 @@
 | `attachment_no` | varchar(50) | 否 | — | — | 附件編號 |
 | `name` | varchar(255) | 否 | — | — | 附件名稱 |
 | `is_active` | boolean | 否 | `true` | INDEX | 是否啟用 |
+| `created_by` | uuid | 否 | — | FK | 建立人 |
 | `created_at` | timestamptz | 否 | `now()` | — | 建立時間 |
 | `updated_at` | timestamptz | 否 | `now()` | — | 更新時間 |
 
@@ -183,6 +184,8 @@
 | `id` | uuid | 否 | `gen_random_uuid()` | PK | 附件版本識別碼 |
 | `attachment_id` | uuid | 否 | — | FK、INDEX | 所屬附件 |
 | `version` | varchar(20) | 否 | — | — | 附件版本 |
+| `version_major` | integer | 否 | — | — | 主版號 |
+| `version_minor` | integer | 否 | — | — | 次版號 |
 | `status` | varchar(20) | 否 | `DRAFT` | INDEX | 版本狀態 |
 | `publish_date` | date | 是 | `NULL` | — | 發布日期 |
 | `effective_date` | date | 是 | `NULL` | INDEX | 生效日期（預先建立時可為 NULL） |
@@ -191,17 +194,19 @@
 | `original_file_name` | varchar(255) | 是 | `NULL` | — | 原始檔名（未補檔時為 NULL） |
 | `content_type` | varchar(100) | 是 | `NULL` | — | MIME Type（未補檔時為 NULL） |
 | `file_size` | bigint | 是 | `NULL` | — | 檔案大小，Bytes（未補檔時為 NULL） |
-| `checksum` | varchar(64) | 是 | `NULL` | — | SHA-256 Hex |
+| `checksum` | varchar(128) | 是 | `NULL` | — | SHA-256 Hex |
 | `created_by` | uuid | 否 | — | FK、INDEX | 建立人 |
 | `created_at` | timestamptz | 否 | `now()` | — | 建立時間 |
 
-> 允許先建立「僅中繼資料」的附件版本（`status = DRAFT`、檔案欄位為 NULL），檔案稍後補上；單次 API 可批次建立 / 上傳多個附件，批次採全有全無。
+> Schema 保留 `DRAFT` 狀態與檔案可為 NULL 的能力，但本輪 API 只支援帶檔建立附件版本並直接進入 `PUBLISHED`。
 
 約束：
 
 - `attachment_versions.attachment_id -> attachments.id`
 - `attachment_versions.created_by -> users.id`
 - `UNIQUE(attachment_id, version)`
+- 同一附件最多一筆 `PUBLISHED`（partial unique index `uq_attachment_single_published`）
+- 同一附件最多一筆 `DRAFT`（partial unique index `uq_attachment_single_draft`）
 - 附件允許：
   - `.jpg`
   - `.jpeg`
@@ -215,25 +220,6 @@
   - `.ods`
 - 檔案驗證至少包含副檔名、MIME Type、檔案大小
 - `checksum` 固定使用 SHA-256
-
----
-
-### 2.8 `document_version_attachments` — 文件版本與附件版本關聯
-
-用於記錄某一主文件版本實際搭配的附件版本，確保歷史版本可完整還原。附件為選配，一個主文件版本可關聯 0..N 個附件版本。
-
-| 欄位 | 型別 | NULL | 預設值 | 索引 | 說明 |
-|---|---|---:|---|---|---|
-| `id` | uuid | 否 | `gen_random_uuid()` | PK | 關聯識別碼 |
-| `document_version_id` | uuid | 否 | — | FK、INDEX | 文件版本 |
-| `attachment_version_id` | uuid | 否 | — | FK、INDEX | 附件版本 |
-| `created_at` | timestamptz | 否 | `now()` | — | 建立時間 |
-
-約束：
-
-- `document_version_attachments.document_version_id -> document_versions.id`
-- `document_version_attachments.attachment_version_id -> attachment_versions.id`
-- `UNIQUE(document_version_id, attachment_version_id)`
 
 ---
 
@@ -308,10 +294,6 @@ companies
     └── documents
           │
           ├── document_versions
-          │     │
-          │     └── document_version_attachments
-          │                    │
-          │                    └── attachment_versions
           │
           ├── attachments
           │     │
@@ -358,9 +340,6 @@ users
 | `attachment_versions` | `attachment_id, version` | UNIQUE |
 | `attachment_versions` | `effective_date` | INDEX |
 | `attachment_versions` | `file_key` | UNIQUE |
-| `document_version_attachments` | `document_version_id` | INDEX |
-| `document_version_attachments` | `attachment_version_id` | INDEX |
-| `document_version_attachments` | `document_version_id, attachment_version_id` | UNIQUE |
 | `document_dept_permissions` | `document_id` | INDEX |
 | `document_dept_permissions` | `dept_id` | INDEX |
 | `document_dept_permissions` | `document_id, dept_id` | UNIQUE |
@@ -373,14 +352,14 @@ users
 
 ## 5. 檔案儲存規則
 
-資料庫不保存 MinIO 完整 URL，只保存 Object Key。
+資料庫不保存實體檔案路徑，只保存 `IDocumentStorage` 使用的 Object Key。
 
 範例：
 
 ```text
-documents/{company_id}/{document_id}/{document_version_id}/document.pdf
+store/{company_code}/{document_no}/main/v{version}/{file_id}_{safe_name}
 
-attachments/{company_id}/{document_id}/{attachment_id}/{attachment_version_id}/attachment.xlsx
+store/{company_code}/{document_no}/att/{attachment_no}/v{version}/{file_id}_{safe_name}
 ```
 
 應用程式透過 Storage Service 處理：
@@ -388,12 +367,12 @@ attachments/{company_id}/{document_id}/{attachment_id}/{attachment_version_id}/a
 ```text
 API
  ↓
-IStorageService
+IDocumentStorage
  ↓
-MinIO
+Local filesystem / NAS bind mount
 ```
 
-未來若由 MinIO 遷移至 GCS、S3 或其他 Object Storage，不需修改資料庫中的完整網址。
+未來替換儲存 provider 時，Service 仍只處理不透明的 Object Key。
 
 ---
 

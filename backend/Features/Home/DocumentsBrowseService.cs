@@ -66,13 +66,12 @@ public sealed class DocumentsBrowseService(
     }
 
     public async Task<Result<DownloadFileResponse>> DownloadAttachmentAsync(
-        Guid documentId,
-        Guid versionId,
         Guid attachmentId,
+        Guid versionId,
         CancellationToken cancellationToken)
     {
         var record = await browseStore.FindAttachmentDownloadAsync(
-            documentId, versionId, attachmentId, cancellationToken);
+            attachmentId, versionId, cancellationToken);
         if (record is null || !DownloadAccessRules.CanDownload(currentUser.Role, record.VersionStatus))
         {
             return Result<DownloadFileResponse>.Forbidden("您沒有下載此檔案的權限。");

@@ -259,9 +259,14 @@ internal sealed class MatrixWebApplicationFactory : WebApplicationFactory<Progra
 
             services.RemoveAll<DbContextOptions<IsoDbContext>>();
             services.RemoveAll<DbContextOptions>();
+            services.RemoveAll<Microsoft.EntityFrameworkCore.Storage.IDatabaseProvider>();
             services.RemoveAll<IsoDbContext>();
+            var inMemoryServices = new ServiceCollection()
+                .AddEntityFrameworkInMemoryDatabase()
+                .BuildServiceProvider();
             services.AddDbContext<IsoDbContext>(options =>
-                options.UseInMemoryDatabase(_databaseName));
+                options.UseInMemoryDatabase(_databaseName)
+                    .UseInternalServiceProvider(inMemoryServices));
         });
     }
 }

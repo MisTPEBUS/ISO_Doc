@@ -28,6 +28,5 @@ public interface IDocumentsBrowseStore
     Task<DocumentDownloadRecord?> FindDocumentDownloadAsync(
         Guid documentId, Guid versionId, CancellationToken cancellationToken);
     Task<AttachmentDownloadRecord?> FindAttachmentDownloadAsync(
-        Guid documentId, Guid versionId, Guid attachmentId,
-        CancellationToken cancellationToken);
+        Guid attachmentId, Guid versionId, CancellationToken cancellationToken);
 }

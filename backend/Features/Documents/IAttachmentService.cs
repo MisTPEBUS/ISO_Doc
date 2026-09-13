@@ -6,12 +6,13 @@ namespace IsoDocument.Api.Features.Documents;
 public interface IAttachmentService
 {
     Task<Result<IReadOnlyList<AttachmentResponse>>> ListAsync(
-        Guid documentId, Guid versionId, CancellationToken cancellationToken);
-    Task<Result<CreateAttachmentsResponse>> CreateAsync(
-        Guid documentId, Guid versionId, CreateAttachmentsRequest request,
-        CancellationToken cancellationToken);
-    Task<Result<UploadAttachmentFileResponse>> UploadFileAsync(
-        Guid attachmentId, UploadAttachmentFileRequest request,
-        CancellationToken cancellationToken);
-    Task<Result> DeleteAsync(Guid attachmentId, CancellationToken cancellationToken);
+        Guid documentId, CancellationToken cancellationToken);
+    Task<Result<AttachmentResponse>> CreateAsync(
+        Guid documentId, CreateAttachmentRequest request, CancellationToken cancellationToken);
+    Task<Result<BulkImportAttachmentsResponse>> BulkImportAsync(
+        BulkImportAttachmentsRequest request, CancellationToken cancellationToken);
+    Task<Result<AttachmentDetailResponse>> GetAsync(
+        Guid documentId, Guid attachmentId, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(
+        Guid documentId, Guid attachmentId, CancellationToken cancellationToken);
 }

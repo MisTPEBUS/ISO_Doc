@@ -104,6 +104,8 @@ builder.Services.AddAuthorization(options =>
             .AddRequirements(new CompanyScopeRequirement()));
     options.AddPolicy(Policies.DocumentAccess, policy =>
         policy.RequireAuthenticatedUser().AddRequirements(new DocumentAccessRequirement()));
+    options.AddPolicy(Policies.AttachmentAccess, policy =>
+        policy.RequireAuthenticatedUser().AddRequirements(new AttachmentAccessRequirement()));
     options.AddPolicy(Policies.SystemAdmin, policy =>
         policy.RequireAuthenticatedUser().AddRequirements(new SystemAdminRequirement()));
 });
@@ -113,6 +115,7 @@ builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddScoped<IAuthSession, CookieAuthSession>();
 builder.Services.AddScoped<IAuthorizationHandler, CompanyScopeHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, DocumentAccessHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, AttachmentAccessHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, SystemAdminHandler>();
 builder.Services.AddScoped<IDocumentAccessStore, EfDocumentAccessStore>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -123,8 +126,8 @@ builder.Services.AddScoped<IValidator<UpdateDeptRequest>, UpdateDeptRequestValid
 builder.Services.AddScoped<IValidator<CreateDocumentRequest>, CreateDocumentRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateDocumentRequest>, UpdateDocumentRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateDocumentVersionRequest>, CreateDocumentVersionRequestValidator>();
-builder.Services.AddScoped<IValidator<CreateAttachmentsRequest>, CreateAttachmentsRequestValidator>();
-builder.Services.AddScoped<IValidator<UploadAttachmentFileRequest>, UploadAttachmentFileRequestValidator>();
+builder.Services.AddScoped<IValidator<CreateAttachmentRequest>, CreateAttachmentRequestValidator>();
+builder.Services.AddScoped<IValidator<CreateAttachmentVersionRequest>, CreateAttachmentVersionRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateDocumentDeptPermissionsRequest>, UpdateDocumentDeptPermissionsRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateDocumentPermissionMatrixRequest>, UpdateDocumentPermissionMatrixRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateUserRequest>, CreateUserRequestValidator>();
@@ -159,6 +162,8 @@ builder.Services.AddScoped<IDocumentVersionStore, EfDocumentVersionStore>();
 builder.Services.AddScoped<IDocumentVersionService, DocumentVersionService>();
 builder.Services.AddScoped<IAttachmentStore, EfAttachmentStore>();
 builder.Services.AddScoped<IAttachmentService, AttachmentService>();
+builder.Services.AddScoped<IAttachmentVersionStore, EfAttachmentVersionStore>();
+builder.Services.AddScoped<IAttachmentVersionService, AttachmentVersionService>();
 builder.Services.AddScoped<IDocumentPermissionStore, EfDocumentPermissionStore>();
 builder.Services.AddScoped<IDocumentPermissionService, DocumentPermissionService>();
 builder.Services.AddScoped<IDocumentPermissionMatrixService, DocumentPermissionMatrixService>();

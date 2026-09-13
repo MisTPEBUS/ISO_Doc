@@ -45,5 +45,6 @@ public static class AuditResourceTypes
     public const string Document = "Document";
     public const string DocumentVersion = "DocumentVersion";
     public const string Attachment = "Attachment";
+    public const string AttachmentVersion = "AttachmentVersion";
     public const string Company = "Company";
 }

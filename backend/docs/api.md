@@ -196,8 +196,8 @@
 - `403`：無權限；或角色 `USER` 但該版本非 `PUBLISHED`（管理者可下載 `PUBLISHED` / `OBSOLETE`）。
 - `404`：`"The document file has not been uploaded."`
 
-### `GET /api/documents/{documentId}/versions/{versionId}/attachments/{attachmentId}/download`
-下載附件檔。授權 `DocumentAccess`。`200` 串流（型別依副檔名）。`403` / `404`（`"The attachment file has not been uploaded."`）。
+### `GET /api/attachments/{attachmentId}/versions/{versionId}/download`
+下載附件版本檔。授權 `AttachmentAccess`；由附件身份解析所屬文件權限，並直接依 `attachment_versions.status` 判斷是否可下載。`200` 串流（型別依副檔名）；附件身份已停用、檔案不存在或尚未上傳時回 `404`。
 
 ---
 
@@ -408,50 +408,59 @@ Query：`companyId?`、`keyword?`（documentNo / name）、`page`、`pageSize`�
 
 - `204`：成功（有主檔則搬 trash，記 audit `DELETE_DOCUMENT_VERSION`）。
 - `404`：版本不存在，或不屬於該文件。
-- `409`：版本非 `DRAFT`（`"只有草稿版本可以刪除。"`）；或該版本仍有附件（`"請先移除此版本的附件，再刪除版本。"`）。
+- `409`：版本非 `DRAFT`（`"只有草稿版本可以刪除。"`）。附件已獨立掛在文件底下，不影響主文版本刪除。
 
 ---
 
 ## 10. 管理 — 附件
 
-### `GET /api/documents/{documentId}/versions/{versionId}/attachments`（`CompanyAdminScope`）
-→ `200` **陣列**（非分頁）：
+### `GET /api/documents/{documentId}/attachments`（`CompanyAdminScope`）
+列出文件底下啟用中的附件身份。→ `200` **陣列**（非分頁）：
 
 ```jsonc
-[ { "attachmentId", "attachmentNo": "ATT-01", "name": "請假申請表", "hasFile": true } ]
+[ { "attachmentId", "attachmentNo": "ATT-01", "name": "請假申請表", "isActive": true } ]
 ```
 
-`403` / `404`（版本不存在）。
+`403` / `404`（文件不存在）。
 
-### `POST /api/documents/{documentId}/versions/{versionId}/attachments`（`CompanyAdminScope`）
-`multipart/form-data`，需 `X-XSRF-TOKEN`。批次新增（**全有全無**：任一項失敗整批 rollback、不留檔）。
+### `POST /api/documents/{documentId}/attachments`（`CompanyAdminScope`）
+需 `X-XSRF-TOKEN`。只建立附件身份，不建立版本或檔案。
 
-| 欄位 | 型別 | 必填 | 說明 |
-| --- | --- | --- | --- |
-| `items[i].attachmentNo` | text | ✔ | ≤ 50；同版本唯一、同批次不可重複 |
-| `items[i].name` | text | ✔ | ≤ 255 |
-| `items[i].file` | file | ✘ | 不給 → 僅建中繼資料。副檔名限 `.jpg .jpeg .png .pdf .doc .docx .xls .xlsx .odt .ods`，檔名 ≤ 255 |
+```jsonc
+{ "attachmentNo": "ATT-01", "name": "請假申請表" }
+```
 
-（`i` 從 0 連續。至少 1 項。）
-
-- `201`：`{ "created": [ { "attachmentId", "attachmentNo", "hasFile" } ] }`。
-- `400`：`errors["items[0].attachmentNo"]` 等欄位錯；或 `errors.attachmentNo`（請求內重複 / 與現有版本衝突），例 `["附件編號「ATT-01」已在此版本使用。"]`。
+- `201`：`{ "attachmentId", "attachmentNo", "name", "isActive": true }`。
+- `400`：附件編號格式錯誤或同文件重複。
 - `403` / `404`。
 
-### `PUT /api/attachments/{id}/file`（`CompanyAdminScope`）
-`multipart/form-data`，需 `X-XSRF-TOKEN`。為「僅中繼資料」的附件（`hasFile: false`）補上實體檔案。
+### `GET /api/documents/{documentId}/attachments/{attachmentId}`（`CompanyAdminScope`）
+→ `200` 附件身份與 `versions[]` 歷程。
+
+### `POST /api/attachments/{attachmentId}/versions`（`CompanyAdminScope`）
+`multipart/form-data`，需 `X-XSRF-TOKEN`。帶檔建立附件版本並直接進入 `PUBLISHED`。
 
 | 欄位 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
-| `file` | file | ✔ | 副檔名限 `.jpg .jpeg .png .pdf .doc .docx .xls .xlsx .odt .ods`，檔名 ≤ 255。與 `POST` 一致，不驗 magic bytes；`contentType` 依副檔名推導 |
+| `changeType` | text | ✔ | `MAJOR` 或 `MINOR` |
+| `effectiveDate` | text `yyyy-MM-dd` | ✔ | 不得早於發佈日（今天 UTC） |
+| `file` | file | ✔ | 白名單副檔名，且內容簽章必須相符 |
 
-- `200`：`{ "attachmentId", "hasFile": true }`。寫入 `file_key` / `original_file_name` / `content_type` / `file_size` / `checksum` 五欄（全有全無）。
-- `400`：`errors.file`（未附檔 / 副檔名不允許 / 檔名超長）。
-- `403` / `404`（附件不存在）。
-- `409`：附件已有檔案（`"此附件已經有檔案，無法重複補檔。"`）。不限制附件所屬版本狀態（PUBLISHED / OBSOLETE / DRAFT 皆可補檔，比照 `DELETE`）。
+- `201`：`{ "versionId", "version", "status": "PUBLISHED" }`。
+- `400`：欄位或檔案驗證失敗。
+- `403` / `404`；附件已停用或併發發佈衝突時回 `409`。
 
-### `DELETE /api/attachments/{id}`（`CompanyAdminScope`）
-需 `X-XSRF-TOKEN`。→ `204`（實體檔移到 trash）/ `403` / `404`。
+### `GET /api/attachments/{attachmentId}/versions/{versionId}`（`CompanyAdminScope`）
+→ `200` 附件版本詳情。
+
+### `DELETE /api/documents/{documentId}/attachments/{attachmentId}`（`CompanyAdminScope`）
+需 `X-XSRF-TOKEN`。→ `204`（附件身份 `is_active=false`，版本歷程保留）/ `403` / `404`。
+
+### 兩階段批次匯入
+
+- `POST /api/documents/bulk-import`：`{ companyId, items: [{ documentNo, name }] }`。
+- `POST /api/attachments/bulk-import`：`{ companyId, items: [{ documentNo, attachmentNo, name }] }`。
+- 每批最多 200 筆，逐筆 continue-on-error；附件階段找不到既有 `documentNo` 時只讓該筆失敗，不自動建立文件。
 
 ---
 

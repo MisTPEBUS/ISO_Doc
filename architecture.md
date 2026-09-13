@@ -20,7 +20,7 @@
 - SignalR / SSE 即時推播。
 - LDAP / AD / SSO 登入整合，本版本僅本地帳密。
 
-**本版本納入之建立模型**：主文版本與附件皆支援「先建立中繼資料、稍後補檔」；附件為選配（版本可 0 附件）；附件上傳單次可多檔。詳見 §4.4 與 SPEC.md 第 3、4、5 節。
+**本版本納入之建立模型**：主文版本可先建立中繼資料、稍後補檔；附件身份掛在文件底下，附件版本與主文版本各自獨立編版。本輪附件版本只支援帶檔建立並直接發佈。詳見 §4.4 與 SPEC.md 第 3、5、6 節。
 
 以上為明確假設，非最終定案；若與實際需求不符，需在動工前修正本文件與 SPEC.md。
 
@@ -207,13 +207,12 @@ CRUD + 密碼重設。刪除一律是 `is_active = false`（軟刪除），理�
 ### 4.4 ISO 文件維護（主文 / 附件）
 
 - `Document` 為靜態識別（編號、名稱、所屬公司），實際內容在 `DocumentVersion`。
-- 主文版本與附件皆可「先建中繼資料、後補檔案」：
-  - `DocumentVersion` 可先以 `Draft` 建立（無主文檔），補檔後轉 `Published`。
-  - `Attachment` 可先以 `attachment_no` + `name` 建立（檔案欄位為 NULL），補檔後即帶檔。
+- `DocumentVersion` 可先以 `Draft` 建立（無主文檔），補檔後轉 `Published`。
+- `Attachment` 是掛在 `document_id` 下的身份表；檔案與版本資料存於 `AttachmentVersion`。
 - 上傳新版本 = 新增一筆 `DocumentVersion`；帶檔時一步標記 `Published`，不帶檔時為 `Draft`。版本轉入 `Published` 的同一 transaction 內，將該文件先前的 `Published` 版本轉為 `Obsolete`。
-- 附件為選配：一個版本可有 0..N 個附件。單次 API 可上傳多個附件，批次全有全無。
-- 附件從屬於特定版本（`attachments.document_version_id`），换版時需重新上傳或延用（由 Service 決定是否複製檔案）。
-- `Draft` 的版本與未補檔的附件不出現在首頁 / 下載 / 備份。
+- 附件為選配：一份文件可有 0..N 個附件身份；每個附件各自維護 `1.0 → 1.1` 的版本時間軸。
+- 本輪附件版本只支援帶檔建立並直接標記 `Published`；附件新版本只會淘汰同一附件先前的 `Published`，主文改版與附件改版互不影響。
+- `Draft` 主文版本與非 `Published` 附件版本不出現在首頁 / 一般使用者下載 / 備份。
 - 檔案寫入採 immutable：`objectKey` 一旦寫入不重算、不覆蓋，`File.Move(overwrite: false)` 強制。
 - 主文限 `.pdf`；附件依原 model 限制的副檔名清單。
 
@@ -252,7 +251,7 @@ CRUD + 密碼重設。刪除一律是 `is_active = false`（軟刪除），理�
 | Auth        | GET    | `/api/antiforgery/token`                                                               | 發放 SPA antiforgery token                             |
 | Home        | GET    | `/api/documents/available`                                                             | 有權限瀏覽的文件清單（分頁）                           |
 | Home        | GET    | `/api/documents/{documentId}/versions/{versionId}/download`                            | 下載主文                                               |
-| Home        | GET    | `/api/documents/{documentId}/versions/{versionId}/attachments/{attachmentId}/download` | 下載附件                                               |
+| Home        | GET    | `/api/attachments/{attachmentId}/versions/{versionId}/download`                        | 下載附件                                               |
 | Companies   | GET    | `/api/companies`                                                                       | 搜尋公司（限 SYSTEM_ADMIN）                            |
 | Depts       | GET    | `/api/depts`                                                                           | 列表（依角色自動限縮公司範圍）                         |
 | Depts       | POST   | `/api/depts`                                                                           | 新增                                                   |
@@ -273,10 +272,14 @@ CRUD + 密碼重設。刪除一律是 `is_active = false`（軟刪除），理�
 | Versions    | POST   | `/api/documents/{documentId}/versions`                                                 | 建立新版本（multipart；`file` 選填，省略則為 `Draft`） |
 | Versions    | PUT    | `/api/documents/{documentId}/versions/{versionId}/file`                                | 為 `Draft` 版本補主文檔，轉 `Published`                |
 | Versions    | GET    | `/api/documents/{documentId}/versions/{versionId}`                                     | 單一版本詳情                                           |
-| Attachments | GET    | `/api/documents/{documentId}/versions/{versionId}/attachments`                         | 附件列表                                               |
-| Attachments | POST   | `/api/documents/{documentId}/versions/{versionId}/attachments`                         | 批次建立／上傳附件（multipart，1..N 筆，全有全無）     |
-| Attachments | PUT    | `/api/attachments/{id}/file`                                                           | 為未補檔的附件上傳檔案                                 |
-| Attachments | DELETE | `/api/attachments/{id}`                                                                | 刪除附件（限同一版本尚可編輯時）                       |
+| Attachments | GET    | `/api/documents/{documentId}/attachments`                                              | 附件身份列表                                           |
+| Attachments | POST   | `/api/documents/{documentId}/attachments`                                              | 建立附件身份                                           |
+| Attachments | GET    | `/api/documents/{documentId}/attachments/{attachmentId}`                               | 附件身份與版本歷程                                     |
+| Attachments | DELETE | `/api/documents/{documentId}/attachments/{attachmentId}`                               | 軟刪除附件身份                                         |
+| Attachments | POST   | `/api/attachments/{attachmentId}/versions`                                             | 帶檔建立附件版本並直接發佈                             |
+| Attachments | GET    | `/api/attachments/{attachmentId}/versions/{versionId}`                                 | 附件版本詳情                                           |
+| Import      | POST   | `/api/documents/bulk-import`                                                           | 第一階段批次匯入文件身份                               |
+| Import      | POST   | `/api/attachments/bulk-import`                                                         | 第二階段批次匯入附件身份                               |
 | Versions    | DELETE | `/api/documents/{documentId}/versions/{versionId}`                                     | 硬刪除草稿版本（僅 DRAFT）                             |
 | Permissions | GET    | `/api/documents/{documentId}/dept-permissions`                                         | 目前可觀看部門清單                                     |
 | Permissions | PUT    | `/api/documents/{documentId}/dept-permissions`                                         | 覆寫可觀看部門清單                                     |

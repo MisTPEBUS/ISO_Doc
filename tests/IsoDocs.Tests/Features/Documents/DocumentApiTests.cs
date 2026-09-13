@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -218,6 +219,163 @@ public sealed class DocumentApiTests
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task BulkImport_WithValidItems_CreatesDraftVersionsInPerItemTransactions()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        var effectiveDate = new DateOnly(2026, 9, 1);
+        using var request = CreateWriteRequest(
+            HttpMethod.Post,
+            "/api/documents/bulk-import",
+            token,
+            new BulkImportDocumentsRequest
+            {
+                CompanyId = factory.CompanyA,
+                Items =
+                [
+                    new BulkImportDocumentItem
+                    {
+                        DocumentNo = "HR-I-01",
+                        Name = "人力資源管理程序",
+                        PageCount = 12,
+                        EffectiveDate = effectiveDate,
+                        Version = "1"
+                    },
+                    new BulkImportDocumentItem
+                    {
+                        DocumentNo = "HR-I-02",
+                        Name = "教育訓練管理程序",
+                        PageCount = 0,
+                        EffectiveDate = effectiveDate,
+                        Version = "2.1"
+                    }
+                ]
+            });
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<BulkImportDocumentsResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal(2, body.Total);
+        Assert.Equal(2, body.SuccessCount);
+        Assert.Equal(0, body.FailureCount);
+        Assert.Equal(2, factory.DocumentStore.Documents.Count);
+        Assert.Equal(2, factory.DocumentStore.DocumentVersions.Count);
+        Assert.Equal(2, factory.DocumentStore.BegunTransactionCount);
+        Assert.Equal(2, factory.DocumentStore.CommittedTransactionCount);
+        Assert.Equal("1.0", body.Succeeded[0].Document.Version);
+        Assert.Equal("DRAFT", body.Succeeded[0].Document.Status);
+        Assert.Equal(effectiveDate, body.Succeeded[0].Document.EffectiveDate);
+        Assert.Equal(0, body.Succeeded[1].Document.PageCount);
+        Assert.All(factory.DocumentStore.DocumentVersions, version =>
+        {
+            Assert.Equal("DRAFT", version.Status);
+            Assert.Null(version.PublishDate);
+            Assert.Null(version.FileKey);
+            Assert.Contains(factory.DocumentStore.Documents,
+                document => document.Id == version.DocumentId);
+        });
+    }
+
+    [Fact]
+    public async Task BulkImport_WithErrors_ContinuesAndReturnsFailedRows()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        factory.DocumentStore.AddSeed(factory.CompanyA, "HR-I-09", "既有文件");
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        var items = Enumerable.Range(1, 10)
+            .Select(index => new BulkImportDocumentItem
+            {
+                DocumentNo = $"HR-I-{index:00}",
+                Name = $"文件 {index}",
+                PageCount = index == 2 ? -1 : index,
+                EffectiveDate = new DateOnly(2026, 9, 1),
+                Version = index == 2 ? "1.x" : "1.0"
+            })
+            .ToArray();
+        using var request = CreateWriteRequest(
+            HttpMethod.Post,
+            "/api/documents/bulk-import",
+            token,
+            new BulkImportDocumentsRequest
+            {
+                CompanyId = factory.CompanyA,
+                Items = items
+            });
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<BulkImportDocumentsResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal(10, body.Total);
+        Assert.Equal(8, body.SuccessCount);
+        Assert.Equal(2, body.FailureCount);
+        Assert.Equal([2, 9], body.Failed.Select(failure => failure.Index).ToArray());
+        Assert.Equal("HR-I-02", body.Failed[0].OriginalData.DocumentNo);
+        Assert.Contains("pageCount", body.Failed[0].Errors.Keys);
+        Assert.Contains("version", body.Failed[0].Errors.Keys);
+        Assert.Equal("HR-I-09", body.Failed[1].OriginalData.DocumentNo);
+        Assert.Contains("documentNo", body.Failed[1].Errors.Keys);
+        Assert.Equal(8, factory.DocumentStore.DocumentVersions.Count);
+        Assert.Equal(8, factory.DocumentStore.CommittedTransactionCount);
+    }
+
+    [Fact]
+    public async Task BulkImport_WhenOneWriteFails_RollsBackThatItemAndContinues()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        factory.DocumentStore.DocumentNoToFailOnSave = "HR-I-01";
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWriteRequest(
+            HttpMethod.Post,
+            "/api/documents/bulk-import",
+            token,
+            new BulkImportDocumentsRequest
+            {
+                CompanyId = factory.CompanyA,
+                Items =
+                [
+                    ValidBulkItem("HR-I-01"),
+                    ValidBulkItem("HR-I-02")
+                ]
+            });
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<BulkImportDocumentsResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal(1, body.SuccessCount);
+        Assert.Equal(1, body.FailureCount);
+        Assert.Equal(1, body.Failed[0].Index);
+        Assert.DoesNotContain(factory.DocumentStore.Documents,
+            document => document.DocumentNo == "HR-I-01");
+        var succeededDocument = Assert.Single(factory.DocumentStore.Documents);
+        var succeededVersion = Assert.Single(factory.DocumentStore.DocumentVersions);
+        Assert.Equal("HR-I-02", succeededDocument.DocumentNo);
+        Assert.Equal(succeededDocument.Id, succeededVersion.DocumentId);
+        Assert.Equal(2, factory.DocumentStore.BegunTransactionCount);
+        Assert.Equal(1, factory.DocumentStore.CommittedTransactionCount);
+    }
+
+    private static BulkImportDocumentItem ValidBulkItem(string documentNo) => new()
+    {
+        DocumentNo = documentNo,
+        Name = $"{documentNo} 名稱",
+        PageCount = 1,
+        EffectiveDate = new DateOnly(2026, 9, 1),
+        Version = "1.0"
+    };
+
     private static void AssertAudit(
         RecordingOperationAuditLogService audit,
         string action,
@@ -313,6 +471,10 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
     private readonly Dictionary<Guid, List<DocumentVersion>> _versions = [];
 
     public List<Document> Documents { get; } = [];
+    public List<DocumentVersion> DocumentVersions { get; } = [];
+    public int BegunTransactionCount { get; private set; }
+    public int CommittedTransactionCount { get; private set; }
+    public string? DocumentNoToFailOnSave { get; set; }
 
     public Document AddSeed(Guid companyId, string documentNo, string name)
     {
@@ -385,18 +547,42 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        IReadOnlyList<DocumentVersion> versions = _versions.TryGetValue(documentId, out var stored)
+        var seeded = _versions.TryGetValue(documentId, out var stored)
             ? stored
             : [];
+        IReadOnlyList<DocumentVersion> versions = seeded
+            .Concat(DocumentVersions.Where(version => version.DocumentId == documentId))
+            .ToArray();
         return Task.FromResult(versions);
     }
 
     public void Add(Document document) => Documents.Add(document);
 
+    public void Add(DocumentVersion version) => DocumentVersions.Add(version);
+
+    public void Detach(Document document) => Documents.Remove(document);
+
+    public void Detach(DocumentVersion version) => DocumentVersions.Remove(version);
+
     public Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (DocumentNoToFailOnSave is { } documentNo
+            && Documents.LastOrDefault()?.DocumentNo == documentNo)
+        {
+            DocumentNoToFailOnSave = null;
+            throw new DbUpdateException("Simulated bulk-import write failure.");
+        }
+
         return Task.CompletedTask;
+    }
+
+    public Task<IDocumentTransaction> BeginTransactionAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        BegunTransactionCount++;
+        return Task.FromResult<IDocumentTransaction>(new FakeDocumentTransaction(this));
     }
 
     private IEnumerable<Document> Filter(Guid? companyId, string? keyword) =>
@@ -405,4 +591,16 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
             && (string.IsNullOrWhiteSpace(keyword)
                 || document.DocumentNo.Contains(keyword.Trim(), StringComparison.OrdinalIgnoreCase)
                 || document.Name.Contains(keyword.Trim(), StringComparison.OrdinalIgnoreCase)));
+
+    private sealed class FakeDocumentTransaction(FakeDocumentStore store) : IDocumentTransaction
+    {
+        public Task CommitAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            store.CommittedTransactionCount++;
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
 }

@@ -1,6 +1,8 @@
+using System.Data;
 using IsoDocument.Api.Data;
 using IsoDocument.Api.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace IsoDocument.Api.Features.Documents;
 
@@ -52,8 +54,22 @@ public sealed class EfDocumentStore(IsoDbContext dbContext) : IDocumentStore
 
     public void Add(Document document) => dbContext.Documents.Add(document);
 
+    public void Add(DocumentVersion version) => dbContext.DocumentVersions.Add(version);
+
+    public void Detach(Document document) =>
+        dbContext.Entry(document).State = EntityState.Detached;
+
+    public void Detach(DocumentVersion version) =>
+        dbContext.Entry(version).State = EntityState.Detached;
+
     public Task SaveChangesAsync(CancellationToken cancellationToken) =>
         dbContext.SaveChangesAsync(cancellationToken);
+
+    public async Task<IDocumentTransaction> BeginTransactionAsync(
+        CancellationToken cancellationToken) =>
+        new EfDocumentTransaction(await dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken));
 
     private IQueryable<Document> Query(Guid? companyId, string? keyword)
     {
@@ -72,5 +88,14 @@ public sealed class EfDocumentStore(IsoDbContext dbContext) : IDocumentStore
         }
 
         return query;
+    }
+
+    private sealed class EfDocumentTransaction(IDbContextTransaction transaction)
+        : IDocumentTransaction
+    {
+        public Task CommitAsync(CancellationToken cancellationToken) =>
+            transaction.CommitAsync(cancellationToken);
+
+        public ValueTask DisposeAsync() => transaction.DisposeAsync();
     }
 }

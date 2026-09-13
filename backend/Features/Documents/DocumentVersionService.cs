@@ -203,11 +203,6 @@ public sealed class DocumentVersionService(
             return Result.Conflict("只有草稿版本可以刪除。");
         }
 
-        if (await versionStore.HasAttachmentsAsync(versionId, cancellationToken))
-        {
-            return Result.Conflict("請先移除此版本的附件，再刪除版本。");
-        }
-
         await using var transaction = await versionStore.BeginTransactionAsync(cancellationToken);
         if (version.FileKey is { } fileKey)
         {

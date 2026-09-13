@@ -5,7 +5,6 @@ using IsoDocument.Api.Data.Entities;
 using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Documents.Dtos;
 using IsoDocument.Api.Security;
-using IsoDocument.Api.Storage;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -13,368 +12,332 @@ namespace IsoDocument.Api.Features.Documents;
 
 public sealed class AttachmentService(
     IAttachmentStore attachmentStore,
-    IDocumentStorage documentStorage,
-    StorageKeyBuilder storageKeyBuilder,
     ICurrentUser currentUser,
-    IValidator<CreateAttachmentsRequest> validator,
-    IValidator<UploadAttachmentFileRequest> uploadFileValidator,
+    IValidator<CreateAttachmentRequest> validator,
     IOperationAuditLogService auditLogService,
     TimeProvider timeProvider) : IAttachmentService
 {
+    private const int MaximumBulkImportSize = 200;
+
     public async Task<Result<IReadOnlyList<AttachmentResponse>>> ListAsync(
         Guid documentId,
-        Guid versionId,
         CancellationToken cancellationToken)
     {
-        var context = await attachmentStore.FindVersionContextAsync(
-            documentId, versionId, cancellationToken);
-        if (context is null)
+        var document = await attachmentStore.FindDocumentAsync(documentId, cancellationToken);
+        if (document is null)
         {
-            return Result<IReadOnlyList<AttachmentResponse>>.NotFound(
-                "找不到指定的文件版本。");
+            return Result<IReadOnlyList<AttachmentResponse>>.NotFound("找不到指定的文件。");
         }
 
-        if (!currentUser.CanAccessCompany(context.Document.CompanyId))
+        if (!currentUser.CanAccessCompany(document.CompanyId))
         {
             return Result<IReadOnlyList<AttachmentResponse>>.Forbidden(
                 "您沒有檢視此文件附件的權限。");
         }
 
-        var attachments = await attachmentStore.ListAsync(versionId, cancellationToken);
+        var attachments = await attachmentStore.ListAsync(documentId, cancellationToken);
         return Result<IReadOnlyList<AttachmentResponse>>.Success(
             attachments.Select(ToResponse).ToArray());
     }
 
-    public async Task<Result<CreateAttachmentsResponse>> CreateAsync(
+    public async Task<Result<AttachmentResponse>> CreateAsync(
         Guid documentId,
-        Guid versionId,
-        CreateAttachmentsRequest request,
+        CreateAttachmentRequest request,
         CancellationToken cancellationToken)
     {
         var validation = await validator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
-            return Result<CreateAttachmentsResponse>.ValidationFailed(ToErrors(validation));
+            return Result<AttachmentResponse>.ValidationFailed(ToErrors(validation));
         }
 
-        var context = await attachmentStore.FindVersionContextAsync(
-            documentId, versionId, cancellationToken);
-        if (context is null)
+        var document = await attachmentStore.FindDocumentAsync(documentId, cancellationToken);
+        if (document is null)
         {
-            return Result<CreateAttachmentsResponse>.NotFound(
-                "找不到指定的文件版本。");
+            return Result<AttachmentResponse>.NotFound("找不到指定的文件。");
         }
 
-        if (!currentUser.CanAccessCompany(context.Document.CompanyId))
+        if (!currentUser.CanAccessCompany(document.CompanyId))
         {
-            return Result<CreateAttachmentsResponse>.Forbidden(
+            return Result<AttachmentResponse>.Forbidden(
                 "您沒有為此文件新增附件的權限。");
         }
 
         if (currentUser.UserId is not { } userId)
         {
-            return Result<CreateAttachmentsResponse>.Unauthorized("請先登入後再操作。");
+            return Result<AttachmentResponse>.Unauthorized("請先登入後再操作。");
         }
 
-        var normalizedNumbers = request.Items
-            .Select(item => item.AttachmentNo!.Trim())
-            .ToArray();
-        var duplicateInRequest = normalizedNumbers
-            .GroupBy(number => number, StringComparer.Ordinal)
-            .FirstOrDefault(group => group.Count() > 1);
-        if (duplicateInRequest is not null)
+        var attachmentNo = request.AttachmentNo!.Trim();
+        if (await attachmentStore.AttachmentNoExistsAsync(documentId, attachmentNo, cancellationToken))
         {
-            return DuplicateAttachmentNumber<CreateAttachmentsResponse>(duplicateInRequest.Key);
+            return DuplicateAttachmentNo<AttachmentResponse>();
         }
 
-        var existingNumbers = await attachmentStore.FindExistingAttachmentNumbersAsync(
-            versionId, normalizedNumbers, cancellationToken);
-        if (existingNumbers.Count > 0)
+        var now = timeProvider.GetUtcNow();
+        var attachment = new Attachment
         {
-            return DuplicateAttachmentNumber<CreateAttachmentsResponse>(existingNumbers.First());
-        }
-
-        var writtenKeys = new List<string>();
+            Id = Guid.NewGuid(),
+            DocumentId = documentId,
+            AttachmentNo = attachmentNo,
+            Name = request.Name!.Trim(),
+            IsActive = true,
+            CreatedBy = userId,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        attachmentStore.Add(attachment);
         try
         {
-            await using var transaction = await attachmentStore.BeginTransactionAsync(cancellationToken);
-            var now = timeProvider.GetUtcNow();
-            var attachments = new List<Attachment>(request.Items.Count);
-            for (var index = 0; index < request.Items.Count; index++)
-            {
-                var item = request.Items[index];
-                var attachment = new Attachment
-                {
-                    Id = Guid.NewGuid(),
-                    DocumentVersionId = versionId,
-                    AttachmentNo = normalizedNumbers[index],
-                    Name = item.Name!.Trim(),
-                    CreatedBy = userId,
-                    CreatedAt = now
-                };
-
-                if (item.File is not null)
-                {
-                    var objectKey = storageKeyBuilder.BuildAttachmentKey(
-                        context.CompanyCode,
-                        context.Document.DocumentNo,
-                        context.Version.Version,
-                        index + 1,
-                        Guid.NewGuid(),
-                        item.File.FileName);
-                    await using var stream = item.File.OpenReadStream();
-                    var writeResult = await documentStorage.WriteAsync(
-                        objectKey, stream, cancellationToken);
-                    writtenKeys.Add(objectKey);
-                    attachment.FileKey = objectKey;
-                    attachment.OriginalFileName = item.File.FileName;
-                    attachment.ContentType = AttachmentFileRules.GetContentType(item.File.FileName);
-                    attachment.FileSize = writeResult.FileSize;
-                    attachment.Checksum = writeResult.Checksum;
-                }
-
-                attachments.Add(attachment);
-            }
-
-            attachmentStore.AddRange(attachments);
             await attachmentStore.SaveChangesAsync(cancellationToken);
-            foreach (var attachment in attachments)
-            {
-                await auditLogService.WriteAsync(
-                    new AuditLogWriteRequest(
-                        context.Document.CompanyId,
-                        attachment.FileKey is null
-                            ? AuditActions.CreateAttachmentMetadata
-                            : AuditActions.UploadAttachment,
-                        AuditResourceTypes.Attachment,
-                        attachment.Id,
-                        new
-                        {
-                            document_version_id = versionId,
-                            attachment_no = attachment.AttachmentNo,
-                            name = attachment.Name,
-                            original_file_name = attachment.OriginalFileName,
-                            has_file = attachment.FileKey is not null
-                        }),
-                    cancellationToken);
-            }
-
-            await transaction.CommitAsync(cancellationToken);
-
-            return Result<CreateAttachmentsResponse>.Success(new(
-                attachments.Select(attachment => new CreatedAttachmentResponse(
-                    attachment.Id,
-                    attachment.AttachmentNo,
-                    attachment.FileKey is not null)).ToArray()));
         }
-        catch (Exception exception) when (IsAttachmentNumberConflict(exception))
+        catch (DbUpdateException exception) when (IsDuplicateAttachmentNoViolation(exception))
         {
-            await MoveWrittenFilesToTrashAsync(writtenKeys);
-            return DuplicateAttachmentNumber<CreateAttachmentsResponse>();
+            return DuplicateAttachmentNo<AttachmentResponse>();
         }
-        catch
-        {
-            await MoveWrittenFilesToTrashAsync(writtenKeys);
-            throw;
-        }
+
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                document.CompanyId,
+                AuditActions.CreateAttachmentMetadata,
+                AuditResourceTypes.Attachment,
+                attachment.Id,
+                new { new_value = ToAuditValue(attachment) }),
+            cancellationToken);
+
+        return Result<AttachmentResponse>.Success(ToResponse(attachment));
     }
 
-    public async Task<Result<UploadAttachmentFileResponse>> UploadFileAsync(
-        Guid attachmentId,
-        UploadAttachmentFileRequest request,
+    public async Task<Result<BulkImportAttachmentsResponse>> BulkImportAsync(
+        BulkImportAttachmentsRequest request,
         CancellationToken cancellationToken)
     {
-        var validation = await uploadFileValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
+        var items = request.Items;
+        if (items is null || items.Count == 0)
         {
-            return Result<UploadAttachmentFileResponse>.ValidationFailed(ToErrors(validation));
+            return Result<BulkImportAttachmentsResponse>.ValidationFailed(
+                FieldError("items", "請至少提供一筆附件資料。"));
         }
 
-        var context = await attachmentStore.FindAttachmentUploadContextAsync(
-            attachmentId, cancellationToken);
-        if (context is null)
+        if (items.Count > MaximumBulkImportSize)
         {
-            return Result<UploadAttachmentFileResponse>.NotFound("找不到指定的附件。");
+            return Result<BulkImportAttachmentsResponse>.ValidationFailed(
+                FieldError("items", $"一次最多可匯入 {MaximumBulkImportSize} 筆附件。"));
         }
 
-        if (!currentUser.CanAccessCompany(context.CompanyId))
+        if (!currentUser.CanAccessCompany(request.CompanyId))
         {
-            return Result<UploadAttachmentFileResponse>.Forbidden("您沒有為此附件補檔的權限。");
+            return Result<BulkImportAttachmentsResponse>.Forbidden(
+                "您沒有為這間公司匯入附件的權限。");
         }
 
-        if (currentUser.UserId is null)
+        if (currentUser.UserId is not { } userId)
         {
-            return Result<UploadAttachmentFileResponse>.Unauthorized("請先登入後再操作。");
+            return Result<BulkImportAttachmentsResponse>.Unauthorized("請先登入後再操作。");
         }
 
-        // 版本狀態不限制（比照 DeleteAsync）；已有檔案不可重複補檔。
-        if (context.Attachment.FileKey is not null)
+        var now = timeProvider.GetUtcNow();
+        var reservedAttachmentNos = new HashSet<(Guid DocumentId, string AttachmentNo)>();
+        var succeeded = new List<BulkImportAttachmentSuccess>();
+        var failed = new List<BulkImportAttachmentFailure>();
+
+        for (var i = 0; i < items.Count; i++)
         {
-            return Result<UploadAttachmentFileResponse>.Conflict("此附件已經有檔案，無法重複補檔。");
-        }
+            var item = items[i];
+            var index = i + 1;
+            if (string.IsNullOrWhiteSpace(item.DocumentNo))
+            {
+                failed.Add(new(index, item,
+                    FieldError("documentNo", "請輸入文件編號。")));
+                continue;
+            }
 
-        var file = request.File!;
-        string? writtenKey = null;
-        try
-        {
-            await using var transaction = await attachmentStore.BeginTransactionAsync(cancellationToken);
+            var createRequest = new CreateAttachmentRequest(item.AttachmentNo, item.Name);
+            var validation = await validator.ValidateAsync(createRequest, cancellationToken);
+            if (!validation.IsValid)
+            {
+                failed.Add(new(index, item, ToErrors(validation)));
+                continue;
+            }
 
-            var objectKey = storageKeyBuilder.BuildAttachmentKey(
-                context.CompanyCode,
-                context.DocumentNo,
-                context.Version,
-                context.Sequence,
-                Guid.NewGuid(),
-                file.FileName);
-            await using var stream = file.OpenReadStream();
-            var writeResult = await documentStorage.WriteAsync(objectKey, stream, cancellationToken);
-            writtenKey = objectKey;
+            var documentNo = item.DocumentNo.Trim();
+            var document = await attachmentStore.FindDocumentByNoAsync(
+                request.CompanyId, documentNo, cancellationToken);
+            if (document is null)
+            {
+                failed.Add(new(index, item,
+                    FieldError("documentNo", "找不到對應的文件；請先完成文件批次匯入。")));
+                continue;
+            }
 
-            var attachment = context.Attachment;
-            attachment.FileKey = objectKey;
-            attachment.OriginalFileName = file.FileName;
-            attachment.ContentType = AttachmentFileRules.GetContentType(file.FileName);
-            attachment.FileSize = writeResult.FileSize;
-            attachment.Checksum = writeResult.Checksum;
-            await attachmentStore.SaveChangesAsync(cancellationToken);
+            var attachmentNo = item.AttachmentNo!.Trim();
+            if (!reservedAttachmentNos.Add((document.Id, attachmentNo)))
+            {
+                failed.Add(new(index, item,
+                    FieldError("attachmentNo", "此附件編號與同文件的批次資料重複。")));
+                continue;
+            }
+
+            if (await attachmentStore.AttachmentNoExistsAsync(
+                document.Id, attachmentNo, cancellationToken))
+            {
+                failed.Add(new(index, item, DuplicateAttachmentNoError()));
+                continue;
+            }
+
+            var attachment = new Attachment
+            {
+                Id = Guid.NewGuid(),
+                DocumentId = document.Id,
+                AttachmentNo = attachmentNo,
+                Name = item.Name!.Trim(),
+                IsActive = true,
+                CreatedBy = userId,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            attachmentStore.Add(attachment);
+            try
+            {
+                await attachmentStore.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (IsDuplicateAttachmentNoViolation(exception))
+            {
+                attachmentStore.Detach(attachment);
+                failed.Add(new(index, item, DuplicateAttachmentNoError()));
+                continue;
+            }
 
             await auditLogService.WriteAsync(
                 new AuditLogWriteRequest(
-                    context.CompanyId,
-                    AuditActions.UploadAttachment,
+                    document.CompanyId,
+                    AuditActions.CreateAttachmentMetadata,
                     AuditResourceTypes.Attachment,
                     attachment.Id,
-                    new
-                    {
-                        document_version_id = attachment.DocumentVersionId,
-                        attachment_no = attachment.AttachmentNo,
-                        name = attachment.Name,
-                        original_file_name = attachment.OriginalFileName
-                    }),
+                    new { new_value = ToAuditValue(attachment), bulk_import = true }),
                 cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-
-            return Result<UploadAttachmentFileResponse>.Success(
-                new UploadAttachmentFileResponse(attachment.Id, HasFile: true));
+            succeeded.Add(new(index, new(
+                attachment.Id,
+                document.Id,
+                document.DocumentNo,
+                attachment.AttachmentNo,
+                attachment.Name)));
         }
-        catch
-        {
-            if (writtenKey is not null)
-            {
-                await MoveWrittenFilesToTrashAsync([writtenKey]);
-            }
 
-            throw;
-        }
+        return Result<BulkImportAttachmentsResponse>.Success(new(
+            items.Count, succeeded.Count, failed.Count, succeeded, failed));
     }
 
-    public async Task<Result> DeleteAsync(
+    public async Task<Result<AttachmentDetailResponse>> GetAsync(
+        Guid documentId,
         Guid attachmentId,
         CancellationToken cancellationToken)
     {
-        var context = await attachmentStore.FindAttachmentContextAsync(
-            attachmentId, cancellationToken);
-        if (context is null)
+        var attachment = await attachmentStore.FindByIdAsync(attachmentId, cancellationToken);
+        if (attachment is null || attachment.DocumentId != documentId)
+        {
+            return Result<AttachmentDetailResponse>.NotFound("找不到指定的附件。");
+        }
+
+        var document = await attachmentStore.FindDocumentAsync(documentId, cancellationToken);
+        if (document is null)
+        {
+            return Result<AttachmentDetailResponse>.NotFound("找不到指定的文件。");
+        }
+
+        if (!currentUser.CanAccessCompany(document.CompanyId))
+        {
+            return Result<AttachmentDetailResponse>.Forbidden("您沒有檢視此附件的權限。");
+        }
+
+        var versions = await attachmentStore.ListVersionsAsync(attachmentId, cancellationToken);
+        return Result<AttachmentDetailResponse>.Success(new(
+            attachment.Id,
+            attachment.AttachmentNo,
+            attachment.Name,
+            attachment.IsActive,
+            versions.Select(version => new AttachmentVersionSummary(
+                version.Version,
+                version.Status,
+                version.EffectiveDate,
+                version.ExpiredDate)).ToArray()));
+    }
+
+    public async Task<Result> DeleteAsync(
+        Guid documentId,
+        Guid attachmentId,
+        CancellationToken cancellationToken)
+    {
+        var attachment = await attachmentStore.FindByIdAsync(attachmentId, cancellationToken);
+        if (attachment is null || attachment.DocumentId != documentId)
         {
             return Result.NotFound("找不到指定的附件。");
         }
 
-        if (!currentUser.CanAccessCompany(context.CompanyId))
+        var document = await attachmentStore.FindDocumentAsync(documentId, cancellationToken);
+        if (document is null)
+        {
+            return Result.NotFound("找不到指定的文件。");
+        }
+
+        if (!currentUser.CanAccessCompany(document.CompanyId))
         {
             return Result.Forbidden("您沒有刪除此附件的權限。");
         }
 
-        await using var transaction = await attachmentStore.BeginTransactionAsync(cancellationToken);
-        if (context.Attachment.FileKey is { } objectKey)
-        {
-            await documentStorage.MoveToTrashAsync(objectKey, cancellationToken);
-        }
-
-        attachmentStore.Remove(context.Attachment);
+        var wasActive = attachment.IsActive;
+        attachment.IsActive = false;
+        attachment.UpdatedAt = timeProvider.GetUtcNow();
         await attachmentStore.SaveChangesAsync(cancellationToken);
         await auditLogService.WriteAsync(
             new AuditLogWriteRequest(
-                context.CompanyId,
+                document.CompanyId,
                 AuditActions.DeleteAttachment,
                 AuditResourceTypes.Attachment,
-                context.Attachment.Id,
+                attachment.Id,
                 new
                 {
-                    old_value = new
-                    {
-                        document_version_id = context.Attachment.DocumentVersionId,
-                        attachment_no = context.Attachment.AttachmentNo,
-                        name = context.Attachment.Name,
-                        original_file_name = context.Attachment.OriginalFileName
-                    }
+                    old_value = new { is_active = wasActive },
+                    new_value = new { is_active = attachment.IsActive }
                 }),
             cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
         return Result.Success();
     }
 
-    private async Task MoveWrittenFilesToTrashAsync(IEnumerable<string> objectKeys)
-    {
-        foreach (var objectKey in objectKeys.Reverse())
-        {
-            try
-            {
-                await documentStorage.MoveToTrashAsync(objectKey, CancellationToken.None);
-            }
-            catch
-            {
-                // Preserve the original batch failure; trash GC can handle a failed cleanup.
-            }
-        }
-    }
+    private static Result<T> DuplicateAttachmentNo<T>() => Result<T>.ValidationFailed(
+        DuplicateAttachmentNoError());
 
-    private static Result<T> DuplicateAttachmentNumber<T>(string? attachmentNo = null) =>
-        Result<T>.ValidationFailed(new Dictionary<string, string[]>(StringComparer.Ordinal)
-        {
-            ["attachmentNo"] =
-            [attachmentNo is null
-                ? "此版本已使用相同的附件編號。"
-                : $"附件編號「{attachmentNo}」已在此版本使用。"]
-        });
+    private static Dictionary<string, string[]> DuplicateAttachmentNoError() =>
+        FieldError("attachmentNo", "這份文件已使用相同的附件編號。");
 
-    private static bool IsAttachmentNumberConflict(Exception exception) => exception switch
-    {
-        DbUpdateException
+    private static Dictionary<string, string[]> FieldError(string field, string message) =>
+        new(StringComparer.Ordinal) { [field] = [message] };
+
+    private static bool IsDuplicateAttachmentNoViolation(DbUpdateException exception) =>
+        exception.InnerException is PostgresException
         {
-            InnerException: PostgresException
-            {
-                SqlState: PostgresErrorCodes.UniqueViolation,
-                ConstraintName: "uq_attachments_version_no"
-            }
-        } => true,
-        DbUpdateException
-        {
-            InnerException: PostgresException
-            {
-                SqlState: PostgresErrorCodes.SerializationFailure
-            }
-        } => true,
-        PostgresException { SqlState: PostgresErrorCodes.SerializationFailure } => true,
-        _ => false
-    };
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: "uq_attachments_document_no"
+        };
 
     private static AttachmentResponse ToResponse(Attachment attachment) => new(
         attachment.Id,
         attachment.AttachmentNo,
         attachment.Name,
-        attachment.FileKey is not null);
+        attachment.IsActive);
+
+    private static object ToAuditValue(Attachment attachment) => new
+    {
+        document_id = attachment.DocumentId,
+        attachment_no = attachment.AttachmentNo,
+        name = attachment.Name
+    };
 
     private static Dictionary<string, string[]> ToErrors(ValidationResult validation) =>
         validation.Errors
-            .GroupBy(error => ToCamelCasePath(error.PropertyName), StringComparer.Ordinal)
+            .GroupBy(error => error.PropertyName, StringComparer.Ordinal)
             .ToDictionary(
                 group => group.Key,
                 group => group.Select(error => error.ErrorMessage).ToArray(),
                 StringComparer.Ordinal);
-
-    private static string ToCamelCasePath(string path) => path
-        .Replace("Items", "items", StringComparison.Ordinal)
-        .Replace("AttachmentNo", "attachmentNo", StringComparison.Ordinal)
-        .Replace("Name", "name", StringComparison.Ordinal)
-        .Replace("File", "file", StringComparison.Ordinal);
 }

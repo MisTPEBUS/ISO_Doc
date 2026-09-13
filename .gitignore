@@ -12,6 +12,8 @@ SPEC.md
 
 # ---------- Docker runtime data ----------
 data/
+!backend/Data/
+!backend/Data/**
 *.tar
 
 # ---------- .NET build artifacts (backend + tests) ----------

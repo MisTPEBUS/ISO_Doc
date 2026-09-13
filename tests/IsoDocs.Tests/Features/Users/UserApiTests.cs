@@ -436,6 +436,8 @@ internal sealed class FakeUserStore(
 
     public void Add(User user) => Users.Add(user);
 
+    public void Detach(User user) => Users.Remove(user);
+
     public Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

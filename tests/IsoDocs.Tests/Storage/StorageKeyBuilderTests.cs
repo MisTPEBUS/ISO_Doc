@@ -20,25 +20,25 @@ public sealed class StorageKeyBuilderTests
             "中文/報告:最終版.PDF");
 
         Assert.Equal(
-            "store/ACME/HR-I-01/v1.0/main/00112233445566778899aabbccddeeff_中文報告_最終版.pdf",
+            "store/ACME/HR-I-01/main/v1.0/00112233445566778899aabbccddeeff_中文報告_最終版.pdf",
             result);
     }
 
     [Fact]
-    public void BuildAttachmentKey_UsesTwoDigitSequenceAndGuidNFormat()
+    public void BuildAttachmentKey_UsesAttachmentIdentityVersionAndGuidNFormat()
     {
         var builder = new StorageKeyBuilder();
 
         var result = builder.BuildAttachmentKey(
             "ACME",
             "HR-I-01",
+            "ATT-A",
             "2.3",
-            3,
             FileId,
             "附件.XLSX");
 
         Assert.Equal(
-            "store/ACME/HR-I-01/v2.3/att/03_00112233445566778899aabbccddeeff_附件.xlsx",
+            "store/ACME/HR-I-01/att/ATT-A/v2.3/00112233445566778899aabbccddeeff_附件.xlsx",
             result);
     }
 

@@ -127,19 +127,29 @@ public sealed class DocumentPermissionMatrixService(
                 group => group.FirstOrDefault(version => version.Status == "PUBLISHED")
                     ?? group.FirstOrDefault(version => version.Status == "DRAFT"));
 
-        var representativeVersionIds = representativeVersionByDocument.Values
-            .Where(version => version is not null)
-            .Select(version => version!.Id)
-            .ToArray();
-        var attachmentRows = await dbContext.Attachments.AsNoTracking()
-            .Where(attachment => representativeVersionIds.Contains(attachment.DocumentVersionId))
-            .Select(attachment => new { attachment.DocumentVersionId, attachment.FileKey })
+        // 附件已獨立編版，不再從屬於主文的代表版本：每個附件身份各自依「代表版本」規則
+        // （PUBLISHED 優先，否則 DRAFT）取得自己的檔案狀態，再依 document_id 彙總。
+        var attachmentIdentityRows = await dbContext.Attachments.AsNoTracking()
+            .Where(attachment => pageDocumentIds.Contains(attachment.DocumentId) && attachment.IsActive)
+            .Select(attachment => new { attachment.Id, attachment.DocumentId })
             .ToListAsync(cancellationToken);
-        var attachmentFileKeysByVersion = attachmentRows
-            .GroupBy(row => row.DocumentVersionId)
+        var attachmentIdsByDocument = attachmentIdentityRows
+            .GroupBy(row => row.DocumentId)
             .ToDictionary(
                 group => group.Key,
-                group => group.Select(row => row.FileKey).ToArray());
+                group => group.Select(row => row.Id).ToArray());
+
+        var allAttachmentIds = attachmentIdentityRows.Select(row => row.Id).ToArray();
+        var attachmentVersionRows = await dbContext.AttachmentVersions.AsNoTracking()
+            .Where(version => allAttachmentIds.Contains(version.AttachmentId))
+            .Select(version => new { version.AttachmentId, version.Status, version.FileKey })
+            .ToListAsync(cancellationToken);
+        var representativeFileKeyByAttachment = attachmentVersionRows
+            .GroupBy(row => row.AttachmentId)
+            .ToDictionary(
+                group => group.Key,
+                group => (group.FirstOrDefault(row => row.Status == "PUBLISHED")
+                    ?? group.FirstOrDefault(row => row.Status == "DRAFT"))?.FileKey);
 
         var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
 
@@ -150,10 +160,11 @@ public sealed class DocumentPermissionMatrixService(
 
             var mainDocumentStatus = await BuildMainDocumentStatusAsync(
                 version?.FileKey, cancellationToken);
+            var documentAttachmentIds = attachmentIdsByDocument.GetValueOrDefault(document.Id);
             var attachmentStatus = await BuildAttachmentStatusAsync(
-                version is null
-                    ? null
-                    : attachmentFileKeysByVersion.GetValueOrDefault(version.Id),
+                documentAttachmentIds?
+                    .Select(id => representativeFileKeyByAttachment.GetValueOrDefault(id))
+                    .ToArray(),
                 cancellationToken);
             var effectiveStatus = BuildEffectiveStatus(
                 document.IsActive, version?.Status, version?.EffectiveDate, today);

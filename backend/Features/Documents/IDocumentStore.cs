@@ -15,5 +15,14 @@ public interface IDocumentStore
     Task<IReadOnlyList<DocumentVersion>> ListVersionsAsync(
         Guid documentId, CancellationToken cancellationToken);
     void Add(Document document);
+    void Add(DocumentVersion version);
+    void Detach(Document document);
+    void Detach(DocumentVersion version);
     Task SaveChangesAsync(CancellationToken cancellationToken);
+    Task<IDocumentTransaction> BeginTransactionAsync(CancellationToken cancellationToken);
+}
+
+public interface IDocumentTransaction : IAsyncDisposable
+{
+    Task CommitAsync(CancellationToken cancellationToken);
 }

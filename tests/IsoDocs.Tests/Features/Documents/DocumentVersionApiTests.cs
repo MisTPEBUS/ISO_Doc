@@ -81,6 +81,34 @@ public sealed class DocumentVersionApiTests
         Assert.True(factory.VersionStore.TransactionCommitted);
     }
 
+    [Fact]
+    public async Task UploadMainVersion_DoesNotChangeIndependentAttachmentVersion()
+    {
+        await using var factory = new DocumentVersionWebApplicationFactory();
+        factory.VersionStore.AddVersionSeed(1, 0, "PUBLISHED");
+        var attachmentVersion = new AttachmentVersion
+        {
+            Id = Guid.NewGuid(), AttachmentId = Guid.NewGuid(), Version = "1.0",
+            VersionMajor = 1, VersionMinor = 0, Status = "PUBLISHED",
+            PublishDate = new DateOnly(2026, 1, 2), EffectiveDate = new DateOnly(2026, 1, 5),
+            CreatedBy = factory.Document.CreatedBy, CreatedAt = DateTimeOffset.UtcNow
+        };
+        factory.VersionStore.IndependentAttachmentVersions.Add(attachmentVersion);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateUploadRequest(
+            factory.Document.Id, token, "MINOR", UtcToday().AddDays(1), "manual.pdf", ValidPdf());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal("PUBLISHED", attachmentVersion.Status);
+        Assert.Null(attachmentVersion.ExpiredDate);
+        Assert.Equal(new DateOnly(2026, 1, 2), attachmentVersion.PublishDate);
+        Assert.Equal(new DateOnly(2026, 1, 5), attachmentVersion.EffectiveDate);
+    }
+
     [Theory]
     [InlineData("manual.txt", "%PDF-valid", "extension")]
     [InlineData("manual.pdf", "not-a-pdf", "content")]
@@ -185,11 +213,16 @@ public sealed class DocumentVersionApiTests
     }
 
     [Fact]
-    public async Task DeleteDraftVersion_WhenVersionHasAttachments_ReturnsConflict()
+    public async Task DeleteDraftVersion_DoesNotDependOnIndependentAttachments()
     {
         await using var factory = new DocumentVersionWebApplicationFactory();
         var draft = factory.VersionStore.AddVersionSeed(2, 0, "DRAFT");
-        factory.VersionStore.AttachedVersionIds.Add(draft.Id);
+        factory.VersionStore.IndependentAttachmentVersions.Add(new AttachmentVersion
+        {
+            Id = Guid.NewGuid(), AttachmentId = Guid.NewGuid(), Version = "1.0",
+            VersionMajor = 1, VersionMinor = 0, Status = "PUBLISHED",
+            CreatedBy = factory.Document.CreatedBy, CreatedAt = DateTimeOffset.UtcNow
+        });
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
         var token = await GetAntiforgeryTokenAsync(client);
@@ -200,8 +233,8 @@ public sealed class DocumentVersionApiTests
 
         var response = await client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Contains(factory.VersionStore.Versions, version => version.Id == draft.Id);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.DoesNotContain(factory.VersionStore.Versions, version => version.Id == draft.Id);
     }
 
     private static byte[] ValidPdf() => "%PDF-1.7\nmock"u8.ToArray();
@@ -318,7 +351,7 @@ internal sealed class FakeDocumentVersionStore(
     private List<(DocumentVersion Version, string Status, DateOnly? ExpiredDate)>? _snapshot;
 
     public List<DocumentVersion> Versions { get; } = [];
-    public HashSet<Guid> AttachedVersionIds { get; } = [];
+    public List<AttachmentVersion> IndependentAttachmentVersions { get; } = [];
     public bool ThrowPublishedConflict { get; set; }
     public bool TransactionStarted { get; private set; }
     public bool TransactionCommitted { get; private set; }
@@ -360,12 +393,6 @@ internal sealed class FakeDocumentVersionStore(
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(Versions.SingleOrDefault(version => version.Id == versionId));
-    }
-
-    public Task<bool> HasAttachmentsAsync(Guid versionId, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(AttachedVersionIds.Contains(versionId));
     }
 
     public Task<DocumentVersion?> FindLatestVersionAsync(

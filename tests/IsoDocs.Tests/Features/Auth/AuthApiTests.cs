@@ -66,7 +66,7 @@ public sealed class AuthApiTests
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.NotNull(body);
-        Assert.Equal("帳號或密碼錯誤。", body.Detail);
+        Assert.Equal("員工編號或帳號密碼錯誤。", body.Detail);
         Assert.DoesNotContain("active", body.Detail, StringComparison.OrdinalIgnoreCase);
         Assert.Null(factory.Store.User.LastLoginAt);
     }
@@ -85,7 +85,7 @@ public sealed class AuthApiTests
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.NotNull(body);
-        Assert.Equal("帳號或密碼錯誤。", body.Detail);
+        Assert.Equal("員工編號或帳號密碼錯誤。", body.Detail);
     }
 
     [Fact]

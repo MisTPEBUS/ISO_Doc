@@ -30,13 +30,6 @@ public sealed class EfDocumentVersionStore(IsoDbContext dbContext) : IDocumentVe
             version => version.Id == versionId,
             cancellationToken);
 
-    public Task<bool> HasAttachmentsAsync(
-        Guid versionId,
-        CancellationToken cancellationToken) =>
-        dbContext.Attachments.AnyAsync(
-            attachment => attachment.DocumentVersionId == versionId,
-            cancellationToken);
-
     public Task<DocumentVersion?> FindLatestVersionAsync(
         Guid documentId,
         CancellationToken cancellationToken) =>

@@ -13,6 +13,14 @@ public sealed class EfDocumentAccessStore(IsoDbContext dbContext) : IDocumentAcc
             .Select(document => (Guid?)document.CompanyId)
             .SingleOrDefaultAsync(cancellationToken);
 
+    public Task<Guid?> FindAttachmentDocumentIdAsync(
+        Guid attachmentId,
+        CancellationToken cancellationToken) =>
+        dbContext.Attachments
+            .Where(attachment => attachment.Id == attachmentId && attachment.IsActive)
+            .Select(attachment => (Guid?)attachment.DocumentId)
+            .SingleOrDefaultAsync(cancellationToken);
+
     public Task<bool> DeptHasAccessAsync(
         Guid documentId,
         Guid deptId,

@@ -155,7 +155,7 @@ public sealed class DocumentsBrowseApiTests
     {
         await using var factory = new BrowseWebApplicationFactory(UserRole.USER);
         factory.AllowUserDocumentAccess();
-        const string fileKey = "store/COMPANYA/ISO-001/v1.0/att/01_file.xlsx";
+        const string fileKey = "store/COMPANYA/ISO-001/att/ATT-A/v1.0/file.xlsx";
         factory.BrowseStore.AddAttachmentDownload(
             factory.DocumentId,
             factory.VersionId,
@@ -168,7 +168,7 @@ public sealed class DocumentsBrowseApiTests
         await LoginAsync(client);
 
         var response = await client.GetAsync(
-            $"/api/documents/{factory.DocumentId}/versions/{factory.VersionId}/attachments/{factory.AttachmentId}/download");
+            $"/api/attachments/{factory.AttachmentId}/versions/{factory.VersionId}/download");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var audit = Assert.Single(factory.Audit.Entries);
@@ -192,7 +192,7 @@ public sealed class DocumentsBrowseApiTests
         await LoginAsync(client);
 
         var response = await client.GetAsync(
-            $"/api/documents/{factory.DocumentId}/versions/{factory.VersionId}/attachments/{factory.AttachmentId}/download");
+            $"/api/attachments/{factory.AttachmentId}/versions/{factory.VersionId}/download");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Empty(factory.Audit.Entries);
@@ -238,6 +238,7 @@ internal sealed class BrowseWebApplicationFactory : WebApplicationFactory<Progra
     public void AllowUserDocumentAccess()
     {
         AccessStore.AddDocument(DocumentId, CompanyId);
+        AccessStore.AddAttachment(AttachmentId, DocumentId);
         AccessStore.Allow(DocumentId, DeptId);
     }
 
@@ -272,10 +273,14 @@ internal sealed class BrowseWebApplicationFactory : WebApplicationFactory<Progra
 internal sealed class FakeDocumentAccessStore : IDocumentAccessStore
 {
     private readonly Dictionary<Guid, Guid> _documentCompanies = [];
+    private readonly Dictionary<Guid, Guid> _attachmentDocuments = [];
     private readonly HashSet<(Guid DocumentId, Guid DeptId)> _permissions = [];
 
     public void AddDocument(Guid documentId, Guid companyId) =>
         _documentCompanies[documentId] = companyId;
+
+    public void AddAttachment(Guid attachmentId, Guid documentId) =>
+        _attachmentDocuments[attachmentId] = documentId;
 
     public void Allow(Guid documentId, Guid deptId) =>
         _permissions.Add((documentId, deptId));
@@ -287,6 +292,16 @@ internal sealed class FakeDocumentAccessStore : IDocumentAccessStore
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(_documentCompanies.TryGetValue(documentId, out var companyId)
             ? (Guid?)companyId
+            : null);
+    }
+
+    public Task<Guid?> FindAttachmentDocumentIdAsync(
+        Guid attachmentId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(_attachmentDocuments.TryGetValue(attachmentId, out var documentId)
+            ? (Guid?)documentId
             : null);
     }
 
@@ -304,7 +319,7 @@ internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
 {
     private readonly List<AvailableEntry> _available = [];
     private readonly Dictionary<(Guid, Guid), DocumentDownloadRecord> _documents = [];
-    private readonly Dictionary<(Guid, Guid, Guid), AttachmentDownloadRecord> _attachments = [];
+    private readonly Dictionary<(Guid, Guid), AttachmentDownloadRecord> _attachments = [];
 
     public void AddAvailable(
         Guid documentId,
@@ -345,7 +360,7 @@ internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
         Guid companyId,
         string status,
         string? fileKey) =>
-        _attachments[(documentId, versionId, attachmentId)] = new(
+        _attachments[(attachmentId, versionId)] = new(
             companyId,
             attachmentId,
             status,
@@ -388,14 +403,13 @@ internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
     }
 
     public Task<AttachmentDownloadRecord?> FindAttachmentDownloadAsync(
-        Guid documentId,
-        Guid versionId,
         Guid attachmentId,
+        Guid versionId,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(
-            _attachments.GetValueOrDefault((documentId, versionId, attachmentId)));
+            _attachments.GetValueOrDefault((attachmentId, versionId)));
     }
 
     private IEnumerable<AvailableEntry> Query(Guid deptId, string? keyword) =>

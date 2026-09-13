@@ -37,20 +37,23 @@ public sealed class DocumentsBrowseController(
         return ToFileResult(result);
     }
 
-    [HttpGet("{documentId:guid}/versions/{versionId:guid}/attachments/{attachmentId:guid}/download")]
+    [HttpGet("/api/attachments/{attachmentId:guid}/versions/{versionId:guid}/download")]
     public async Task<IActionResult> DownloadAttachment(
-        Guid documentId,
-        Guid versionId,
         Guid attachmentId,
+        Guid versionId,
         CancellationToken cancellationToken)
     {
-        if (!await CanAccessDocumentAsync(documentId))
+        var authorization = await authorizationService.AuthorizeAsync(
+            User,
+            new AttachmentAccessResource(attachmentId),
+            Policies.AttachmentAccess);
+        if (!authorization.Succeeded)
         {
             return Forbid();
         }
 
         var result = await browseService.DownloadAttachmentAsync(
-            documentId, versionId, attachmentId, cancellationToken);
+            attachmentId, versionId, cancellationToken);
         return ToFileResult(result);
     }
 

@@ -43,25 +43,24 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
         .SingleOrDefaultAsync(cancellationToken);
 
     public Task<AttachmentDownloadRecord?> FindAttachmentDownloadAsync(
-        Guid documentId,
-        Guid versionId,
         Guid attachmentId,
+        Guid versionId,
         CancellationToken cancellationToken) =>
-        (from document in dbContext.Documents.AsNoTracking()
-         join version in dbContext.DocumentVersions.AsNoTracking()
-             on document.Id equals version.DocumentId
-         join attachment in dbContext.Attachments.AsNoTracking()
-             on version.Id equals attachment.DocumentVersionId
-         where document.Id == documentId
+        (from attachment in dbContext.Attachments.AsNoTracking()
+         join document in dbContext.Documents.AsNoTracking()
+             on attachment.DocumentId equals document.Id
+         join version in dbContext.AttachmentVersions.AsNoTracking()
+             on attachment.Id equals version.AttachmentId
+         where attachment.Id == attachmentId
+             && attachment.IsActive
              && version.Id == versionId
-             && attachment.Id == attachmentId
          select new AttachmentDownloadRecord(
              document.CompanyId,
              attachment.Id,
              version.Status,
-             attachment.FileKey,
-             attachment.OriginalFileName,
-             attachment.ContentType))
+             version.FileKey,
+             version.OriginalFileName,
+             version.ContentType))
         .SingleOrDefaultAsync(cancellationToken);
 
     private IQueryable<AvailableDocumentResponse> AvailableQuery(Guid deptId, string? keyword)

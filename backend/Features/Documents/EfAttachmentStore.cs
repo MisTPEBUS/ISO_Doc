@@ -1,119 +1,66 @@
-using System.Data;
 using IsoDocument.Api.Data;
 using IsoDocument.Api.Data.Entities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace IsoDocument.Api.Features.Documents;
 
 public sealed class EfAttachmentStore(IsoDbContext dbContext) : IAttachmentStore
 {
-    public Task<AttachmentVersionContext?> FindVersionContextAsync(
+    public Task<Document?> FindDocumentAsync(
         Guid documentId,
-        Guid versionId,
         CancellationToken cancellationToken) =>
-        (from version in dbContext.DocumentVersions
-         join document in dbContext.Documents on version.DocumentId equals document.Id
-         join company in dbContext.Companies on document.CompanyId equals company.Id
-         where version.Id == versionId && document.Id == documentId
-         select new AttachmentVersionContext(document, version, company.Code))
-        .SingleOrDefaultAsync(cancellationToken);
+        dbContext.Documents.SingleOrDefaultAsync(
+            document => document.Id == documentId, cancellationToken);
 
-    public Task<AttachmentContext?> FindAttachmentContextAsync(
-        Guid attachmentId,
+    public Task<Document?> FindDocumentByNoAsync(
+        Guid companyId,
+        string documentNo,
         CancellationToken cancellationToken) =>
-        (from attachment in dbContext.Attachments
-         join version in dbContext.DocumentVersions on attachment.DocumentVersionId equals version.Id
-         join document in dbContext.Documents on version.DocumentId equals document.Id
-         where attachment.Id == attachmentId
-         select new AttachmentContext(attachment, document.CompanyId))
-        .SingleOrDefaultAsync(cancellationToken);
+        dbContext.Documents.SingleOrDefaultAsync(
+            document => document.CompanyId == companyId
+                && document.DocumentNo == documentNo,
+            cancellationToken);
 
-    public async Task<AttachmentUploadContext?> FindAttachmentUploadContextAsync(
-        Guid attachmentId,
-        CancellationToken cancellationToken)
-    {
-        var row = await (
-            from attachment in dbContext.Attachments
-            join version in dbContext.DocumentVersions
-                on attachment.DocumentVersionId equals version.Id
-            join document in dbContext.Documents on version.DocumentId equals document.Id
-            join company in dbContext.Companies on document.CompanyId equals company.Id
-            where attachment.Id == attachmentId
-            select new
-            {
-                Attachment = attachment,
-                document.CompanyId,
-                CompanyCode = company.Code,
-                document.DocumentNo,
-                version.Version,
-                VersionId = version.Id
-            }).SingleOrDefaultAsync(cancellationToken);
-
-        if (row is null)
-        {
-            return null;
-        }
-
-        // seq 取「同版本附件依 attachment_no 排序後，本附件的 1-based 序位」。
-        var siblingNumbers = await dbContext.Attachments
-            .Where(attachment => attachment.DocumentVersionId == row.VersionId)
-            .Select(attachment => attachment.AttachmentNo)
-            .ToListAsync(cancellationToken);
-        var sequence = siblingNumbers
-            .OrderBy(number => number, StringComparer.Ordinal)
-            .ToList()
-            .IndexOf(row.Attachment.AttachmentNo) + 1;
-
-        return new AttachmentUploadContext(
-            row.Attachment,
-            row.CompanyId,
-            row.CompanyCode,
-            row.DocumentNo,
-            row.Version,
-            sequence);
-    }
+    public Task<bool> AttachmentNoExistsAsync(
+        Guid documentId,
+        string attachmentNo,
+        CancellationToken cancellationToken) =>
+        dbContext.Attachments.AnyAsync(
+            attachment => attachment.DocumentId == documentId
+                && attachment.AttachmentNo == attachmentNo,
+            cancellationToken);
 
     public async Task<IReadOnlyList<Attachment>> ListAsync(
-        Guid versionId,
+        Guid documentId,
         CancellationToken cancellationToken) =>
         await dbContext.Attachments
             .AsNoTracking()
-            .Where(attachment => attachment.DocumentVersionId == versionId)
+            .Where(attachment => attachment.DocumentId == documentId && attachment.IsActive)
             .OrderBy(attachment => attachment.AttachmentNo)
             .ThenBy(attachment => attachment.Id)
             .ToListAsync(cancellationToken);
 
-    public async Task<IReadOnlySet<string>> FindExistingAttachmentNumbersAsync(
-        Guid versionId,
-        IReadOnlyCollection<string> attachmentNumbers,
+    public Task<Attachment?> FindByIdAsync(
+        Guid attachmentId,
         CancellationToken cancellationToken) =>
-        (await dbContext.Attachments
-            .Where(attachment => attachment.DocumentVersionId == versionId
-                && attachmentNumbers.Contains(attachment.AttachmentNo))
-            .Select(attachment => attachment.AttachmentNo)
-            .ToListAsync(cancellationToken))
-        .ToHashSet(StringComparer.Ordinal);
+        dbContext.Attachments.SingleOrDefaultAsync(
+            attachment => attachment.Id == attachmentId, cancellationToken);
 
-    public void AddRange(IEnumerable<Attachment> attachments) =>
-        dbContext.Attachments.AddRange(attachments);
+    public async Task<IReadOnlyList<AttachmentVersion>> ListVersionsAsync(
+        Guid attachmentId,
+        CancellationToken cancellationToken) =>
+        await dbContext.AttachmentVersions
+            .AsNoTracking()
+            .Where(version => version.AttachmentId == attachmentId)
+            .OrderByDescending(version => version.VersionMajor)
+            .ThenByDescending(version => version.VersionMinor)
+            .ToListAsync(cancellationToken);
 
-    public void Remove(Attachment attachment) => dbContext.Attachments.Remove(attachment);
+    public void Add(Attachment attachment) => dbContext.Attachments.Add(attachment);
+
+    public void Detach(Attachment attachment) =>
+        dbContext.Entry(attachment).State = EntityState.Detached;
 
     public Task SaveChangesAsync(CancellationToken cancellationToken) =>
         dbContext.SaveChangesAsync(cancellationToken);
-
-    public async Task<IAttachmentTransaction> BeginTransactionAsync(
-        CancellationToken cancellationToken) =>
-        new EfAttachmentTransaction(await dbContext.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable, cancellationToken));
-
-    private sealed class EfAttachmentTransaction(IDbContextTransaction transaction)
-        : IAttachmentTransaction
-    {
-        public Task CommitAsync(CancellationToken cancellationToken) =>
-            transaction.CommitAsync(cancellationToken);
-
-        public ValueTask DisposeAsync() => transaction.DisposeAsync();
-    }
 }

@@ -47,6 +47,20 @@ public sealed class DocumentsController(
         return result.ToCreatedResult(this, location);
     }
 
+    [HttpPost("bulk-import")]
+    public async Task<IActionResult> BulkImport(
+        BulkImportDocumentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!await CanAccessCompanyAsync(request.CompanyId))
+        {
+            return Forbid();
+        }
+
+        return (await documentService.BulkImportAsync(request, cancellationToken))
+            .ToOkResult(this);
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken) =>
         (await documentService.GetAsync(id, cancellationToken)).ToOkResult(this);
