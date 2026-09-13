@@ -25,7 +25,7 @@ namespace IsoDocs.Tests.Features.Documents;
 public sealed class DocumentVersionApiTests
 {
     [Fact]
-    public async Task UploadMinorVersion_IncrementsMinorVersionNumber()
+    public async Task UploadManualVersion_UsesRequestedVersionNumber()
     {
         await using var factory = new DocumentVersionWebApplicationFactory();
         factory.VersionStore.AddVersionSeed(1, 0, "PUBLISHED");
@@ -34,19 +34,19 @@ public sealed class DocumentVersionApiTests
         var token = await GetAntiforgeryTokenAsync(client);
         var effectiveDate = UtcToday().AddDays(1);
         using var request = CreateUploadRequest(
-            factory.Document.Id, token, "MINOR", effectiveDate, "manual.pdf", ValidPdf());
+            factory.Document.Id, token, "2.1", effectiveDate, "manual.pdf", ValidPdf());
 
         var response = await client.SendAsync(request);
         var body = await response.Content.ReadFromJsonAsync<DocumentVersionResponse>();
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.NotNull(body);
-        Assert.Equal("1.1", body.Version);
+        Assert.Equal("2.1", body.Version);
         Assert.Equal("PUBLISHED", body.Status);
         var created = Assert.Single(
             factory.VersionStore.Versions,
             version => version.Id == body.VersionId);
-        Assert.Equal(1, created.VersionMajor);
+        Assert.Equal(2, created.VersionMajor);
         Assert.Equal(1, created.VersionMinor);
         Assert.Equal(UtcToday(), created.PublishDate);
         Assert.Equal(effectiveDate, created.EffectiveDate);
@@ -59,6 +59,27 @@ public sealed class DocumentVersionApiTests
     }
 
     [Fact]
+    public async Task UploadIntegerManualVersion_NormalizesMinorVersionToZero()
+    {
+        await using var factory = new DocumentVersionWebApplicationFactory();
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateUploadRequest(
+            factory.Document.Id, token, "2", UtcToday(), "manual.pdf", ValidPdf());
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<DocumentVersionResponse>();
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal("2.0", body.Version);
+        var created = Assert.Single(factory.VersionStore.Versions);
+        Assert.Equal(2, created.VersionMajor);
+        Assert.Equal(0, created.VersionMinor);
+    }
+
+    [Fact]
     public async Task UploadVersion_ObsoletesPreviousPublishedVersionInTransaction()
     {
         await using var factory = new DocumentVersionWebApplicationFactory();
@@ -68,7 +89,7 @@ public sealed class DocumentVersionApiTests
         var token = await GetAntiforgeryTokenAsync(client);
         var effectiveDate = UtcToday().AddDays(2);
         using var request = CreateUploadRequest(
-            factory.Document.Id, token, "MINOR", effectiveDate, "manual.pdf", ValidPdf());
+            factory.Document.Id, token, "2.0", effectiveDate, "manual.pdf", ValidPdf());
 
         var response = await client.SendAsync(request);
 
@@ -98,7 +119,7 @@ public sealed class DocumentVersionApiTests
         await LoginAsync(client);
         var token = await GetAntiforgeryTokenAsync(client);
         using var request = CreateUploadRequest(
-            factory.Document.Id, token, "MINOR", UtcToday().AddDays(1), "manual.pdf", ValidPdf());
+            factory.Document.Id, token, "2.0", UtcToday().AddDays(1), "manual.pdf", ValidPdf());
 
         var response = await client.SendAsync(request);
 
@@ -125,7 +146,7 @@ public sealed class DocumentVersionApiTests
         using var request = CreateUploadRequest(
             factory.Document.Id,
             token,
-            "MINOR",
+            "2.0",
             UtcToday().AddDays(1),
             fileName,
             System.Text.Encoding.UTF8.GetBytes(contents));
@@ -150,7 +171,7 @@ public sealed class DocumentVersionApiTests
         using var request = CreateUploadRequest(
             factory.Document.Id,
             token,
-            "MINOR",
+            "2.0",
             UtcToday().AddDays(1),
             "manual.pdf",
             ValidPdf());
@@ -165,6 +186,49 @@ public sealed class DocumentVersionApiTests
             version => version.Status == "PUBLISHED");
         Assert.Single(factory.Storage.TrashedKeys);
         Assert.Empty(factory.Audit.Entries);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("0.1")]
+    [InlineData("01.0")]
+    [InlineData("1.02")]
+    [InlineData("1.2.3")]
+    public async Task UploadInvalidManualVersion_ReturnsBadRequestWithoutWritingFile(
+        string version)
+    {
+        await using var factory = new DocumentVersionWebApplicationFactory();
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateUploadRequest(
+            factory.Document.Id, token, version, UtcToday(), "manual.pdf", ValidPdf());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(factory.Storage.WrittenKeys);
+        Assert.Empty(factory.VersionStore.Versions);
+        Assert.False(factory.VersionStore.TransactionStarted);
+    }
+
+    [Fact]
+    public async Task UploadDuplicateManualVersion_ReturnsConflictWithoutWritingFile()
+    {
+        await using var factory = new DocumentVersionWebApplicationFactory();
+        factory.VersionStore.AddVersionSeed(2, 1, "PUBLISHED");
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateUploadRequest(
+            factory.Document.Id, token, "2.1", UtcToday(), "manual.pdf", ValidPdf());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(factory.Storage.WrittenKeys);
+        Assert.Single(factory.VersionStore.Versions);
+        Assert.False(factory.VersionStore.TransactionStarted);
     }
 
     [Fact]
@@ -244,14 +308,14 @@ public sealed class DocumentVersionApiTests
     private static HttpRequestMessage CreateUploadRequest(
         Guid documentId,
         string token,
-        string changeType,
+        string version,
         DateOnly effectiveDate,
         string fileName,
         byte[] contents)
     {
         var multipart = new MultipartFormDataContent
         {
-            { new StringContent(changeType), "changeType" },
+            { new StringContent(version), "version" },
             { new StringContent(effectiveDate.ToString("yyyy-MM-dd")), "effectiveDate" },
             { new StringContent("12"), "pageCount" },
             { new StringContent("Version memo"), "memo" }
@@ -395,16 +459,14 @@ internal sealed class FakeDocumentVersionStore(
         return Task.FromResult(Versions.SingleOrDefault(version => version.Id == versionId));
     }
 
-    public Task<DocumentVersion?> FindLatestVersionAsync(
+    public Task<bool> VersionExistsAsync(
         Guid documentId,
+        string version,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(Versions
-            .Where(version => version.DocumentId == documentId)
-            .OrderByDescending(version => version.VersionMajor)
-            .ThenByDescending(version => version.VersionMinor)
-            .FirstOrDefault());
+        return Task.FromResult(Versions.Any(candidate =>
+            candidate.DocumentId == documentId && candidate.Version == version));
     }
 
     public Task<IReadOnlyList<DocumentVersion>> ListPublishedVersionsAsync(

@@ -7,8 +7,8 @@ public interface IDocumentVersionStore
     Task<Document?> FindDocumentAsync(Guid documentId, CancellationToken cancellationToken);
     Task<string?> FindCompanyCodeAsync(Guid companyId, CancellationToken cancellationToken);
     Task<DocumentVersion?> FindVersionAsync(Guid versionId, CancellationToken cancellationToken);
-    Task<DocumentVersion?> FindLatestVersionAsync(
-        Guid documentId, CancellationToken cancellationToken);
+    Task<bool> VersionExistsAsync(
+        Guid documentId, string version, CancellationToken cancellationToken);
     Task<IReadOnlyList<DocumentVersion>> ListPublishedVersionsAsync(
         Guid documentId, CancellationToken cancellationToken);
     void Add(DocumentVersion version);

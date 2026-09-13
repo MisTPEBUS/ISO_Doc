@@ -9,4 +9,5 @@ public sealed record DocumentDetailResponse(
     Guid CreatedBy,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
+    DocumentVersionSummary? CurrentVersion,
     IReadOnlyList<DocumentVersionSummary> Versions);

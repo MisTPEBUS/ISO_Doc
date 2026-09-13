@@ -1,6 +1,5 @@
 using FluentValidation;
 using FluentValidation.Results;
-using System.Text.RegularExpressions;
 using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
 using IsoDocument.Api.Features.AuditLogs;
@@ -11,7 +10,7 @@ using Npgsql;
 
 namespace IsoDocument.Api.Features.Documents;
 
-public sealed partial class DocumentService(
+public sealed class DocumentService(
     IDocumentStore documentStore,
     ICurrentUser currentUser,
     IValidator<CreateDocumentRequest> createValidator,
@@ -163,7 +162,7 @@ public sealed partial class DocumentService(
                 AddError(errors, "pageCount", "頁數不可小於零。");
             }
 
-            if (!TryParseImportVersion(
+            if (!DocumentVersionNumber.TryParse(
                     item.Version, out var normalizedVersion, out var versionMajor, out var versionMinor))
             {
                 AddError(errors, "version", "版本格式必須為正整數或「主版號.次版號」，例如 1、1.0、2.1。");
@@ -296,6 +295,9 @@ public sealed partial class DocumentService(
         }
 
         var versions = await documentStore.ListVersionsAsync(id, cancellationToken);
+        var versionSummaries = versions.Select(ToVersionSummary).ToArray();
+        var currentVersion = versions.FirstOrDefault(version => version.Status == "PUBLISHED")
+            ?? versions.FirstOrDefault(version => version.Status == "DRAFT");
         return Result<DocumentDetailResponse>.Success(new(
             document.Id,
             document.CompanyId,
@@ -305,11 +307,8 @@ public sealed partial class DocumentService(
             document.CreatedBy,
             document.CreatedAt,
             document.UpdatedAt,
-            versions.Select(version => new DocumentVersionSummary(
-                version.Version,
-                version.Status,
-                version.EffectiveDate,
-                version.ExpiredDate)).ToArray()));
+            currentVersion is null ? null : ToVersionSummary(currentVersion),
+            versionSummaries));
     }
 
     public async Task<Result<DocumentResponse>> UpdateAsync(
@@ -405,45 +404,6 @@ public sealed partial class DocumentService(
             : [message];
     }
 
-    private static bool TryParseImportVersion(
-        string? value,
-        out string normalizedVersion,
-        out int versionMajor,
-        out int versionMinor)
-    {
-        normalizedVersion = string.Empty;
-        versionMajor = 0;
-        versionMinor = 0;
-
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
-
-        var trimmedValue = value.Trim();
-        if (trimmedValue.Length > 20)
-        {
-            return false;
-        }
-
-        var match = ImportVersionPattern().Match(trimmedValue);
-        if (!match.Success
-            || !int.TryParse(match.Groups[1].Value, out versionMajor)
-            || (match.Groups[2].Success
-                && !int.TryParse(match.Groups[2].Value, out versionMinor)))
-        {
-            versionMajor = 0;
-            versionMinor = 0;
-            return false;
-        }
-
-        normalizedVersion = $"{versionMajor}.{versionMinor}";
-        return true;
-    }
-
-    [GeneratedRegex("^([1-9][0-9]*)(?:\\.(0|[1-9][0-9]*))?$")]
-    private static partial Regex ImportVersionPattern();
-
     private static bool IsDuplicateDocumentNoViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException
         {
@@ -460,6 +420,16 @@ public sealed partial class DocumentService(
         document.CreatedBy,
         document.CreatedAt,
         document.UpdatedAt);
+
+    private static DocumentVersionSummary ToVersionSummary(DocumentVersion version) => new(
+        version.Id,
+        version.Version,
+        version.Status,
+        version.PublishDate,
+        version.EffectiveDate,
+        version.ExpiredDate,
+        version.PageCount,
+        version.FileKey is not null);
 
     private static object ToAuditValue(Document document) => new
     {

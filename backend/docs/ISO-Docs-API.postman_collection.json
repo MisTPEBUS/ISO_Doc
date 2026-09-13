@@ -646,10 +646,10 @@
               "mode": "formdata",
               "formdata": [
                 {
-                  "key": "changeType",
-                  "value": "MINOR",
+                  "key": "version",
+                  "value": "2.1",
                   "type": "text",
-                  "description": "MAJOR 或 MINOR"
+                  "description": "手動版號，例如 1、1.0、2.1"
                 },
                 {
                   "key": "effectiveDate",

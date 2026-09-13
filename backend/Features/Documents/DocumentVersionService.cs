@@ -64,6 +64,21 @@ public sealed class DocumentVersionService(
             return Result<DocumentVersionResponse>.Unauthorized("請先登入後再操作。");
         }
 
+        if (!DocumentVersionNumber.TryParse(
+                request.Version, out var versionText, out var major, out var minor))
+        {
+            return Result<DocumentVersionResponse>.ValidationFailed(new(StringComparer.Ordinal)
+            {
+                ["version"] = ["版本格式必須為正整數或「主版號.次版號」，例如 1、1.0、2.1。"]
+            });
+        }
+
+        if (await versionStore.VersionExistsAsync(
+                documentId, versionText, cancellationToken))
+        {
+            return Result<DocumentVersionResponse>.Conflict("此文件已存在相同的版本號。");
+        }
+
         var companyCode = await versionStore.FindCompanyCodeAsync(
             document.CompanyId, cancellationToken);
         if (companyCode is null)
@@ -75,9 +90,6 @@ public sealed class DocumentVersionService(
         try
         {
             await using var transaction = await versionStore.BeginTransactionAsync(cancellationToken);
-            var latest = await versionStore.FindLatestVersionAsync(documentId, cancellationToken);
-            var (major, minor) = CalculateNextVersion(latest, request.ChangeType!);
-            var versionText = $"{major}.{minor}";
             var publishDate = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
             var effectiveDate = request.EffectiveDate!.Value;
             var objectKey = storageKeyBuilder.BuildMainKey(
@@ -137,7 +149,6 @@ public sealed class DocumentVersionService(
                     {
                         document_id = document.Id,
                         version = version.Version,
-                        change_type = request.ChangeType,
                         effective_date = version.EffectiveDate,
                         previous_published_version_ids = previousPublished
                             .Select(previous => previous.Id)
@@ -148,6 +159,16 @@ public sealed class DocumentVersionService(
 
             return Result<DocumentVersionResponse>.Success(new(
                 version.Id, version.Version, version.Status));
+        }
+        catch (Exception exception) when (IsDuplicateVersionConflict(exception))
+        {
+            if (writtenObjectKey is not null)
+            {
+                await TryMoveToTrashAsync(writtenObjectKey);
+            }
+
+            return Result<DocumentVersionResponse>.Conflict(
+                "此文件已存在相同的版本號。");
         }
         catch (Exception exception) when (IsPublishedVersionConflict(exception))
         {
@@ -243,17 +264,6 @@ public sealed class DocumentVersionService(
         }
     }
 
-    private static (int Major, int Minor) CalculateNextVersion(
-        DocumentVersion? latest,
-        string changeType)
-    {
-        var currentMajor = latest?.VersionMajor ?? 0;
-        var currentMinor = latest?.VersionMinor ?? 0;
-        return changeType == "MAJOR"
-            ? (currentMajor + 1, 0)
-            : (currentMajor, currentMinor + 1);
-    }
-
     private static async Task<bool> HasPdfMagicBytesAsync(
         IFormFile file,
         CancellationToken cancellationToken)
@@ -284,7 +294,7 @@ public sealed class DocumentVersionService(
             InnerException: PostgresException
             {
                 SqlState: PostgresErrorCodes.UniqueViolation,
-                ConstraintName: "uq_doc_single_published" or "uq_doc_versions"
+                ConstraintName: "uq_doc_single_published"
             }
         } => true,
         DbUpdateException
@@ -297,6 +307,16 @@ public sealed class DocumentVersionService(
         PostgresException { SqlState: PostgresErrorCodes.SerializationFailure } => true,
         _ => false
     };
+
+    private static bool IsDuplicateVersionConflict(Exception exception) => exception is
+        DbUpdateException
+        {
+            InnerException: PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: "uq_doc_versions"
+            }
+        };
 
     private static Dictionary<string, string[]> ToErrors(ValidationResult validation) =>
         validation.Errors

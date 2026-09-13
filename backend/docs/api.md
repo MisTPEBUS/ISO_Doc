@@ -367,12 +367,20 @@ Query：`companyId?`、`keyword?`（documentNo / name）、`page`、`pageSize`�
 {
   "id", "companyId", "documentNo", "name", "isActive": true,
   "createdBy", "createdAt", "updatedAt",
+  "currentVersion": {
+    "versionId", "version": "2.0", "status": "PUBLISHED",
+    "publishDate": "2026-01-01", "effectiveDate": "2026-01-01",
+    "expiredDate": null, "pageCount": 12, "hasFile": true
+  },
   "versions": [
-    { "version": "2.0", "status": "PUBLISHED",
-      "effectiveDate": "2026-01-01", "expiredDate": null }
+    { "versionId", "version": "2.0", "status": "PUBLISHED",
+      "publishDate": "2026-01-01", "effectiveDate": "2026-01-01",
+      "expiredDate": null, "pageCount": 12, "hasFile": true }
   ]
 }
 ```
+
+`currentVersion` 依 `PUBLISHED` 優先、其次 `DRAFT` 的代表版本規則選取；無版本時為 `null`。
 
 `403` / `404`。
 
@@ -391,17 +399,17 @@ Query：`companyId?`、`keyword?`（documentNo / name）、`page`、`pageSize`�
 
 | 欄位 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
-| `changeType` | text | ✔ | `MAJOR`（x+1.0）或 `MINOR`（x.y+1） |
+| `version` | text | ✔ | 手動輸入正整數或 `主版號.次版號`，例如 `1`、`1.0`、`2.1`；整數正規化為 `.0` |
 | `effectiveDate` | text `yyyy-MM-dd` | ✔ | 不得早於發佈日（今天 UTC） |
 | `pageCount` | text (int) | ✘ | 有給須 > 0 |
 | `memo` | text | ✘ | 版本備註 |
 | `file` | file | ✔ | 副檔名 `.pdf`，內容前置須為 `%PDF-`，檔名 ≤ 255 |
 
 - `201`：`{ "versionId", "version": "1.1", "status": "PUBLISHED" }`（無有效 `Location` header，直接用 body）。
-- `400`：`errors.changeType` / `effectiveDate` / `pageCount` / `file`；或 `errors.file = ["The document file content is not a valid PDF."]`。
+- `400`：`errors.version` / `effectiveDate` / `pageCount` / `file`；或 `errors.file = ["The document file content is not a valid PDF."]`。
 - `403`：非同公司。
 - `404`：文件不存在 / 公司不存在。
-- `409`：文件已停用（`"已停用的文件無法新增版本。"`）；併發發佈（`"另一個版本已同時發佈，請重新載入文件後再試一次。"`）。
+- `409`：文件已停用（`"已停用的文件無法新增版本。"`）；同文件版號重複（`"此文件已存在相同的版本號。"`）；併發發佈（`"另一個版本已同時發佈，請重新載入文件後再試一次。"`）。
 
 ### `DELETE /api/documents/{documentId}/versions/{versionId}`（`CompanyAdminScope`）
 需 `X-XSRF-TOKEN`。硬刪除**草稿版本**。

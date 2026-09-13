@@ -1,5 +1,5 @@
 export interface VersionFormDataInput {
-  changeType: 'MAJOR' | 'MINOR'
+  version: string
   effectiveDate: string
   pageCount?: number
   memo?: string
@@ -9,7 +9,7 @@ export interface VersionFormDataInput {
 export function buildVersionFormData(input: VersionFormDataInput): FormData {
   const formData = new FormData()
 
-  formData.append('changeType', input.changeType)
+  formData.append('version', input.version)
   formData.append('effectiveDate', input.effectiveDate)
 
   if (input.pageCount !== undefined) {

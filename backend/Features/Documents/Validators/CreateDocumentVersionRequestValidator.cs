@@ -8,10 +8,12 @@ public sealed class CreateDocumentVersionRequestValidator
 {
     public CreateDocumentVersionRequestValidator(TimeProvider timeProvider)
     {
-        RuleFor(request => request.ChangeType)
-            .Must(value => value is "MAJOR" or "MINOR")
-            .WithMessage("變更類型必須是 MAJOR 或 MINOR。")
-            .OverridePropertyName("changeType");
+        RuleFor(request => request.Version)
+            .NotEmpty()
+            .WithMessage("請輸入版本號。")
+            .Must(value => DocumentVersionNumber.TryParse(value, out _, out _, out _))
+            .WithMessage("版本格式必須為正整數或「主版號.次版號」，例如 1、1.0、2.1。")
+            .OverridePropertyName("version");
         RuleFor(request => request.EffectiveDate)
             .NotNull()
             .WithMessage("請輸入生效日期。")

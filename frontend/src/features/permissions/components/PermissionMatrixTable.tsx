@@ -208,14 +208,16 @@ export function PermissionMatrixTable({
                     </td>
                     <td className="px-4 py-2 align-middle">
                       <div className="flex min-w-44 flex-col items-start gap-0.5">
-                        <StatusText
-                          label={document.status.mainDocument.label}
-                          tone={fileStatusTone(document.status.mainDocument)}
-                          icon={document.status.mainDocument.code === 'MISSING'
-                            ? TriangleAlert
-                            : undefined}
-                          iconClassName="text-state-danger"
-                        />
+                        {document.status.mainDocument.code !== 'NORMAL' && (
+                          <StatusText
+                            label={document.status.mainDocument.label}
+                            tone={fileStatusTone(document.status.mainDocument)}
+                            icon={document.status.mainDocument.code === 'MISSING'
+                              ? TriangleAlert
+                              : undefined}
+                            iconClassName="text-state-danger"
+                          />
+                        )}
                         <StatusText
                           label={document.status.attachment.label}
                           tone={fileStatusTone(document.status.attachment)}

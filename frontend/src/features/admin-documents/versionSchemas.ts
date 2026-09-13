@@ -1,9 +1,7 @@
 import { z } from 'zod'
 
-import { VERSION_CHANGE_TYPE, type VersionChangeType } from './types'
-
 export interface VersionFormValues {
-  changeType: VersionChangeType
+  version: string
   effectiveDate: string
   pageCount: string
   memo: string
@@ -26,9 +24,16 @@ const pdfFileSchema = z.custom<File>(
 )
 
 export const createVersionFormSchema = z.object({
-  changeType: z.enum([VERSION_CHANGE_TYPE.Major, VERSION_CHANGE_TYPE.Minor], {
-    error: '請選擇變更類型',
-  }),
+  version: z.string()
+    .trim()
+    .min(1, '請輸入版本號')
+    .max(20, '版本號不可超過 20 個字元')
+    .regex(/^([1-9]\d*)(?:\.(0|[1-9]\d*))?$/, '版本格式須為正整數或主版號.次版號，例如 1、1.0、2.1')
+    .refine(
+      (value) => value.split('.').every((part) => Number(part) <= 2_147_483_647),
+      '主版號與次版號不可超過 2147483647',
+    )
+    .transform((value) => value.includes('.') ? value : `${value}.0`),
   effectiveDate: z.string()
     .min(1, '請選擇生效日期')
     .regex(/^\d{4}-\d{2}-\d{2}$/, '生效日期格式不正確')

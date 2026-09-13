@@ -30,14 +30,14 @@ public sealed class EfDocumentVersionStore(IsoDbContext dbContext) : IDocumentVe
             version => version.Id == versionId,
             cancellationToken);
 
-    public Task<DocumentVersion?> FindLatestVersionAsync(
+    public Task<bool> VersionExistsAsync(
         Guid documentId,
+        string version,
         CancellationToken cancellationToken) =>
-        dbContext.DocumentVersions
-            .Where(version => version.DocumentId == documentId)
-            .OrderByDescending(version => version.VersionMajor)
-            .ThenByDescending(version => version.VersionMinor)
-            .FirstOrDefaultAsync(cancellationToken);
+        dbContext.DocumentVersions.AnyAsync(
+            candidate => candidate.DocumentId == documentId
+                && candidate.Version == version,
+            cancellationToken);
 
     public async Task<IReadOnlyList<DocumentVersion>> ListPublishedVersionsAsync(
         Guid documentId,

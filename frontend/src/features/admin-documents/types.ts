@@ -1,18 +1,11 @@
 export const DOCUMENT_VERSION_STATUS = {
+  Draft: 'DRAFT',
   Published: 'PUBLISHED',
   Obsolete: 'OBSOLETE',
 } as const
 
 export type DocumentVersionStatus =
   (typeof DOCUMENT_VERSION_STATUS)[keyof typeof DOCUMENT_VERSION_STATUS]
-
-export const VERSION_CHANGE_TYPE = {
-  Major: 'MAJOR',
-  Minor: 'MINOR',
-} as const
-
-export type VersionChangeType =
-  (typeof VERSION_CHANGE_TYPE)[keyof typeof VERSION_CHANGE_TYPE]
 
 export interface AdminDocument {
   id: string
@@ -26,13 +19,18 @@ export interface AdminDocument {
 }
 
 export interface DocumentVersionSummary {
+  versionId: string
   version: string
   status: DocumentVersionStatus
+  publishDate: string | null
   effectiveDate: string | null
   expiredDate: string | null
+  pageCount: number | null
+  hasFile: boolean
 }
 
 export interface DocumentDetail extends AdminDocument {
+  currentVersion: DocumentVersionSummary | null
   versions: DocumentVersionSummary[]
 }
 
