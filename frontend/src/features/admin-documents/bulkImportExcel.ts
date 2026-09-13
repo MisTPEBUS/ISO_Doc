@@ -1,4 +1,7 @@
-import { Workbook, type CellValue } from 'exceljs'
+/**
+ * SheetJS (window.XLSX) 由 index.html 的 CDN <script> 載入，用來解析批次匯入的
+ * Excel 檔案（.xlsx / .xls）。型別宣告見 src/types/xlsx-global.d.ts。
+ */
 
 export const MAX_BULK_IMPORT_ROWS = 200
 
@@ -53,15 +56,9 @@ export interface ParsedWorkbook {
   mapping: ColumnMapping
 }
 
-function cellText(value: CellValue): string {
+function cellText(value: unknown): string {
   if (value === null || value === undefined) return ''
-  if (typeof value === 'string') return value.trim()
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  if (value instanceof Date) return value.toISOString().slice(0, 10)
-  if ('richText' in value) return value.richText.map((part) => part.text).join('').trim()
-  if ('hyperlink' in value) return value.text.trim()
-  if ('formula' in value || 'sharedFormula' in value) return cellText(value.result ?? null)
-  return ''
+  return String(value).trim()
 }
 
 function normalize(value: string): string {
@@ -126,48 +123,37 @@ export function autoMapColumns(headers: string[]): ColumnMapping {
 
 export class ExcelParseError extends Error {}
 
-/**
- * 僅支援 .xlsx（Office Open XML，Excel 2007 以後另存新檔的格式）。
- * exceljs 無法讀取舊版二進位 .xls（Excel 97-2003）格式，選到 .xls 時需明確告知使用者，
- * 而不是讓 exceljs 拋出難以理解的解析錯誤。
- */
 export function isSupportedExcelFileName(fileName: string): boolean {
-  return /\.xlsx$/i.test(fileName)
+  return /\.(xlsx|xls)$/i.test(fileName)
 }
 
-export function isLegacyXlsFileName(fileName: string): boolean {
-  return /\.xls$/i.test(fileName) && !/\.xlsx$/i.test(fileName)
-}
-
-/** 解析上傳的 Excel 檔案，僅讀取第一個工作表，並自動尋找表頭列（最多掃描前 30 列）。 */
+/** 解析上傳的 Excel 檔案（.xlsx / .xls），僅讀取第一個工作表，並自動尋找表頭列（最多掃描前 30 列）。 */
 export async function parseDocumentsWorkbook(file: File): Promise<ParsedWorkbook> {
-  if (isLegacyXlsFileName(file.name)) {
-    throw new ExcelParseError(
-      '偵測到舊版 .xls 格式，此頁面僅支援 .xlsx（Excel 2007 以後的格式）。' +
-        '請在 Excel 開啟後另存新檔為 .xlsx，再重新匯入。',
-    )
-  }
   if (!isSupportedExcelFileName(file.name)) {
-    throw new ExcelParseError('只接受 .xlsx 檔案。')
+    throw new ExcelParseError('只接受 .xlsx 或 .xls 檔案。')
   }
 
-  const workbook = new Workbook()
-  const buffer = await file.arrayBuffer()
-  await workbook.xlsx.load(buffer)
+  const xlsx = window.XLSX
+  if (!xlsx) {
+    throw new ExcelParseError('Excel 解析套件載入失敗，請重新整理頁面後再試一次。')
+  }
 
-  const worksheet = workbook.worksheets[0]
-  if (!worksheet) {
+  const buffer = await file.arrayBuffer()
+  const workbook = xlsx.read(buffer, { type: 'array', cellDates: false, cellText: true })
+
+  const sheetName = workbook.SheetNames[0]
+  if (!sheetName) {
     throw new ExcelParseError('Excel 內沒有工作表。')
   }
 
-  const rows: string[][] = []
-  worksheet.eachRow({ includeEmpty: true }, (row) => {
-    const cells: string[] = []
-    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      cells[colNumber - 1] = cellText(cell.value)
-    })
-    rows.push(cells)
+  const worksheet = workbook.Sheets[sheetName]
+  const rawRows = xlsx.utils.sheet_to_json(worksheet, {
+    header: 1,
+    defval: '',
+    raw: false,
+    blankrows: false,
   })
+  const rows: string[][] = rawRows.map((row) => (Array.isArray(row) ? row.map(cellText) : []))
 
   const headerRowIndex = detectHeaderRowIndex(rows)
   if (headerRowIndex < 0) {
@@ -182,7 +168,7 @@ export async function parseDocumentsWorkbook(file: File): Promise<ParsedWorkbook
     .filter((row) => row.some((cell) => cell.trim() !== ''))
 
   return {
-    worksheetName: worksheet.name,
+    worksheetName: sheetName,
     headerRowIndex,
     sourceHeaders,
     sourceRows,

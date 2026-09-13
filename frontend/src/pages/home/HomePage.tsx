@@ -273,9 +273,7 @@ export function HomePage() {
             : undefined
         }
         changePasswordHref={
-          currentUser.data
-            ? `${import.meta.env.BASE_URL}change-password`
-            : null
+          currentUser.data ? `${import.meta.env.BASE_URL}change-password` : null
         }
         logoutLabel={logoutMutation.isPending ? "登出中" : "登出"}
         onLogout={handleLogout}
@@ -285,13 +283,13 @@ export function HomePage() {
         <section className="mb-4 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="mb-1 text-label font-medium text-primary">文件中心</p>
-            <h1 className="text-page-title text-ink">可閱讀文件</h1>
+            <h1 className="text-page-title text-ink">ISO文件列表</h1>
             <p className="mt-1 text-meta text-ink-muted">
-              查詢目前已發布，且你的部門具有權限的 ISO 文件。
+              查詢目前已發布 ISO 文件。
             </p>
           </div>
           <div className="border-l-2 border-primary pl-3 text-right">
-            <p className="text-fine text-ink-muted">可閱讀文件</p>
+            <p className="text-fine text-ink-muted">ISO文件列表</p>
             <p className="tabular text-page-title text-ink">
               {MOCK_AVAILABLE_DOCUMENTS.length}
             </p>

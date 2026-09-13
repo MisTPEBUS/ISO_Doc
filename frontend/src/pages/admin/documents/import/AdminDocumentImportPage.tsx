@@ -142,7 +142,7 @@ export function AdminDocumentImportPage() {
       setFileError(
         error instanceof ExcelParseError
           ? error.message
-          : '無法解析這個檔案，請確認格式為 .xlsx。',
+          : '無法解析這個檔案，請確認格式為 .xlsx 或 .xls。',
       )
     } finally {
       setParsing(false)

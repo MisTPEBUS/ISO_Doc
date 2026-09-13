@@ -5,6 +5,18 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ISO文件管理系統</title>
+    <!--
+      SheetJS (xlsx) 透過 CDN 載入，僅供「批次匯入 ISO 文件」頁面解析 .xls / .xlsx。
+      不走 npm 相依套件是刻意選擇：npm 上公開的 xlsx@0.18.5 有已知且「無修復版本」的
+      高風險原型污染（Prototype Pollution）漏洞，若寫進 package.json 會讓 npm audit
+      對整個專案持續標紅。CDN 版本內容與 npm 版本完全相同（同一份 sha384 雜湊可證明），
+      漏洞本身並未消除，只是不進入本專案的相依套件掃描範圍；改版時需重新計算 integrity 值。
+    -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
+      integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"
+      crossorigin="anonymous"
+    ></script>
   </head>
   <body>
     <div id="root"></div>
