@@ -30,6 +30,13 @@ public sealed class DocumentsBrowseApiTests
         await using var factory = new BrowseWebApplicationFactory(UserRole.USER);
         factory.BrowseStore.AddAvailable(
             factory.DocumentId, factory.VersionId, factory.DeptId, "PUBLISHED", isActive: true);
+        factory.BrowseStore.AddAvailableAttachment(
+            factory.DocumentId,
+            factory.AttachmentId,
+            Guid.NewGuid(),
+            "FM-HR-001",
+            "請假申請表",
+            hasFile: true);
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
 
@@ -40,6 +47,38 @@ public sealed class DocumentsBrowseApiTests
         var document = Assert.Single(body!.Items);
         Assert.Equal(factory.DocumentId, document.DocumentId);
         Assert.Equal(factory.VersionId, document.CurrentVersion.VersionId);
+        Assert.True(document.CurrentVersion.HasFile);
+        var attachment = Assert.Single(document.Attachments);
+        Assert.Equal(factory.AttachmentId, attachment.AttachmentId);
+        Assert.Equal("FM-HR-001", attachment.AttachmentNo);
+        Assert.Equal("請假申請表", attachment.Name);
+        Assert.True(attachment.CurrentVersion?.HasFile);
+    }
+
+    [Fact]
+    public async Task Available_WhenAttachmentHasNoCurrentVersion_ReturnsAttachmentWithNullCurrentVersion()
+    {
+        await using var factory = new BrowseWebApplicationFactory(UserRole.USER);
+        factory.BrowseStore.AddAvailable(
+            factory.DocumentId, factory.VersionId, factory.DeptId, "PUBLISHED", isActive: true);
+        factory.BrowseStore.AddAvailableAttachment(
+            factory.DocumentId,
+            factory.AttachmentId,
+            versionId: null,
+            "FM-HR-002",
+            "加班申請表",
+            hasFile: false);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+
+        var body = await client.GetFromJsonAsync<PagedResult<AvailableDocumentResponse>>(
+            "/api/documents/available");
+
+        var document = Assert.Single(body!.Items);
+        var attachment = Assert.Single(document.Attachments);
+        Assert.Equal("FM-HR-002", attachment.AttachmentNo);
+        Assert.Equal("加班申請表", attachment.Name);
+        Assert.Null(attachment.CurrentVersion);
     }
 
     [Fact]
@@ -318,6 +357,7 @@ internal sealed class FakeDocumentAccessStore : IDocumentAccessStore
 internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
 {
     private readonly List<AvailableEntry> _available = [];
+    private readonly Dictionary<Guid, List<AvailableAttachmentResponse>> _availableAttachments = [];
     private readonly Dictionary<(Guid, Guid), DocumentDownloadRecord> _documents = [];
     private readonly Dictionary<(Guid, Guid), AttachmentDownloadRecord> _attachments = [];
 
@@ -337,7 +377,31 @@ internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
                 "Quality Manual",
                 "Company A",
                 new AvailableDocumentVersionResponse(
-                    versionId, "1.0", DateOnly.FromDateTime(DateTime.UtcNow), 10))));
+                    versionId, "1.0", DateOnly.FromDateTime(DateTime.UtcNow), 10, true),
+                [])));
+
+    public void AddAvailableAttachment(
+        Guid documentId,
+        Guid attachmentId,
+        Guid? versionId,
+        string attachmentNo,
+        string name,
+        bool hasFile)
+    {
+        if (!_availableAttachments.TryGetValue(documentId, out var attachments))
+        {
+            attachments = [];
+            _availableAttachments[documentId] = attachments;
+        }
+
+        attachments.Add(new(
+            attachmentId,
+            attachmentNo,
+            name,
+            versionId.HasValue
+                ? new AvailableAttachmentVersionResponse(versionId.Value, "1.0", hasFile)
+                : null));
+    }
 
     public void AddDocumentDownload(
         Guid documentId,
@@ -388,7 +452,10 @@ internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
         IReadOnlyList<AvailableDocumentResponse> result = Query(deptId, keyword)
             .Skip(skip)
             .Take(take)
-            .Select(entry => entry.Response)
+            .Select(entry => entry.Response with
+            {
+                Attachments = _availableAttachments.GetValueOrDefault(entry.Response.DocumentId) ?? []
+            })
             .ToArray();
         return Task.FromResult(result);
     }

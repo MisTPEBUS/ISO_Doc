@@ -450,13 +450,14 @@ Query：`companyId?`、`keyword?`（documentNo / name）、`page`、`pageSize`�
 
 | 欄位 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
-| `changeType` | text | ✔ | `MAJOR` 或 `MINOR` |
+| `version` | text | ✔ | 手動輸入正整數或 `主版號.次版號`，例如 `1`、`1.0`、`2.1`；整數正規化為 `.0` |
 | `effectiveDate` | text `yyyy-MM-dd` | ✔ | 不得早於發佈日（今天 UTC） |
 | `file` | file | ✔ | 白名單副檔名，且內容簽章必須相符 |
 
 - `201`：`{ "versionId", "version", "status": "PUBLISHED" }`。
-- `400`：欄位或檔案驗證失敗。
-- `403` / `404`；附件已停用或併發發佈衝突時回 `409`。
+- `400`：`errors.version`（格式不符）/ `effectiveDate` / `file` 驗證失敗。
+- `403` / `404`。
+- `409`：附件已停用（`"已停用的附件無法新增版本。"`）；同附件版號重複（`"此附件已存在相同的版本號。"`）；併發發佈（`"另一個版本已同時發佈，請重新載入附件後再試一次。"`）。
 
 ### `GET /api/attachments/{attachmentId}/versions/{versionId}`（`CompanyAdminScope`）
 → `200` 附件版本詳情。

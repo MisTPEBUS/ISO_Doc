@@ -22,11 +22,62 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
         int take,
         CancellationToken cancellationToken)
     {
-        return await AvailableQuery(deptId, keyword)
+        var documents = await AvailableQuery(deptId, keyword)
             .OrderBy(item => item.DocumentNo)
             .ThenBy(item => item.DocumentId)
             .Skip(skip)
             .Take(take)
+            .ToListAsync(cancellationToken);
+
+        if (documents.Count == 0)
+        {
+            return [];
+        }
+
+        var documentIds = documents.Select(item => item.DocumentId).ToArray();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var attachmentRows = await (
+            from attachment in dbContext.Attachments.AsNoTracking()
+            where documentIds.Contains(attachment.DocumentId)
+                && attachment.IsActive
+            join version in dbContext.AttachmentVersions.AsNoTracking().Where(version =>
+                    version.Status == "PUBLISHED"
+                    && version.EffectiveDate.HasValue
+                    && version.EffectiveDate.Value <= today
+                    && (!version.ExpiredDate.HasValue || version.ExpiredDate.Value > today))
+                on attachment.Id equals version.AttachmentId into currentVersions
+            from currentVersion in currentVersions.DefaultIfEmpty()
+            orderby attachment.DocumentId, attachment.AttachmentNo, attachment.Id
+            select new AvailableAttachmentQueryItem
+            {
+                DocumentId = attachment.DocumentId,
+                AttachmentId = attachment.Id,
+                AttachmentNo = attachment.AttachmentNo,
+                Name = attachment.Name,
+                VersionId = currentVersion == null ? null : currentVersion.Id,
+                Version = currentVersion == null ? null : currentVersion.Version,
+                HasFile = currentVersion != null && currentVersion.FileKey != null
+            })
+            .ToListAsync(cancellationToken);
+
+        var attachmentsByDocumentId = attachmentRows
+            .GroupBy(item => item.DocumentId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<AvailableAttachmentResponse>)group
+                    .Select(item => new AvailableAttachmentResponse(
+                        item.AttachmentId,
+                        item.AttachmentNo,
+                        item.Name,
+                        item.VersionId.HasValue && item.Version is not null
+                            ? new AvailableAttachmentVersionResponse(
+                                item.VersionId.Value,
+                                item.Version,
+                                item.HasFile)
+                            : null))
+                    .ToArray());
+
+        return documents
             .Select(item => new AvailableDocumentResponse(
                 item.DocumentId,
                 item.DocumentNo,
@@ -36,8 +87,10 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
                     item.VersionId,
                     item.Version,
                     item.EffectiveDate,
-                    item.PageCount)))
-            .ToListAsync(cancellationToken);
+                    item.PageCount,
+                    item.FileKey is not null),
+                attachmentsByDocumentId.GetValueOrDefault(item.DocumentId) ?? []))
+            .ToArray();
     }
 
     public Task<DocumentDownloadRecord?> FindDocumentDownloadAsync(
@@ -83,6 +136,7 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
         Guid deptId,
         string? keyword)
     {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var query =
             from permission in dbContext.DocumentDeptPermissions.AsNoTracking()
             join document in dbContext.Documents.AsNoTracking()
@@ -94,6 +148,9 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
             where permission.DeptId == deptId
                 && document.IsActive
                 && version.Status == "PUBLISHED"
+                && version.EffectiveDate.HasValue
+                && version.EffectiveDate.Value <= today
+                && (!version.ExpiredDate.HasValue || version.ExpiredDate.Value > today)
             select new AvailableDocumentQueryItem
             {
                 DocumentId = document.Id,
@@ -103,7 +160,8 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
                 VersionId = version.Id,
                 Version = version.Version,
                 EffectiveDate = version.EffectiveDate,
-                PageCount = version.PageCount
+                PageCount = version.PageCount,
+                FileKey = version.FileKey
             };
 
         if (!string.IsNullOrWhiteSpace(keyword))
@@ -135,5 +193,24 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
         public DateOnly? EffectiveDate { get; init; }
 
         public int? PageCount { get; init; }
+
+        public string? FileKey { get; init; }
+    }
+
+    private sealed class AvailableAttachmentQueryItem
+    {
+        public Guid DocumentId { get; init; }
+
+        public Guid AttachmentId { get; init; }
+
+        public string AttachmentNo { get; init; } = string.Empty;
+
+        public string Name { get; init; } = string.Empty;
+
+        public Guid? VersionId { get; init; }
+
+        public string? Version { get; init; }
+
+        public bool HasFile { get; init; }
     }
 }
