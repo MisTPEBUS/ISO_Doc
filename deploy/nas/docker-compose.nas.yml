@@ -1,0 +1,57 @@
+services:
+  postgres:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: iso-postgres:16
+    container_name: iso-postgres-production
+    environment:
+      TZ: Asia/Taipei
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ${NAS_POSTGRES_DATA_PATH}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    # 不對外露 port：只有同一個 compose network 內的 backend 能連線
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    image: iso-backend:latest
+    container_name: iso-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      Storage__RootPath: /app/storage-data
+      Database__AutoMigrate: "true"
+      TZ: Asia/Taipei
+    volumes:
+      - ${NAS_STORAGE_DATA_PATH}:/app/storage-data
+    restart: unless-stopped
+    # 不對外露 port：ForwardedHeaders 信任模型假設 backend 只有 frontend(nginx) 打得到
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    image: iso-frontend:latest
+    container_name: iso-frontend
+    depends_on:
+      - backend
+    ports:
+      # 只綁 loopback，只有本機的 Synology DSM Reverse Proxy 能連到
+      - "127.0.0.1:${NAS_FRONTEND_PORT}:80"
+    restart: unless-stopped

@@ -27,6 +27,7 @@ using IsoDocument.Api.Security.Authorization;
 using IsoDocument.Api.Storage;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -132,6 +133,15 @@ builder.Services.AddScoped<IValidator<UpdateDocumentDeptPermissionsRequest>, Upd
 builder.Services.AddScoped<IValidator<UpdateDocumentPermissionMatrixRequest>, UpdateDocumentPermissionMatrixRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateUserRequest>, CreateUserRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateUserRequest>, UpdateUserRequestValidator>();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    // NAS 部署：唯一能連到這個 container 的是同一個 compose network 裡的 frontend(nginx)，
+    // 其 IP 由 Docker 動態配發，因此清空 KnownProxies/KnownNetworks（不限制來源）。
+    // 只有在 backend 不對外露 port 時，這個設定才是安全的。
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Services.AddOptions<StorageOptions>()
     .BindConfiguration(StorageOptions.SectionName)
     .Validate(
@@ -188,6 +198,10 @@ builder.Services.AddScoped<IOperationAuditLogService>(serviceProvider =>
 
 var app = builder.Build();
 
+// 必須排在 UseHttpsRedirection 前面，讓 Kestrel 先用 X-Forwarded-Proto 修正 Request.Scheme，
+// 否則 reverse proxy 後面的請求會被誤判為 plain HTTP，造成 redirect loop。
+app.UseForwardedHeaders();
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -200,6 +214,12 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+if (app.Configuration.GetValue("Database:AutoMigrate", true))
+{
+    using var migrationScope = app.Services.CreateScope();
+    migrationScope.ServiceProvider.GetRequiredService<IsoDbContext>().Database.Migrate();
+}
 
 var startupHealth = app.Services
     .GetRequiredService<HealthCheckService>()
