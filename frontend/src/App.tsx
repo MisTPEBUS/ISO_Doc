@@ -8,6 +8,7 @@ import { USER_ROLE } from './features/auth/types'
 import { AdminLayout } from './layouts/AdminLayout'
 import { AdminDocumentsPage } from './pages/admin/documents/AdminDocumentsPage'
 import { AdminDocumentDetailPage } from './pages/admin/documents/[id]/AdminDocumentDetailPage'
+import { AdminDocumentImportPage } from './pages/admin/documents/import/AdminDocumentImportPage'
 import { BackupPage } from './pages/admin/backup/BackupPage'
 import { DepartmentsPage } from './pages/admin/departments/DepartmentsPage'
 import { PermissionsPage } from './pages/admin/permissions/PermissionsPage'
@@ -47,6 +48,7 @@ function App() {
           >
             <Route index element={<Navigate to="documents" replace />} />
             <Route path="documents" element={<AdminDocumentsPage />} />
+            <Route path="documents/import" element={<AdminDocumentImportPage />} />
             <Route path="documents/:id" element={<AdminDocumentDetailPage />} />
             <Route path="backup" element={<BackupPage />} />
             <Route path="departments" element={<DepartmentsPage />} />

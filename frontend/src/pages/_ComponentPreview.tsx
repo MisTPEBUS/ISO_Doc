@@ -17,6 +17,7 @@ import {
   type SidebarNavGroup,
 } from '../components/common'
 import { IsoDocumentPermissionMatrix } from '../components/uikit/IsoDocumentPermissionMatrix'
+import { IsoDocumentInlineEntryPreview } from '../components/uikit/IsoDocumentInlineEntryPreview'
 
 interface PreviewSectionProps {
   title: string
@@ -456,6 +457,13 @@ export default function ComponentPreview() {
             onPageChange={setPage}
             className="mt-2"
           />
+        </PreviewSection>
+
+        <PreviewSection
+          title="ISO 文件登錄資料匯入"
+          description="參考 inline entry prototype：Excel 拖放解析、欄位對應，以及可直接編輯、新增與刪除的文件資料表。"
+        >
+          <IsoDocumentInlineEntryPreview />
         </PreviewSection>
 
         <PreviewSection

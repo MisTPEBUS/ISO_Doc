@@ -316,9 +316,20 @@ export function AdminDocumentsPage() {
             管理 ISO 文件主檔並檢視版本歷程。
           </p>
         </div>
-        <Button disabled={companyId === undefined} onClick={openCreateForm}>
-          新增文件
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            disabled={companyId === undefined}
+            onClick={() =>
+              navigate('/admin/documents/import', { state: { companyId } })
+            }
+          >
+            匯入 Excel
+          </Button>
+          <Button disabled={companyId === undefined} onClick={openCreateForm}>
+            新增文件
+          </Button>
+        </div>
       </div>
 
       {successMessage && (

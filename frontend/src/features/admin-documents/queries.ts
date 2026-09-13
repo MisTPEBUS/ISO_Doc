@@ -58,6 +58,16 @@ export function useUpdateAdminDocument() {
   })
 }
 
+export function useBulkImportAdminDocuments() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: adminDocumentsApi.bulkImport,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: adminDocumentKeys.lists() })
+    },
+  })
+}
+
 export function useDeleteAdminDocument() {
   const queryClient = useQueryClient()
   return useMutation({

@@ -3,6 +3,8 @@ import type { PagedResult } from '@/types/pagination'
 
 import type {
   AdminDocument,
+  BulkImportDocumentsRequest,
+  BulkImportDocumentsResponse,
   CreateAdminDocumentRequest,
   DocumentDetail,
   ListAdminDocumentsParams,
@@ -34,4 +36,13 @@ export function update(
 
 export function remove(id: string): Promise<void> {
   return httpClient.delete<void>(`/documents/${id}`)
+}
+
+export function bulkImport(
+  request: BulkImportDocumentsRequest,
+): Promise<BulkImportDocumentsResponse> {
+  return httpClient.post<BulkImportDocumentsResponse, BulkImportDocumentsRequest>(
+    '/documents/bulk-import',
+    request,
+  )
 }
