@@ -7,7 +7,10 @@ Reverse Proxy 終止 TLS 後轉發進來。三個 service 都不對外露 port�
 ## 前置需求
 
 - NAS 已開 SSH，且 DSM 版本的 Container Manager 支援 `docker compose`（v2 CLI）
-- 已在 DSM 建立要用的資料夾（下面步驟會建立）
+- 已在 DSM **控制台 → 共用資料夾** 建立一個叫 `ISO` 的共用資料夾（對應 `/volume1/ISO`）——
+  文件/附件會直接放在這裡，才能用 File Station 瀏覽。單純用 SSH `mkdir /volume1/ISO`
+  不會自動變成共用資料夾，一定要透過 DSM 控制台建立。
+- 其餘資料夾（`docker` 共用資料夾底下放 postgres 資料）下面步驟會建立
 
 ## 第一次部署
 
@@ -28,7 +31,19 @@ net use Z: \\<NAS-IP>\docker
 robocopy D:\Lobinda\Project\ISO Z:\iso\app /E /XD .git node_modules bin obj storage-data dist .vs .idea
 ```
 
-或整包壓縮後用 scp 傳過去（只有 SSH、沒有 SMB 的情況）：
+或用 [WinSCP](https://winscp.net/) 這類圖形化 SFTP client：連上 NAS（Protocol 選
+SFTP/SCP，帳密跟 SSH 一樣），把整個專案資料夾拖到 `/volume1/docker/iso/app`。上傳前
+在「Transfer Settings」設排除規則（不然 `node_modules`/`bin`/`obj` 會傳很久，
+`storage-data` 更不該把本機開發資料誤傳上去蓋掉 NAS 正式資料）：
+
+```text
+|.git/; node_modules/; bin/; obj/; backend\storage-data/; frontend\dist/; .vs/; .idea/
+```
+
+傳完後 docker compose 指令還是要下：WinSCP 選單 **Commands → Open Terminal** 可以在
+同一個連線直接開終端機，或另開 PuTTY / Windows 內建 `ssh` 連進去執行下面的指令。
+
+也可以整包壓縮後用 scp 傳過去（只有 SSH、沒有 SMB 的情況）：
 
 ```bash
 tar --exclude=.git --exclude=node_modules --exclude=bin --exclude=obj \
@@ -44,8 +59,11 @@ cd /volume1/docker/iso/app/deploy/nas
 
 # 2. 建立資料目錄，權限對齊 backend Dockerfile 裡固定的 UID/GID(1654:1654)
 mkdir -p /volume1/docker/iso/postgres-data
-mkdir -p /volume1/docker/iso/storage-data/{store,staging,trash}
-chown -R 1654:1654 /volume1/docker/iso/storage-data
+mkdir -p /volume1/ISO/{store,staging,trash}
+chown -R 1654:1654 /volume1/ISO
+# 若要讓某個 DSM 使用者/群組能在 File Station 打開這個資料夾瀏覽，
+# 記得回 DSM 控制台 -> 共用資料夾 -> ISO -> 編輯權限，額外授予該帳號讀取權限
+# （DSM admin 預設就能透過 File Station 看到，不需要額外設定）
 
 # 3. 建立正式環境變數檔
 cp .env.nas.example .env.nas
@@ -70,7 +88,7 @@ docker cp iso-postgres-development:/tmp/iso_dev.dump ./iso_dev.dump
 
 # 傳到 NAS（scp 需要 Windows 內建 OpenSSH client，或改用 mapped SMB 磁碟機 + robocopy）
 scp ./iso_dev.dump <nasuser>@<nas-host>:/volume1/docker/iso/migration/iso_dev.dump
-scp -r backend/storage-data/store <nasuser>@<nas-host>:/volume1/docker/iso/storage-data/store
+scp -r backend/storage-data/store <nasuser>@<nas-host>:/volume1/ISO/store
 # 只搬 store/，staging/ 跟 trash/ 是暫存/軟刪除區，不要搬
 ```
 
