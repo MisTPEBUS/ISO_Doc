@@ -52,6 +52,16 @@ export function useUpdateUser() {
   })
 }
 
+export function useBatchCreateUsers() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: usersApi.batchCreate,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: userKeys.lists() })
+    },
+  })
+}
+
 export function useDeleteUser() {
   const queryClient = useQueryClient()
   return useMutation({

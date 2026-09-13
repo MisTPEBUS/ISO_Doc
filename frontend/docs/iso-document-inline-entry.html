@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ISO 文件登錄資料匯入</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-subtle: #eff6ff;
+      --surface: #ffffff;
+      --surface-header: #f1f5f9;
+      --canvas: #f8fafc;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --line-strong: #cbd5e1;
+      --danger: #dc2626;
+      --danger-subtle: #fef2f2;
+      --success: #059669;
+      --success-subtle: #ecfdf5;
+      --color-state-expiring-subtle: #fffbeb;
+      --font: Inter, "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+      --mono: "IBM Plex Mono", Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: var(--font);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    button, input, select { font: inherit; }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    .drop-zone:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    .page {
+      width: min(1480px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 48px;
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 16px;
+    }
+
+    .page-title {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .page-subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .panel {
+      margin-bottom: 16px;
+      border: 1px solid var(--line-strong);
+      background: var(--surface);
+    }
+
+    .panel-header {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-header);
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .panel-body { padding: 16px; }
+
+    .drop-zone {
+      min-height: 150px;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      border: 2px dashed var(--line-strong);
+      background: var(--canvas);
+      cursor: pointer;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.is-dragging {
+      border-color: var(--primary);
+      background: var(--primary-subtle);
+    }
+
+    .drop-content { text-align: center; }
+
+    .drop-title {
+      margin: 0;
+      font-weight: 600;
+    }
+
+    .drop-help {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .file-input { display: none; }
+
+    .toolbar,
+    .actions,
+    .summary {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar {
+      justify-content: space-between;
+      margin-top: 12px;
+    }
+
+    .file-meta,
+    .summary {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .summary strong {
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .btn {
+      min-height: 36px;
+      padding: 6px 12px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover { background: var(--primary-hover); }
+
+    .btn-secondary {
+      border-color: var(--line);
+      background: var(--surface);
+      color: var(--ink);
+    }
+
+    .btn-secondary:hover { background: var(--surface-header); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .status {
+      margin-top: 12px;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .status.success {
+      color: var(--success);
+      background: var(--success-subtle);
+    }
+
+    .status.error {
+      color: var(--danger);
+      background: var(--danger-subtle);
+    }
+
+    .mapping-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(220px, 1fr));
+      gap: 12px 16px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .field label {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .field select {
+      height: 36px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .field small {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      min-width: 1120px;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    th, td {
+      padding: 8px 10px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th:last-child,
+    td:last-child { border-right: 0; }
+
+    th {
+      height: 48px;
+      background: var(--color-state-expiring-subtle);
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    tbody tr:hover { background: var(--primary-subtle); }
+
+    .manual-row {
+      background: var(--primary-subtle);
+    }
+
+    .col-code { width: 160px; font-family: var(--mono); }
+    .col-name { width: 34%; }
+    .col-pages { width: 80px; text-align: right; }
+    .col-date { width: 140px; }
+    .col-revision { width: 90px; font-family: var(--mono); }
+    .col-action { width: 110px; text-align: center; }
+
+    .cell-input {
+      width: 100%;
+      height: 34px;
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--surface);
+      color: var(--ink);
+    }
+
+    .cell-input:focus {
+      border-color: var(--primary);
+      outline: 1px solid var(--primary);
+    }
+
+    .cell-input.number { text-align: right; }
+
+    .row-actions {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .row-btn {
+      min-height: 28px;
+      padding: 3px 7px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--primary);
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .row-btn:hover { background: var(--surface-header); }
+    .row-btn.danger { color: var(--danger); }
+
+    .source-label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .empty-row td {
+      padding: 36px 16px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .hidden { display: none !important; }
+
+    details {
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      background: var(--canvas);
+    }
+
+    summary {
+      cursor: pointer;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    pre {
+      max-height: 280px;
+      overflow: auto;
+      margin: 0;
+      padding: 12px;
+      border-top: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 900px) {
+      .mapping-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .page { width: calc(100% - 20px); padding-top: 12px; }
+      .page-header { flex-direction: column; }
+      .mapping-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="page">
+    <header class="page-header">
+      <div>
+        <h1 class="page-title">ISO 文件登錄資料匯入</h1>
+        <p class="page-subtitle">可直接在表格新增一筆資料，也可以拖曳 Excel 解析。</p>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Excel 匯入</h2>
+      </div>
+
+      <div class="panel-body">
+        <div id="dropZone" class="drop-zone" tabindex="0" role="button">
+          <div class="drop-content">
+            <p class="drop-title">拖曳 Excel 到這裡，或點擊選擇檔案</p>
+            <p class="drop-help">支援 .xlsx / .xls，會自動尋找表頭。</p>
+          </div>
+        </div>
+
+        <input id="fileInput" class="file-input" type="file"
+          accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+
+        <div class="toolbar">
+          <div id="fileMeta" class="file-meta">尚未選擇 Excel</div>
+
+          <div class="actions">
+            <button id="addRowBtn" class="btn btn-primary" type="button">＋ 新增一筆</button>
+            <button id="clearExcelBtn" class="btn btn-secondary" type="button" disabled>清除 Excel</button>
+            <button id="downloadJsonBtn" class="btn btn-secondary" type="button" disabled>下載 JSON</button>
+          </div>
+        </div>
+
+        <div id="statusBox" class="status">可直接新增一筆，或匯入 Excel。</div>
+      </div>
+    </section>
+
+    <section id="mappingPanel" class="panel hidden">
+      <div class="panel-header">
+        <h2 class="panel-title">Excel 欄位對應</h2>
+        <div id="mappingMeta" class="summary"></div>
+      </div>
+
+      <div class="panel-body">
+        <div id="mappingGrid" class="mapping-grid"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2 class="panel-title">文件資料</h2>
+        <div class="summary">
+          <span>共 <strong id="rowCount">0</strong> 筆</span>
+          <span>手動 <strong id="manualCount">0</strong> 筆</span>
+          <span>Excel <strong id="excelCount">0</strong> 筆</span>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-code">文件編號</th>
+              <th class="col-name">文件名稱</th>
+              <th class="col-pages">頁數</th>
+              <th class="col-date">核准日期</th>
+              <th class="col-date">公告發行日期</th>
+              <th class="col-revision">版次</th>
+              <th class="col-action">操作</th>
+            </tr>
+          </thead>
+
+          <tbody id="previewBody">
+            <tr class="empty-row">
+              <td colspan="7">按「新增一筆」即可直接在表格內輸入。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel-body">
+        <details>
+          <summary>查看 JSON</summary>
+          <pre id="jsonPreview">[]</pre>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const TARGETS = [
+      {
+        key: "documentCode",
+        label: "文件編號",
+        aliases: ["文件編號", "文件代號", "文號", "編號", "documentcode", "code"]
+      },
+      {
+        key: "documentName",
+        label: "文件名稱",
+        aliases: ["文件名稱", "文件名", "名稱", "documentname", "title", "name"]
+      },
+      {
+        key: "pageCount",
+        label: "頁數",
+        aliases: ["頁數", "頁碼", "pages", "pagecount"]
+      },
+      {
+        key: "approvedDate",
+        label: "核准日期",
+        aliases: ["核准日期", "核定日期", "批准日期", "approveddate", "approvaldate"]
+      },
+      {
+        key: "issuedDate",
+        label: "公告發行日期",
+        aliases: ["公告發行日期", "發行日期", "公告日期", "issueddate", "releasedate"]
+      },
+      {
+        key: "revision",
+        label: "版次",
+        aliases: ["版次", "版本", "版本號", "revision", "version"]
+      }
+    ];
+
+    const state = {
+      file: null,
+      worksheetName: "",
+      headerRowIndex: -1,
+      sourceHeaders: [],
+      sourceRows: [],
+      mapping: {},
+      excelRows: [],
+      manualRows: []
+    };
+
+    const dropZone = document.getElementById("dropZone");
+    const fileInput = document.getElementById("fileInput");
+    const addRowBtn = document.getElementById("addRowBtn");
+    const clearExcelBtn = document.getElementById("clearExcelBtn");
+    const downloadJsonBtn = document.getElementById("downloadJsonBtn");
+    const fileMeta = document.getElementById("fileMeta");
+    const statusBox = document.getElementById("statusBox");
+    const mappingPanel = document.getElementById("mappingPanel");
+    const mappingGrid = document.getElementById("mappingGrid");
+    const mappingMeta = document.getElementById("mappingMeta");
+    const previewBody = document.getElementById("previewBody");
+    const rowCount = document.getElementById("rowCount");
+    const manualCount = document.getElementById("manualCount");
+    const excelCount = document.getElementById("excelCount");
+    const jsonPreview = document.getElementById("jsonPreview");
+
+    function blankRow() {
+      return {
+        documentCode: "",
+        documentName: "",
+        pageCount: "",
+        approvedDate: "",
+        issuedDate: "",
+        revision: ""
+      };
+    }
+
+    function normalize(value) {
+      return String(value ?? "")
+        .replace(/\s+/g, "")
+        .replace(/[：:()（）【】\[\]\-_]/g, "")
+        .toLowerCase();
+    }
+
+    function clean(value) {
+      return value === null || value === undefined ? "" : String(value).trim();
+    }
+
+    function scoreHeaderRow(row) {
+      const cells = row.map(normalize);
+      let score = 0;
+
+      TARGETS.forEach(target => {
+        const hit = cells.some(cell =>
+          target.aliases.some(alias => {
+            const a = normalize(alias);
+            return cell === a || cell.includes(a) || a.includes(cell);
+          })
+        );
+
+        if (hit) score++;
+      });
+
+      return score;
+    }
+
+    function detectHeaderRow(rows) {
+      let best = { index: -1, score: 0 };
+      const limit = Math.min(rows.length, 30);
+
+      for (let i = 0; i < limit; i++) {
+        const score = scoreHeaderRow(rows[i] || []);
+        if (score > best.score) best = { index: i, score };
+      }
+
+      return best;
+    }
+
+    function autoMap(headers) {
+      const result = {};
+
+      TARGETS.forEach(target => {
+        const aliases = target.aliases.map(normalize);
+
+        let index = headers.findIndex(header =>
+          aliases.includes(normalize(header))
+        );
+
+        if (index === -1) {
+          index = headers.findIndex(header => {
+            const h = normalize(header);
+            return aliases.some(alias => h.includes(alias) || alias.includes(h));
+          });
+        }
+
+        result[target.key] = index >= 0 ? index : "";
+      });
+
+      return result;
+    }
+
+    function buildExcelRows() {
+      state.excelRows = state.sourceRows
+        .filter(row => row.some(cell => clean(cell) !== ""))
+        .map(sourceRow => {
+          const result = blankRow();
+
+          TARGETS.forEach(target => {
+            const sourceIndex = state.mapping[target.key];
+
+            if (sourceIndex !== "" && sourceIndex !== undefined) {
+              result[target.key] = clean(sourceRow[Number(sourceIndex)]);
+            }
+          });
+
+          return result;
+        })
+        .filter(row =>
+          Object.values(row).some(value => value !== "")
+        );
+
+      renderTable();
+    }
+
+    function renderMapping() {
+      mappingGrid.innerHTML = "";
+
+      TARGETS.forEach(target => {
+        const field = document.createElement("div");
+        field.className = "field";
+
+        const label = document.createElement("label");
+        label.textContent = target.label;
+
+        const select = document.createElement("select");
+        select.dataset.key = target.key;
+
+        const empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "— 未對應 —";
+        select.appendChild(empty);
+
+        state.sourceHeaders.forEach((header, index) => {
+          const option = document.createElement("option");
+          option.value = String(index);
+          option.textContent = `${index + 1}. ${header || "(空白欄位)"}`;
+          select.appendChild(option);
+        });
+
+        const selected = state.mapping[target.key];
+        select.value = selected === "" ? "" : String(selected);
+
+        const help = document.createElement("small");
+        help.textContent = select.value === "" ? "請手動指定" : "已自動辨識";
+
+        select.addEventListener("change", event => {
+          state.mapping[target.key] = event.target.value;
+          help.textContent = event.target.value === "" ? "請手動指定" : "已對應";
+          buildExcelRows();
+        });
+
+        field.append(label, select, help);
+        mappingGrid.appendChild(field);
+      });
+
+      const mapped = TARGETS.filter(target => state.mapping[target.key] !== "").length;
+
+      mappingMeta.innerHTML =
+        `<span>工作表 <strong>${escapeHtml(state.worksheetName)}</strong></span>` +
+        `<span>表頭第 <strong>${state.headerRowIndex + 1}</strong> 列</span>` +
+        `<span>辨識 <strong>${mapped} / 6</strong></span>`;
+    }
+
+    function getAllRows() {
+      return [
+        ...state.manualRows.map(row => ({ ...row, source: "manual" })),
+        ...state.excelRows.map(row => ({ ...row, source: "excel" }))
+      ];
+    }
+
+    function createInput(rowIndex, key, value, extraClass = "") {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = `cell-input ${extraClass}`.trim();
+      input.value = value;
+      input.dataset.rowIndex = String(rowIndex);
+      input.dataset.key = key;
+
+      input.addEventListener("input", event => {
+        const index = Number(event.currentTarget.dataset.rowIndex);
+        const field = event.currentTarget.dataset.key;
+
+        state.manualRows[index][field] = event.currentTarget.value;
+        updateSummary();
+      });
+
+      return input;
+    }
+
+    function renderTable() {
+      previewBody.innerHTML = "";
+
+      const fragment = document.createDocumentFragment();
+
+      state.manualRows.forEach((row, index) => {
+        const tr = document.createElement("tr");
+        tr.className = "manual-row";
+
+        const config = [
+          ["documentCode", "col-code", ""],
+          ["documentName", "col-name", ""],
+          ["pageCount", "col-pages", "number"],
+          ["approvedDate", "col-date", ""],
+          ["issuedDate", "col-date", ""],
+          ["revision", "col-revision", ""]
+        ];
+
+        config.forEach(([key, className, inputClass]) => {
+          const td = document.createElement("td");
+          td.className = className;
+          td.appendChild(createInput(index, key, row[key], inputClass));
+          tr.appendChild(td);
+        });
+
+        const actionTd = document.createElement("td");
+        actionTd.className = "col-action";
+
+        const actions = document.createElement("div");
+        actions.className = "row-actions";
+
+        const duplicateBtn = document.createElement("button");
+        duplicateBtn.type = "button";
+        duplicateBtn.className = "row-btn";
+        duplicateBtn.textContent = "複製";
+        duplicateBtn.addEventListener("click", () => {
+          state.manualRows.splice(index + 1, 0, { ...state.manualRows[index] });
+          renderTable();
+        });
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "row-btn danger";
+        deleteBtn.textContent = "刪除";
+        deleteBtn.addEventListener("click", () => {
+          state.manualRows.splice(index, 1);
+          renderTable();
+        });
+
+        actions.append(duplicateBtn, deleteBtn);
+        actionTd.appendChild(actions);
+        tr.appendChild(actionTd);
+
+        fragment.appendChild(tr);
+      });
+
+      state.excelRows.forEach(row => {
+        const tr = document.createElement("tr");
+
+        const values = [
+          ["col-code", row.documentCode],
+          ["col-name", row.documentName],
+          ["col-pages", row.pageCount],
+          ["col-date", row.approvedDate],
+          ["col-date", row.issuedDate],
+          ["col-revision", row.revision]
+        ];
+
+        values.forEach(([className, value]) => {
+          const td = document.createElement("td");
+          td.className = className;
+          td.textContent = value || "—";
+          td.title = value || "";
+          tr.appendChild(td);
+        });
+
+        const sourceTd = document.createElement("td");
+        sourceTd.className = "col-action source-label";
+        sourceTd.textContent = "Excel";
+        tr.appendChild(sourceTd);
+
+        fragment.appendChild(tr);
+      });
+
+      if (!state.manualRows.length && !state.excelRows.length) {
+        previewBody.innerHTML = `
+          <tr class="empty-row">
+            <td colspan="7">按「新增一筆」即可直接在表格內輸入。</td>
+          </tr>
+        `;
+      } else {
+        previewBody.appendChild(fragment);
+      }
+
+      updateSummary();
+    }
+
+    function updateSummary() {
+      const rows = getAllRows();
+
+      rowCount.textContent = String(rows.length);
+      manualCount.textContent = String(state.manualRows.length);
+      excelCount.textContent = String(state.excelRows.length);
+
+      const jsonRows = rows.map(({ source, ...row }) => row);
+      jsonPreview.textContent = JSON.stringify(jsonRows, null, 2);
+      downloadJsonBtn.disabled = jsonRows.length === 0;
+    }
+
+    function addManualRow() {
+      state.manualRows.push(blankRow());
+      renderTable();
+
+      requestAnimationFrame(() => {
+        const rows = previewBody.querySelectorAll(".manual-row");
+        const latest = rows[rows.length - 1];
+        latest?.querySelector("input")?.focus();
+      });
+    }
+
+    async function handleFile(file) {
+      if (!file) return;
+
+      if (!/\.(xlsx|xls)$/i.test(file.name)) {
+        setStatus("只接受 .xlsx 或 .xls 檔案。", "error");
+        return;
+      }
+
+      if (!window.XLSX) {
+        setStatus("Excel 解析套件載入失敗。", "error");
+        return;
+      }
+
+      try {
+        setStatus("正在解析 Excel…");
+
+        const buffer = await file.arrayBuffer();
+
+        const workbook = XLSX.read(buffer, {
+          type: "array",
+          cellDates: false,
+          cellText: true
+        });
+
+        const sheetName = workbook.SheetNames[0];
+        if (!sheetName) throw new Error("Excel 內沒有工作表");
+
+        const worksheet = workbook.Sheets[sheetName];
+
+        const rows = XLSX.utils.sheet_to_json(worksheet, {
+          header: 1,
+          defval: "",
+          raw: false,
+          blankrows: false
+        });
+
+        const detected = detectHeaderRow(rows);
+
+        if (detected.index < 0 || detected.score < 2) {
+          throw new Error("找不到可辨識的表頭列。");
+        }
+
+        state.file = file;
+        state.worksheetName = sheetName;
+        state.headerRowIndex = detected.index;
+        state.sourceHeaders = (rows[detected.index] || []).map((cell, index) => {
+          return clean(cell) || `未命名欄位 ${index + 1}`;
+        });
+        state.sourceRows = rows.slice(detected.index + 1);
+        state.mapping = autoMap(state.sourceHeaders);
+
+        fileMeta.textContent = `${file.name} · ${sheetName}`;
+        clearExcelBtn.disabled = false;
+        mappingPanel.classList.remove("hidden");
+
+        renderMapping();
+        buildExcelRows();
+
+        const mapped = TARGETS.filter(target => state.mapping[target.key] !== "").length;
+
+        setStatus(
+          `Excel 已解析，自動辨識 ${mapped} / 6 個欄位。`,
+          mapped === 6 ? "success" : ""
+        );
+      } catch (error) {
+        console.error(error);
+        setStatus(error?.message || "Excel 解析失敗。", "error");
+      }
+    }
+
+    function clearExcel() {
+      state.file = null;
+      state.worksheetName = "";
+      state.headerRowIndex = -1;
+      state.sourceHeaders = [];
+      state.sourceRows = [];
+      state.mapping = {};
+      state.excelRows = [];
+
+      fileInput.value = "";
+      fileMeta.textContent = "尚未選擇 Excel";
+      clearExcelBtn.disabled = true;
+      mappingPanel.classList.add("hidden");
+      mappingGrid.innerHTML = "";
+      mappingMeta.innerHTML = "";
+
+      setStatus("Excel 已清除，手動輸入資料保留。");
+      renderTable();
+    }
+
+    function downloadJson() {
+      const rows = getAllRows().map(({ source, ...row }) => row);
+      if (!rows.length) return;
+
+      const blob = new Blob(
+        [JSON.stringify(rows, null, 2)],
+        { type: "application/json;charset=utf-8" }
+      );
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+
+      a.href = url;
+      a.download = "iso-documents.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+    }
+
+    function setStatus(message, type = "") {
+      statusBox.className = "status";
+      if (type) statusBox.classList.add(type);
+      statusBox.textContent = message;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    dropZone.addEventListener("click", () => fileInput.click());
+
+    dropZone.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        fileInput.click();
+      }
+    });
+
+    fileInput.addEventListener("change", event => {
+      handleFile(event.target.files?.[0]);
+    });
+
+    ["dragenter", "dragover"].forEach(type => {
+      dropZone.addEventListener(type, event => {
+        event.preventDefault();
+        dropZone.classList.add("is-dragging");
+      });
+    });
+
+    ["dragleave", "drop"].forEach(type => {
+      dropZone.addEventListener(type, event => {
+        event.preventDefault();
+        dropZone.classList.remove("is-dragging");
+      });
+    });
+
+    dropZone.addEventListener("drop", event => {
+      handleFile(event.dataTransfer?.files?.[0]);
+    });
+
+    addRowBtn.addEventListener("click", addManualRow);
+    clearExcelBtn.addEventListener("click", clearExcel);
+    downloadJsonBtn.addEventListener("click", downloadJson);
+  </script>
+</body>
+</html>

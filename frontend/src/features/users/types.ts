@@ -64,3 +64,26 @@ export interface UpdateUserRequest {
 export interface ResetPasswordResponse {
   temporaryPassword: string
 }
+
+export interface BatchCreateUsersRequest {
+  users: CreateUserRequest[]
+}
+
+export interface BatchCreateUserSuccess {
+  index: number
+  user: UserResponse
+}
+
+export interface BatchCreateUserFailure {
+  index: number
+  originalData: CreateUserRequest
+  errors: Record<string, string[]>
+}
+
+export interface BatchCreateUsersResponse {
+  total: number
+  successCount: number
+  failureCount: number
+  succeeded: BatchCreateUserSuccess[]
+  failed: BatchCreateUserFailure[]
+}

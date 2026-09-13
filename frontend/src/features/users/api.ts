@@ -2,6 +2,8 @@ import { httpClient } from '@/api/httpClient'
 import type { PagedResult } from '@/types/pagination'
 
 import type {
+  BatchCreateUsersRequest,
+  BatchCreateUsersResponse,
   CreateUserRequest,
   ListUsersParams,
   ResetPasswordResponse,
@@ -19,6 +21,15 @@ export function get(id: string): Promise<UserResponse> {
 
 export function create(request: CreateUserRequest): Promise<UserResponse> {
   return httpClient.post<UserResponse, CreateUserRequest>('/users', request)
+}
+
+export function batchCreate(
+  request: BatchCreateUsersRequest,
+): Promise<BatchCreateUsersResponse> {
+  return httpClient.post<BatchCreateUsersResponse, BatchCreateUsersRequest>(
+    '/users/batch',
+    request,
+  )
 }
 
 export function update(id: string, request: UpdateUserRequest): Promise<UserResponse> {

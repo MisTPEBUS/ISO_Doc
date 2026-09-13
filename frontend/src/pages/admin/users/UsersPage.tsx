@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { lazy, Suspense, useState, type FormEvent } from "react";
 
 import { ApiError } from "@/api/httpClient";
 import {
@@ -10,6 +10,7 @@ import {
   Modal,
   Pagination,
   Select,
+  Spinner,
   Table,
   type TableColumn,
 } from "@/components/common";
@@ -36,6 +37,12 @@ import {
   type ManagedUserRole,
   type UserResponse,
 } from "@/features/users/types";
+
+const UserBatchImportPanel = lazy(() =>
+  import("@/features/users/components/UserBatchImportPanel").then((module) => ({
+    default: module.UserBatchImportPanel,
+  })),
+);
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -101,6 +108,7 @@ export function UsersPage() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [batchMode, setBatchMode] = useState(false);
   const [editingUser, setEditingUser] = useState<UserResponse>();
   const [formOpen, setFormOpen] = useState(false);
   const [formValues, setFormValues] = useState<UserFormValues>(EMPTY_FORM);
@@ -462,12 +470,23 @@ export function UsersPage() {
             管理帳號、角色、所屬部門與登入狀態。
           </p>
         </div>
-        <Button
-          disabled={companyId === undefined || departments.isPending}
-          onClick={openCreateForm}
-        >
-          新增使用者
-        </Button>
+        {!batchMode && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              disabled={companyId === undefined || departments.isPending}
+              onClick={() => setBatchMode(true)}
+            >
+              批次匯入
+            </Button>
+            <Button
+              disabled={companyId === undefined || departments.isPending}
+              onClick={openCreateForm}
+            >
+              新增使用者
+            </Button>
+          </div>
+        )}
       </div>
 
       {successMessage && (
@@ -493,131 +512,152 @@ export function UsersPage() {
         </Alert>
       )}
 
-      <form
-        className="border border-line-strong bg-surface p-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setKeyword(keywordInput.trim());
-          setPage(1);
-        }}
-      >
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {isSystemAdmin && (
-            <FormField label="公司" htmlFor="user-company-filter">
-              <Select
-                id="user-company-filter"
-                value={selectedCompanyId}
-                disabled={companies.isPending || companies.isError}
-                onChange={(event) => {
-                  setSelectedCompanyId(event.target.value);
-                  setSelectedDeptId("");
-                  setPage(1);
-                }}
-              >
-                {companies.isPending && <option value="">公司載入中</option>}
-                {companies.data?.items.map((company) => (
-                  <option key={company.id} value={company.id}>
-                    {company.code} — {company.name}
-                  </option>
-                ))}
-              </Select>
-            </FormField>
-          )}
-          <FormField label="關鍵字" htmlFor="user-keyword">
-            <Input
-              id="user-keyword"
-              value={keywordInput}
-              placeholder="輸入關鍵字"
-              onChange={(event) => setKeywordInput(event.target.value)}
-            />
-          </FormField>
-
-          <div className="flex items-end gap-2">
-            <label className="flex h-control flex-1 cursor-pointer items-center gap-2 text-label text-ink">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={includeInactive}
-                onChange={(event) => {
-                  setIncludeInactive(event.target.checked);
-                  setPage(1);
-                }}
-              />
-              包含停用帳號
-            </label>
-            <Button type="submit" variant="secondary">
-              搜尋
-            </Button>
-          </div>
-        </div>
-      </form>
-
-      <div className="border-x border-b border-line-strong bg-surface">
-        <div className="flex h-row items-center justify-between border-b border-line px-4">
-          <p className="text-meta text-ink-muted">
-            共{" "}
-            <span className="tabular font-medium text-ink">
-              {users.data?.totalCount ?? 0}
-            </span>{" "}
-            位使用者
-          </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={users.isFetching}
-            loadingText="載入中"
-            onClick={() => void users.refetch()}
-          >
-            重新整理
-          </Button>
-        </div>
-        <Table
-          className="border-0"
-          columns={columns}
-          data={users.data?.items ?? []}
-          loading={users.isPending}
-          skeletonRows={6}
-          getRowKey={(user) => user.id}
-          caption="使用者清單"
-          emptyMessage={
-            <div className="py-5">
-              <p className="font-medium text-ink">
-                {hasFilters ? "沒有符合條件的使用者" : "尚未建立任何使用者"}
-              </p>
-              <p className="mt-1 text-meta">
-                {hasFilters
-                  ? "請調整搜尋條件後再試一次。"
-                  : "建立第一位使用者以開始管理系統帳號。"}
-              </p>
-              {hasFilters ? (
-                <Button
-                  className="mt-4"
-                  variant="secondary"
-                  onClick={clearFilters}
-                >
-                  清除篩選
-                </Button>
-              ) : (
-                <Button
-                  className="mt-4"
-                  variant="secondary"
-                  onClick={openCreateForm}
-                >
-                  新增使用者
-                </Button>
-              )}
+      {batchMode && companyId !== undefined ? (
+        <Suspense
+          fallback={
+            <div className="flex h-40 items-center justify-center gap-2 border border-line-strong bg-surface text-meta text-ink-muted">
+              <Spinner size="sm" decorative />
+              載入批次匯入元件中
             </div>
           }
-        />
-        <Pagination
-          className="border-t border-line px-4"
-          page={users.data?.page ?? page}
-          pageSize={pageSize}
-          totalCount={users.data?.totalCount ?? 0}
-          onPageSizeChange={handlePageSizeChange}
-          onPageChange={setPage}
-        />
-      </div>
+        >
+          <UserBatchImportPanel
+            companyId={companyId}
+            isSystemAdmin={isSystemAdmin}
+            onCancel={() => setBatchMode(false)}
+          />
+        </Suspense>
+      ) : (
+        <>
+          <form
+            className="border border-line-strong bg-surface p-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setKeyword(keywordInput.trim());
+              setPage(1);
+            }}
+          >
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {isSystemAdmin && (
+                <FormField label="公司" htmlFor="user-company-filter">
+                  <Select
+                    id="user-company-filter"
+                    value={selectedCompanyId}
+                    disabled={companies.isPending || companies.isError}
+                    onChange={(event) => {
+                      setSelectedCompanyId(event.target.value);
+                      setSelectedDeptId("");
+                      setPage(1);
+                    }}
+                  >
+                    {companies.isPending && (
+                      <option value="">公司載入中</option>
+                    )}
+                    {companies.data?.items.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.code} — {company.name}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+              )}
+              <FormField label="關鍵字" htmlFor="user-keyword">
+                <Input
+                  id="user-keyword"
+                  value={keywordInput}
+                  placeholder="輸入關鍵字"
+                  onChange={(event) => setKeywordInput(event.target.value)}
+                />
+              </FormField>
+
+              <div className="flex items-end gap-2">
+                <label className="flex h-control flex-1 cursor-pointer items-center gap-2 text-label text-ink">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={includeInactive}
+                    onChange={(event) => {
+                      setIncludeInactive(event.target.checked);
+                      setPage(1);
+                    }}
+                  />
+                  包含停用帳號
+                </label>
+                <Button type="submit" variant="secondary">
+                  搜尋
+                </Button>
+              </div>
+            </div>
+          </form>
+
+          <div className="border-x border-b border-line-strong bg-surface">
+            <div className="flex h-row items-center justify-between border-b border-line px-4">
+              <p className="text-meta text-ink-muted">
+                共{" "}
+                <span className="tabular font-medium text-ink">
+                  {users.data?.totalCount ?? 0}
+                </span>{" "}
+                位使用者
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={users.isFetching}
+                loadingText="載入中"
+                onClick={() => void users.refetch()}
+              >
+                重新整理
+              </Button>
+            </div>
+            <Table
+              className="border-0"
+              columns={columns}
+              data={users.data?.items ?? []}
+              loading={users.isPending}
+              skeletonRows={6}
+              getRowKey={(user) => user.id}
+              caption="使用者清單"
+              emptyMessage={
+                <div className="py-5">
+                  <p className="font-medium text-ink">
+                    {hasFilters ? "沒有符合條件的使用者" : "尚未建立任何使用者"}
+                  </p>
+                  <p className="mt-1 text-meta">
+                    {hasFilters
+                      ? "請調整搜尋條件後再試一次。"
+                      : "建立第一位使用者以開始管理系統帳號。"}
+                  </p>
+                  {hasFilters ? (
+                    <Button
+                      className="mt-4"
+                      variant="secondary"
+                      onClick={clearFilters}
+                    >
+                      清除篩選
+                    </Button>
+                  ) : (
+                    <Button
+                      className="mt-4"
+                      variant="secondary"
+                      onClick={openCreateForm}
+                    >
+                      新增使用者
+                    </Button>
+                  )}
+                </div>
+              }
+            />
+            <Pagination
+              className="border-t border-line px-4"
+              page={users.data?.page ?? page}
+              pageSize={pageSize}
+              totalCount={users.data?.totalCount ?? 0}
+              onPageSizeChange={handlePageSizeChange}
+              onPageChange={setPage}
+            />
+          </div>
+        </>
+      )}
 
       <Modal
         open={formOpen}
@@ -845,7 +885,6 @@ export function UsersPage() {
         }}
         size="sm"
         title="停用使用者"
-        description="停用後，使用者將無法登入；資料與歷史紀錄仍會保留。"
         footer={
           <>
             <Button
