@@ -25,14 +25,14 @@ public sealed class EfAttachmentVersionStore(IsoDbContext dbContext) : IAttachme
              company.Code))
         .SingleOrDefaultAsync(cancellationToken);
 
-    public Task<bool> VersionExistsAsync(
+    public Task<AttachmentVersion?> FindLatestVersionAsync(
         Guid attachmentId,
-        string version,
         CancellationToken cancellationToken) =>
-        dbContext.AttachmentVersions.AnyAsync(
-            candidate => candidate.AttachmentId == attachmentId
-                && candidate.Version == version,
-            cancellationToken);
+        dbContext.AttachmentVersions
+            .Where(version => version.AttachmentId == attachmentId)
+            .OrderByDescending(version => version.VersionMajor)
+            .ThenByDescending(version => version.VersionMinor)
+            .FirstOrDefaultAsync(cancellationToken);
 
     public async Task<IReadOnlyList<AttachmentVersion>> ListPublishedVersionsAsync(
         Guid attachmentId,

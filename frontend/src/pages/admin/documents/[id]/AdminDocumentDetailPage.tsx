@@ -8,12 +8,21 @@ import {
   FormField,
   Input,
   Modal,
+  Select,
   Spinner,
   Textarea,
 } from "@/components/common";
+import { AttachmentBatchImportPanel } from "@/features/admin-documents/components/AttachmentBatchImportPanel";
+import {
+  createAttachmentVersionFormSchema,
+  type AttachmentVersionFormValues,
+} from "@/features/admin-documents/attachmentSchemas";
 import {
   useAdminDocument,
+  useAttachmentDetail,
+  useCreateAttachmentVersion,
   useCreateVersion,
+  useDeleteAttachment,
 } from "@/features/admin-documents/queries";
 import {
   createVersionFormSchema,
@@ -22,16 +31,21 @@ import {
 } from "@/features/admin-documents/versionSchemas";
 import {
   DOCUMENT_VERSION_STATUS,
+  type Attachment,
   type DocumentVersionStatus,
 } from "@/features/admin-documents/types";
 import { useCurrentUser } from "@/features/auth/queries";
 import { USER_ROLE } from "@/features/auth/types";
 import { useCompanies } from "@/features/companies/queries";
+import { useDownloadAttachment } from "@/features/documents/queries";
 
-const VERSION_STATUS: Record<
-  DocumentVersionStatus,
-  { label: string; dotClassName: string; textClassName: string }
-> = {
+type VersionStatusPresentation = {
+  label: string;
+  dotClassName: string;
+  textClassName: string;
+};
+
+const VERSION_STATUS: Record<DocumentVersionStatus, VersionStatusPresentation> = {
   [DOCUMENT_VERSION_STATUS.Draft]: {
     label: "草稿",
     dotClassName: "bg-ink-muted",
@@ -48,6 +62,23 @@ const VERSION_STATUS: Record<
     textClassName: "text-state-obsolete",
   },
 };
+
+const UNKNOWN_VERSION_STATUS: VersionStatusPresentation = {
+  label: "未知狀態",
+  dotClassName: "bg-ink-muted",
+  textClassName: "text-ink-muted",
+};
+
+function getVersionStatusPresentation(status: unknown): VersionStatusPresentation {
+  if (typeof status !== "string") return UNKNOWN_VERSION_STATUS;
+
+  const normalizedStatus = status.toUpperCase();
+  if (normalizedStatus in VERSION_STATUS) {
+    return VERSION_STATUS[normalizedStatus as DocumentVersionStatus];
+  }
+
+  return UNKNOWN_VERSION_STATUS;
+}
 
 type VersionFieldErrors = Partial<Record<keyof VersionFormValues, string>>;
 
@@ -76,13 +107,17 @@ function emptyVersionForm(version = "1.0"): VersionFormValues {
   };
 }
 
+function emptyAttachmentVersionForm(): AttachmentVersionFormValues {
+  return { changeType: "MINOR", effectiveDate: "", file: null };
+}
+
 function firstMessage(messages: string[] | undefined): string | undefined {
   return messages?.[0];
 }
 
-function apiFieldMessage(
+function apiFieldMessage<TField extends string>(
   errors: Record<string, string[]>,
-  field: keyof VersionFormValues,
+  field: TField,
 ): string | undefined {
   const entry = Object.entries(errors).find(
     ([key]) => key.toLowerCase() === field.toLowerCase(),
@@ -121,6 +156,37 @@ function versionErrorMessage(error: unknown): string {
   return error.detail ?? "無法更新文件版本，請稍後再試。";
 }
 
+function attachmentVersionErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) {
+    return "目前無法連線到系統，請稍後再試。";
+  }
+
+  if (error.status === 404) {
+    return "找不到這個附件，請重新整理頁面後再試。";
+  }
+
+  if (error.status === 409) {
+    const message = `${error.title} ${error.detail ?? ""}`.toLowerCase();
+    if (message.includes("停用") || message.includes("inactive")) {
+      return "附件已停用，無法新增版本。";
+    }
+    if (message.includes("版本號") || message.includes("version")) {
+      return error.detail ?? "此附件已存在相同的版本號。";
+    }
+    return "其他管理員可能同時發布版本，請重新整理後再試。";
+  }
+
+  return error.detail ?? "無法更新附件版本，請稍後再試。";
+}
+
+function attachmentErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError)) {
+    return "目前無法連線到系統，請稍後再試。";
+  }
+
+  return error.detail ?? fallback;
+}
+
 export function AdminDocumentDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -136,7 +202,153 @@ export function AdminDocumentDetailPage() {
   const [versionFieldErrors, setVersionFieldErrors] =
     useState<VersionFieldErrors>({});
   const [versionFormError, setVersionFormError] = useState<string>();
-  const [successMessage, setSuccessMessage] = useState<string>();
+
+  const deleteAttachment = useDeleteAttachment();
+  const createAttachmentVersion = useCreateAttachmentVersion();
+  const downloadAttachment = useDownloadAttachment();
+
+  const [addAttachmentOpen, setAddAttachmentOpen] = useState(false);
+  const [attachmentDownloadError, setAttachmentDownloadError] =
+    useState<string>();
+
+  const [deleteAttachmentTarget, setDeleteAttachmentTarget] =
+    useState<Attachment>();
+  const [deleteAttachmentError, setDeleteAttachmentError] = useState<string>();
+
+  const [versionAttachment, setVersionAttachment] = useState<Attachment>();
+  const attachmentDetail = useAttachmentDetail(
+    id,
+    versionAttachment?.attachmentId,
+  );
+  const [attachmentVersionFormKey, setAttachmentVersionFormKey] = useState(0);
+  const [attachmentVersionValues, setAttachmentVersionValues] =
+    useState<AttachmentVersionFormValues>(emptyAttachmentVersionForm);
+  const [attachmentVersionFieldErrors, setAttachmentVersionFieldErrors] =
+    useState<Partial<Record<keyof AttachmentVersionFormValues, string>>>({});
+  const [attachmentVersionFormError, setAttachmentVersionFormError] =
+    useState<string>();
+
+  function confirmDeleteAttachment() {
+    if (id === undefined || deleteAttachmentTarget === undefined) return;
+
+    setDeleteAttachmentError(undefined);
+    deleteAttachment.mutate(
+      { documentId: id, attachmentId: deleteAttachmentTarget.attachmentId },
+      {
+        onSuccess: () => {
+          setDeleteAttachmentTarget(undefined);
+        },
+        onError: (error) => {
+          setDeleteAttachmentError(
+            attachmentErrorMessage(error, "無法刪除附件，請稍後再試。"),
+          );
+        },
+      },
+    );
+  }
+
+  function openAttachmentVersionModal(attachment: Attachment) {
+    setVersionAttachment(attachment);
+    setAttachmentVersionValues(emptyAttachmentVersionForm());
+    setAttachmentVersionFieldErrors({});
+    setAttachmentVersionFormError(undefined);
+    setAttachmentVersionFormKey((current) => current + 1);
+  }
+
+  function handleAttachmentDownload(attachment: Attachment) {
+    const currentVersion = detail.attachments.find(
+      (item) => item.attachmentId === attachment.attachmentId,
+    )?.currentVersion;
+    if (currentVersion?.hasFile !== true) return;
+
+    setAttachmentDownloadError(undefined);
+    downloadAttachment.mutate(
+      {
+        attachmentId: attachment.attachmentId,
+        versionId: currentVersion.versionId,
+        fallbackFileName: attachment.name,
+      },
+      {
+        onError: (error) => {
+          setAttachmentDownloadError(
+            attachmentErrorMessage(error, "附件下載失敗，請稍後再試。"),
+          );
+        },
+      },
+    );
+  }
+
+  function closeAttachmentVersionModal() {
+    if (!createAttachmentVersion.isPending) setVersionAttachment(undefined);
+  }
+
+  function updateAttachmentVersionField<
+    TField extends Exclude<keyof AttachmentVersionFormValues, "file">,
+  >(
+    field: TField,
+    value: AttachmentVersionFormValues[TField],
+  ) {
+    setAttachmentVersionValues((current) => ({ ...current, [field]: value }));
+    setAttachmentVersionFieldErrors((current) => ({
+      ...current,
+      [field]: undefined,
+    }));
+    setAttachmentVersionFormError(undefined);
+  }
+
+  function handleAttachmentVersionSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAttachmentVersionFormError(undefined);
+
+    const parsed = createAttachmentVersionFormSchema.safeParse(
+      attachmentVersionValues,
+    );
+    if (!parsed.success) {
+      const errors = parsed.error.flatten().fieldErrors;
+      setAttachmentVersionFieldErrors({
+        changeType: firstMessage(errors.changeType),
+        effectiveDate: firstMessage(errors.effectiveDate),
+        file: firstMessage(errors.file),
+      });
+      return;
+    }
+
+    if (id === undefined || versionAttachment === undefined) {
+      setAttachmentVersionFormError("找不到這個附件，請重新整理頁面後再試。");
+      return;
+    }
+
+    createAttachmentVersion.mutate(
+      {
+        documentId: id,
+        attachmentId: versionAttachment.attachmentId,
+        input: parsed.data,
+      },
+      {
+        onSuccess: () => {
+          setVersionAttachment(undefined);
+        },
+        onError: (error) => {
+          if (error instanceof ApiError && error.status === 400) {
+            const errors = error.fieldErrors();
+            setAttachmentVersionFieldErrors({
+              changeType: apiFieldMessage(errors, "changeType"),
+              effectiveDate: apiFieldMessage(errors, "effectiveDate"),
+              file: apiFieldMessage(errors, "file"),
+            });
+            setAttachmentVersionFormError(
+              Object.keys(errors).length === 0
+                ? (error.detail ?? "欄位或檔案內容不正確，請檢查後重試。")
+                : undefined,
+            );
+            return;
+          }
+
+          setAttachmentVersionFormError(attachmentVersionErrorMessage(error));
+        },
+      },
+    );
+  }
 
   function openVersionModal() {
     setVersionValues(
@@ -144,7 +356,6 @@ export function AdminDocumentDetailPage() {
     );
     setVersionFieldErrors({});
     setVersionFormError(undefined);
-    setSuccessMessage(undefined);
     setVersionFormKey((current) => current + 1);
     setVersionModalOpen(true);
   }
@@ -187,9 +398,8 @@ export function AdminDocumentDetailPage() {
     createVersion.mutate(
       { documentId: id, input: parsed.data },
       {
-        onSuccess: (version) => {
+        onSuccess: () => {
           setVersionModalOpen(false);
-          setSuccessMessage(`版本 ${version.version} 已發布，文件詳情已更新。`);
         },
         onError: (error) => {
           if (error instanceof ApiError && error.status === 400) {
@@ -256,10 +466,11 @@ export function AdminDocumentDetailPage() {
     ? companies.data?.items.find((company) => company.id === detail.companyId)
         ?.name
     : currentUser.data?.companyName;
-  const downloadableVersion = detail.currentVersion?.status ===
-    DOCUMENT_VERSION_STATUS.Published && detail.currentVersion.hasFile
-    ? detail.currentVersion
-    : undefined;
+  const downloadableVersion =
+    detail.currentVersion?.status === DOCUMENT_VERSION_STATUS.Published &&
+    detail.currentVersion.hasFile
+      ? detail.currentVersion
+      : undefined;
 
   return (
     <section>
@@ -273,18 +484,6 @@ export function AdminDocumentDetailPage() {
           )}
         </div>
       </div>
-
-      {successMessage && (
-        <Alert
-          className="mb-4"
-          variant="success"
-          title="版本建立完成"
-          dismissAfterMs={3000}
-          onDismiss={() => setSuccessMessage(undefined)}
-        >
-          {successMessage}
-        </Alert>
-      )}
 
       <div className="grid border border-line-strong bg-surface md:grid-cols-2 xl:grid-cols-4">
         <div className="border-b border-line p-4 md:border-r xl:border-b-0">
@@ -325,6 +524,131 @@ export function AdminDocumentDetailPage() {
 
       <section
         className="mt-4 border border-line-strong bg-surface"
+        aria-labelledby="attachments-title"
+      >
+        {addAttachmentOpen && id !== undefined ? (
+          <AttachmentBatchImportPanel
+            documentId={id}
+            documentNo={detail.documentNo}
+            documentName={detail.name}
+            onCancel={() => setAddAttachmentOpen(false)}
+            onImported={() => {}}
+          />
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3">
+              <div>
+                <h2
+                  id="attachments-title"
+                  className="text-section-label text-ink"
+                >
+                  附件
+                </h2>
+                <p className="mt-1 text-meta text-ink-muted">
+                  管理此文件的附件身份與版本檔案。
+                </p>
+              </div>
+              {detail.isActive && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setAddAttachmentOpen(true)}
+                >
+                  新增附件
+                </Button>
+              )}
+            </div>
+
+            {attachmentDownloadError && (
+              <div className="p-4">
+                <Alert variant="error" title="無法下載附件">
+                  {attachmentDownloadError}
+                </Alert>
+              </div>
+            )}
+
+            {detail.attachments.length === 0 ? (
+              <div className="p-12 text-center">
+                <p className="text-cell font-medium text-ink">
+                  尚未建立任何附件
+                </p>
+                <p className="mt-1 text-meta text-ink-muted">
+                  {detail.isActive
+                    ? "點選「新增附件」建立第一筆附件身份。"
+                    : "文件已停用，無法新增附件。"}
+                </p>
+              </div>
+            ) : (
+              <ol className="divide-y divide-line">
+                {detail.attachments.map((attachment) => {
+                  const canDownload = attachment.currentVersion?.hasFile === true;
+                  const isDownloading =
+                    downloadAttachment.isPending &&
+                    downloadAttachment.variables?.attachmentId ===
+                      attachment.attachmentId;
+
+                  return (
+                    <li
+                      key={attachment.attachmentId}
+                      className="grid gap-3 px-4 py-3 md:grid-cols-[1fr_1fr_auto] md:items-center"
+                    >
+                      <div>
+                        <p className="text-label text-ink-muted">編號</p>
+                        <p className="font-mono text-code text-ink">
+                          {attachment.attachmentNo}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-label text-ink-muted">名稱</p>
+                        {canDownload ? (
+                          <button
+                            type="button"
+                            className="rounded-xs text-left text-cell font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-60"
+                            disabled={isDownloading}
+                            title={`下載 ${attachment.name}`}
+                            onClick={() =>
+                              handleAttachmentDownload(attachment)
+                            }
+                          >
+                            {isDownloading ? "下載中…" : attachment.name}
+                          </button>
+                        ) : (
+                          <p className="text-cell text-ink">
+                            {attachment.name}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 justify-self-start md:justify-self-end">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => openAttachmentVersionModal(attachment)}
+                        >
+                          版本管理
+                        </Button>
+                        {detail.isActive && (
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => {
+                              setDeleteAttachmentError(undefined);
+                              setDeleteAttachmentTarget(attachment);
+                            }}
+                          >
+                            刪除
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </>
+        )}
+      </section>
+
+      <section
+        className="mt-4 border border-line-strong bg-surface"
         aria-labelledby="version-history-title"
       >
         <div className="border-b border-line px-4 py-3">
@@ -351,7 +675,7 @@ export function AdminDocumentDetailPage() {
         ) : (
           <ol className="divide-y divide-line">
             {detail.versions.map((version) => {
-              const status = VERSION_STATUS[version.status];
+              const status = getVersionStatusPresentation(version.status);
               return (
                 <li
                   key={version.version}
@@ -394,6 +718,211 @@ export function AdminDocumentDetailPage() {
           </ol>
         )}
       </section>
+
+      <Modal
+        open={deleteAttachmentTarget !== undefined}
+        onClose={() => {
+          if (!deleteAttachment.isPending) setDeleteAttachmentTarget(undefined);
+        }}
+        title="刪除附件"
+        size="sm"
+        closeOnBackdrop={!deleteAttachment.isPending}
+        closeOnEscape={!deleteAttachment.isPending}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              disabled={deleteAttachment.isPending}
+              onClick={() => setDeleteAttachmentTarget(undefined)}
+            >
+              取消
+            </Button>
+            <Button
+              variant="danger"
+              loading={deleteAttachment.isPending}
+              loadingText="刪除中"
+              onClick={confirmDeleteAttachment}
+            >
+              確認刪除
+            </Button>
+          </>
+        }
+      >
+        {deleteAttachmentError && (
+          <Alert className="mb-4" variant="error" title="無法刪除">
+            {deleteAttachmentError}
+          </Alert>
+        )}
+        確定要刪除附件「
+        <strong className="font-semibold">
+          {deleteAttachmentTarget?.attachmentNo} {deleteAttachmentTarget?.name}
+        </strong>
+        」嗎？
+      </Modal>
+
+      <Modal
+        open={versionAttachment !== undefined}
+        onClose={closeAttachmentVersionModal}
+        title="附件版本管理"
+        description={
+          versionAttachment
+            ? `${versionAttachment.attachmentNo}｜${versionAttachment.name}`
+            : undefined
+        }
+        size="md"
+        closeOnBackdrop={!createAttachmentVersion.isPending}
+        closeOnEscape={!createAttachmentVersion.isPending}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              disabled={createAttachmentVersion.isPending}
+              onClick={closeAttachmentVersionModal}
+            >
+              關閉
+            </Button>
+            <Button
+              type="submit"
+              form="create-attachment-version-form"
+              loading={createAttachmentVersion.isPending}
+              loadingText="上傳中"
+            >
+              上傳並發布
+            </Button>
+          </>
+        }
+      >
+        <div className="mb-4">
+          <h3 className="mb-2 text-label font-medium text-ink-muted">
+            版本歷程
+          </h3>
+          {attachmentDetail.isPending ? (
+            <div className="flex items-center gap-2 text-meta text-ink-muted">
+              <Spinner decorative />
+              版本載入中
+            </div>
+          ) : attachmentDetail.data === undefined ||
+            attachmentDetail.data.versions.length === 0 ? (
+            <p className="text-meta text-ink-muted">尚未上傳任何版本。</p>
+          ) : (
+            <ol className="divide-y divide-line border border-line">
+              {attachmentDetail.data.versions.map((version) => {
+                const status = getVersionStatusPresentation(version.status);
+                return (
+                  <li
+                    key={version.version}
+                    className="flex items-center justify-between gap-3 px-3 py-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`size-1.5 shrink-0 rounded-full ${status.dotClassName}`}
+                        aria-hidden="true"
+                      />
+                      <span className="font-mono text-revision text-ink">
+                        {version.version}
+                      </span>
+                      <span
+                        className={`text-label font-medium ${status.textClassName}`}
+                      >
+                        {status.label}
+                      </span>
+                    </div>
+                    <span className="text-meta text-ink-muted tabular">
+                      {version.effectiveDate ?? "－"}
+                      {version.expiredDate ? ` ～ ${version.expiredDate}` : ""}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
+
+        <form
+          key={attachmentVersionFormKey}
+          id="create-attachment-version-form"
+          className="space-y-4"
+          onSubmit={handleAttachmentVersionSubmit}
+        >
+          {attachmentVersionFormError && (
+            <Alert variant="error" title="無法新增版本">
+              {attachmentVersionFormError}
+            </Alert>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              label="改版類型"
+              htmlFor="attachment-version-change-type"
+              error={attachmentVersionFieldErrors.changeType}
+              hint="首版固定為 1.0；之後依大改或小改自動編版。"
+              required
+            >
+              <Select
+                id="attachment-version-change-type"
+                value={attachmentVersionValues.changeType}
+                error={attachmentVersionFieldErrors.changeType !== undefined}
+                onChange={(event) =>
+                  updateAttachmentVersionField(
+                    "changeType",
+                    event.target.value as "MAJOR" | "MINOR",
+                  )
+                }
+              >
+                <option value="MINOR">小改（次版號 +1）</option>
+                <option value="MAJOR">大改（主版號 +1）</option>
+              </Select>
+            </FormField>
+
+            <FormField
+              label="生效日期"
+              htmlFor="attachment-version-effective-date"
+              error={attachmentVersionFieldErrors.effectiveDate}
+              hint="選填；空白時以 UTC 今日立即生效。"
+            >
+              <Input
+                id="attachment-version-effective-date"
+                type="date"
+                min={todayUtc()}
+                value={attachmentVersionValues.effectiveDate}
+                error={attachmentVersionFieldErrors.effectiveDate !== undefined}
+                onChange={(event) =>
+                  updateAttachmentVersionField(
+                    "effectiveDate",
+                    event.target.value,
+                  )
+                }
+              />
+            </FormField>
+          </div>
+
+          <FormField
+            label="附件檔案"
+            htmlFor="attachment-version-file"
+            error={attachmentVersionFieldErrors.file}
+            hint="支援 jpg、png、pdf、doc(x)、xls(x)、odt、ods。"
+            required
+          >
+            <Input
+              id="attachment-version-file"
+              type="file"
+              accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.odt,.ods"
+              error={attachmentVersionFieldErrors.file !== undefined}
+              onChange={(event) => {
+                setAttachmentVersionValues((current) => ({
+                  ...current,
+                  file: event.target.files?.[0] ?? null,
+                }));
+                setAttachmentVersionFieldErrors((current) => ({
+                  ...current,
+                  file: undefined,
+                }));
+                setAttachmentVersionFormError(undefined);
+              }}
+            />
+          </FormField>
+        </form>
+      </Modal>
 
       <Modal
         open={versionModalOpen}

@@ -4,7 +4,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     image: iso-postgres:16
-    container_name: iso-postgres-production
+    container_name: iso-pgsql-production
     environment:
       TZ: Asia/Taipei
       POSTGRES_DB: ${POSTGRES_DB}
@@ -12,6 +12,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ${NAS_POSTGRES_DATA_PATH}:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s

@@ -78,7 +78,7 @@ public sealed class AttachmentApiTests
     }
 
     [Fact]
-    public async Task CreateVersion_UsesRequestedVersionNumber_PreservesHistoryAndDoesNotChangeMainVersion()
+    public async Task CreateVersion_CalculatesMinorVersion_PreservesHistoryAndDoesNotChangeMainVersion()
     {
         await using var factory = new AttachmentWebApplicationFactory();
         var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "附件 A");
@@ -92,13 +92,16 @@ public sealed class AttachmentApiTests
         var token = await GetAntiforgeryTokenAsync(client);
         var effectiveDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
         using var request = CreateVersionRequest(
-            attachment.Id, token, "1.1", effectiveDate, "form.pdf", "%PDF-new"u8.ToArray());
+            attachment.Id, token, "MINOR", effectiveDate, "form.pdf", "%PDF-new"u8.ToArray());
 
         var response = await client.SendAsync(request);
         var body = await response.Content.ReadFromJsonAsync<AttachmentVersionResponse>();
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal("1.1", body!.Version);
+        Assert.Equal(
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            factory.VersionStore.Versions.Single(x => x.Id == body.VersionId).PublishDate);
         Assert.Equal("OBSOLETE", oldVersion.Status);
         Assert.Equal(effectiveDate, oldVersion.ExpiredDate);
         Assert.Equal(oldEffectiveDate, oldVersion.EffectiveDate);
@@ -115,7 +118,7 @@ public sealed class AttachmentApiTests
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
         var token = await GetAntiferyTokenAsync(client);
-        using var request = CreateVersionRequest(attachment.Id, token, "1.0",
+        using var request = CreateVersionRequest(attachment.Id, token, "MINOR",
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), "form.pdf", "not-pdf"u8.ToArray());
 
         var response = await client.SendAsync(request);
@@ -127,12 +130,10 @@ public sealed class AttachmentApiTests
 
     [Theory]
     [InlineData("")]
-    [InlineData("0.1")]
-    [InlineData("01.0")]
-    [InlineData("1.02")]
-    [InlineData("1.2.3")]
-    public async Task CreateVersion_WithInvalidVersionFormat_ReturnsBadRequestWithoutWritingFile(
-        string version)
+    [InlineData("PATCH")]
+    [InlineData("major")]
+    public async Task CreateVersion_WithInvalidChangeType_ReturnsBadRequestWithoutWritingFile(
+        string changeType)
     {
         await using var factory = new AttachmentWebApplicationFactory();
         var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "附件 A");
@@ -140,7 +141,7 @@ public sealed class AttachmentApiTests
         await LoginAsync(client);
         var token = await GetAntiforgeryTokenAsync(client);
         using var request = CreateVersionRequest(
-            attachment.Id, token, version,
+            attachment.Id, token, changeType,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), "form.pdf", "%PDF-new"u8.ToArray());
 
         var response = await client.SendAsync(request);
@@ -151,24 +152,25 @@ public sealed class AttachmentApiTests
     }
 
     [Fact]
-    public async Task CreateVersion_WithDuplicateVersionNumber_ReturnsConflictWithoutWritingFile()
+    public async Task CreateFirstVersion_UsesOnePointZeroAndDefaultsDatesToUtcToday()
     {
         await using var factory = new AttachmentWebApplicationFactory();
         var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "附件 A");
-        factory.VersionStore.AddVersion(
-            attachment.Id, 1, 0, "PUBLISHED", new DateOnly(2026, 1, 5));
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
         var token = await GetAntiforgeryTokenAsync(client);
         using var request = CreateVersionRequest(
-            attachment.Id, token, "1.0",
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), "form.pdf", "%PDF-new"u8.ToArray());
+            attachment.Id, token, "MAJOR", null,
+            "form.pdf", "%PDF-new"u8.ToArray());
 
         var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<AttachmentVersionResponse>();
+        var created = Assert.Single(factory.VersionStore.Versions);
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Empty(factory.Storage.WrittenKeys);
-        Assert.Single(factory.VersionStore.Versions);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal("1.0", body!.Version);
+        Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow), created.PublishDate);
+        Assert.Equal(created.PublishDate, created.EffectiveDate);
     }
 
     [Fact]
@@ -245,12 +247,15 @@ public sealed class AttachmentApiTests
     }
 
     private static HttpRequestMessage CreateVersionRequest(
-        Guid attachmentId, string token, string version, DateOnly effectiveDate,
+        Guid attachmentId, string token, string changeType, DateOnly? effectiveDate,
         string fileName, byte[] content)
     {
         var multipart = new MultipartFormDataContent();
-        multipart.Add(new StringContent(version), "version");
-        multipart.Add(new StringContent(effectiveDate.ToString("yyyy-MM-dd")), "effectiveDate");
+        multipart.Add(new StringContent(changeType), "changeType");
+        if (effectiveDate.HasValue)
+        {
+            multipart.Add(new StringContent(effectiveDate.Value.ToString("yyyy-MM-dd")), "effectiveDate");
+        }
         var file = new ByteArrayContent(content);
         file.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         multipart.Add(file, "file", fileName);
@@ -379,6 +384,9 @@ internal sealed class FakeAttachmentDocumentStore(Document seed, Guid userId)
         Task.FromResult(Documents.SingleOrDefault(x => x.Id == id));
     public Task<IReadOnlyList<DocumentVersion>> ListVersionsAsync(Guid documentId, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<DocumentVersion>>([]);
+    public Task<IReadOnlyList<DocumentAttachmentRecord>> ListAttachmentsAsync(
+        Guid documentId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<DocumentAttachmentRecord>>([]);
     public void Add(Document document) => Documents.Add(document);
     public void Add(DocumentVersion version) { }
     public void Detach(Document document) => Documents.Remove(document);
@@ -424,6 +432,7 @@ internal sealed class FakeAttachmentVersionStore(
         {
             Id = Guid.NewGuid(), AttachmentId = attachmentId, Version = $"{major}.{minor}",
             VersionMajor = major, VersionMinor = minor, Status = status,
+            PublishDate = effectiveDate,
             EffectiveDate = effectiveDate,
             FileKey = "store/existing", OriginalFileName = "old.pdf",
             ContentType = "application/pdf", FileSize = 10, Checksum = "checksum",
@@ -441,8 +450,12 @@ internal sealed class FakeAttachmentVersionStore(
             document.CompanyId, document.DocumentNo, "COMPANYA"));
     }
 
-    public Task<bool> VersionExistsAsync(Guid attachmentId, string version, CancellationToken ct) =>
-        Task.FromResult(Versions.Any(x => x.AttachmentId == attachmentId && x.Version == version));
+    public Task<AttachmentVersion?> FindLatestVersionAsync(Guid attachmentId, CancellationToken ct) =>
+        Task.FromResult(Versions
+            .Where(x => x.AttachmentId == attachmentId)
+            .OrderByDescending(x => x.VersionMajor)
+            .ThenByDescending(x => x.VersionMinor)
+            .FirstOrDefault());
     public Task<IReadOnlyList<AttachmentVersion>> ListPublishedVersionsAsync(Guid attachmentId, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<AttachmentVersion>>(Versions
             .Where(x => x.AttachmentId == attachmentId && x.Status == "PUBLISHED").ToArray());

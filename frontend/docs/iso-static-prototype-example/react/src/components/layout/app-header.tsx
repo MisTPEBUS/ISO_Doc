@@ -17,7 +17,7 @@ export function AppHeader({
         <span className="grid size-6 place-items-center rounded-sm border border-shell-700 text-fine text-primary-on-shell">
           ISO
         </span>
-        <span>首都集團 ISO 文件管理系統</span>
+        <span>首都集團 ISO 文件管理系統 V2.0</span>
       </div>
 
       <div className="flex items-center gap-3 text-label">
@@ -34,7 +34,10 @@ export function AppHeader({
           </a>
         ) : null}
 
-        <a href="/change-password" className="text-primary-on-shell hover:underline">
+        <a
+          href="/change-password"
+          className="text-primary-on-shell hover:underline"
+        >
           修改密碼
         </a>
 

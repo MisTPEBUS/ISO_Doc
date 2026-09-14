@@ -295,6 +295,7 @@ public sealed class DocumentService(
         }
 
         var versions = await documentStore.ListVersionsAsync(id, cancellationToken);
+        var attachments = await documentStore.ListAttachmentsAsync(id, cancellationToken);
         var versionSummaries = versions.Select(ToVersionSummary).ToArray();
         var currentVersion = versions.FirstOrDefault(version => version.Status == "PUBLISHED")
             ?? versions.FirstOrDefault(version => version.Status == "DRAFT");
@@ -308,7 +309,8 @@ public sealed class DocumentService(
             document.CreatedAt,
             document.UpdatedAt,
             currentVersion is null ? null : ToVersionSummary(currentVersion),
-            versionSummaries));
+            versionSummaries,
+            attachments.Select(ToAttachmentSummary).ToArray()));
     }
 
     public async Task<Result<DocumentResponse>> UpdateAsync(
@@ -430,6 +432,23 @@ public sealed class DocumentService(
         version.ExpiredDate,
         version.PageCount,
         version.FileKey is not null);
+
+    private static DocumentAttachmentSummary ToAttachmentSummary(
+        DocumentAttachmentRecord record) => new(
+        record.Attachment.Id,
+        record.Attachment.AttachmentNo,
+        record.Attachment.Name,
+        record.Attachment.IsActive,
+        record.CurrentVersion is null
+            ? null
+            : new AttachmentVersionSummary(
+                record.CurrentVersion.Id,
+                record.CurrentVersion.Version,
+                record.CurrentVersion.Status,
+                record.CurrentVersion.PublishDate,
+                record.CurrentVersion.EffectiveDate,
+                record.CurrentVersion.ExpiredDate,
+                record.CurrentVersion.FileKey is not null));
 
     private static object ToAuditValue(Document document) => new
     {

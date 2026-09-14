@@ -23,3 +23,22 @@ export function buildVersionFormData(input: VersionFormDataInput): FormData {
   formData.append('file', input.file, input.file.name)
   return formData
 }
+
+export interface AttachmentVersionFormDataInput {
+  changeType: 'MAJOR' | 'MINOR'
+  effectiveDate: string
+  file: File
+}
+
+export function buildAttachmentVersionFormData(
+  input: AttachmentVersionFormDataInput,
+): FormData {
+  const formData = new FormData()
+
+  formData.append('changeType', input.changeType)
+  if (input.effectiveDate.length > 0) {
+    formData.append('effectiveDate', input.effectiveDate)
+  }
+  formData.append('file', input.file, input.file.name)
+  return formData
+}

@@ -32,6 +32,7 @@ export interface DocumentVersionSummary {
 export interface DocumentDetail extends AdminDocument {
   currentVersion: DocumentVersionSummary | null
   versions: DocumentVersionSummary[]
+  attachments: DocumentAttachmentSummary[]
 }
 
 export interface CreateDocumentVersionResponse {
@@ -98,4 +99,40 @@ export interface BulkImportDocumentsResponse {
   failureCount: number
   succeeded: BulkImportDocumentSuccess[]
   failed: BulkImportDocumentFailure[]
+}
+
+export interface Attachment {
+  attachmentId: string
+  attachmentNo: string
+  name: string
+  isActive: boolean
+}
+
+export interface AttachmentVersionSummary {
+  versionId: string
+  version: string
+  status: DocumentVersionStatus
+  publishDate: string | null
+  effectiveDate: string | null
+  expiredDate: string | null
+  hasFile: boolean
+}
+
+export interface DocumentAttachmentSummary extends Attachment {
+  currentVersion: AttachmentVersionSummary | null
+}
+
+export interface AttachmentDetail extends Attachment {
+  versions: AttachmentVersionSummary[]
+}
+
+export interface CreateAttachmentRequest {
+  attachmentNo: string
+  name: string
+}
+
+export interface CreateAttachmentVersionResponse {
+  versionId: string
+  version: string
+  status: DocumentVersionStatus
 }

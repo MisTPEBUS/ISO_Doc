@@ -15,8 +15,8 @@ public interface IAttachmentVersionStore
 {
     Task<AttachmentVersionCreateContext?> FindCreateContextAsync(
         Guid attachmentId, CancellationToken cancellationToken);
-    Task<bool> VersionExistsAsync(
-        Guid attachmentId, string version, CancellationToken cancellationToken);
+    Task<AttachmentVersion?> FindLatestVersionAsync(
+        Guid attachmentId, CancellationToken cancellationToken);
     Task<IReadOnlyList<AttachmentVersion>> ListPublishedVersionsAsync(
         Guid attachmentId, CancellationToken cancellationToken);
     Task<AttachmentVersion?> FindVersionAsync(

@@ -218,14 +218,16 @@ export function PermissionMatrixTable({
                             iconClassName="text-state-danger"
                           />
                         )}
-                        <StatusText
-                          label={document.status.attachment.label}
-                          tone={fileStatusTone(document.status.attachment)}
-                          icon={document.status.attachment.code === 'NONE'
-                            ? TriangleAlert
-                            : undefined}
-                          iconClassName="text-state-danger"
-                        />
+                        {document.status.attachment.code !== 'NORMAL' && (
+                          <StatusText
+                            label={document.status.attachment.label}
+                            tone={fileStatusTone(document.status.attachment)}
+                            icon={document.status.attachment.code === 'NONE'
+                              ? TriangleAlert
+                              : undefined}
+                            iconClassName="text-state-danger"
+                          />
+                        )}
                         {document.status.effective.code !== 'DRAFT' && (
                           <StatusText
                             label={document.status.effective.label}

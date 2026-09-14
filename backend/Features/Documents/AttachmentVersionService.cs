@@ -67,26 +67,15 @@ public sealed class AttachmentVersionService(
             return Result<AttachmentVersionResponse>.Unauthorized("請先登入後再操作。");
         }
 
-        if (!DocumentVersionNumber.TryParse(
-                request.Version, out var versionText, out var major, out var minor))
-        {
-            return Result<AttachmentVersionResponse>.ValidationFailed(new(StringComparer.Ordinal)
-            {
-                ["version"] = ["版本格式必須為正整數或「主版號.次版號」，例如 1、1.0、2.1。"]
-            });
-        }
-
-        if (await versionStore.VersionExistsAsync(
-                attachmentId, versionText, cancellationToken))
-        {
-            return Result<AttachmentVersionResponse>.Conflict("此附件已存在相同的版本號。");
-        }
-
         string? writtenObjectKey = null;
         try
         {
             await using var transaction = await versionStore.BeginTransactionAsync(cancellationToken);
-            var effectiveDate = request.EffectiveDate!.Value;
+            var latest = await versionStore.FindLatestVersionAsync(attachmentId, cancellationToken);
+            var (major, minor) = CalculateNextVersion(latest, request.ChangeType!);
+            var versionText = $"{major}.{minor}";
+            var publishDate = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+            var effectiveDate = request.EffectiveDate ?? publishDate;
             var objectKey = storageKeyBuilder.BuildAttachmentKey(
                 context.CompanyCode,
                 context.DocumentNo,
@@ -121,6 +110,7 @@ public sealed class AttachmentVersionService(
                 VersionMajor = major,
                 VersionMinor = minor,
                 Status = "PUBLISHED",
+                PublishDate = publishDate,
                 EffectiveDate = effectiveDate,
                 FileKey = objectKey,
                 OriginalFileName = request.File.FileName,
@@ -142,6 +132,8 @@ public sealed class AttachmentVersionService(
                     {
                         attachment_id = attachmentId,
                         version = version.Version,
+                        change_type = request.ChangeType,
+                        publish_date = version.PublishDate,
                         effective_date = version.EffectiveDate,
                         previous_published_version_ids = previousPublished
                             .Select(previous => previous.Id)
@@ -211,6 +203,7 @@ public sealed class AttachmentVersionService(
             version.Id,
             version.Version,
             version.Status,
+            version.PublishDate,
             version.EffectiveDate,
             version.ExpiredDate,
             version.FileKey is not null));
@@ -226,6 +219,20 @@ public sealed class AttachmentVersionService(
         {
             // Preserve the database/storage exception that caused the rollback.
         }
+    }
+
+    private static (int Major, int Minor) CalculateNextVersion(
+        AttachmentVersion? latest,
+        string changeType)
+    {
+        if (latest is null)
+        {
+            return (1, 0);
+        }
+
+        return changeType == "MAJOR"
+            ? (checked(latest.VersionMajor + 1), 0)
+            : (latest.VersionMajor, checked(latest.VersionMinor + 1));
     }
 
     private static bool IsPublishedVersionConflict(Exception exception) => exception switch

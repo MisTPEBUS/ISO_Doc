@@ -17,8 +17,8 @@ public sealed class AttachmentVersionConfiguration
             );
 
             table.HasCheckConstraint(
-                "ck_attachment_published_requires_effective_date",
-                "status <> 'PUBLISHED' OR effective_date IS NOT NULL"
+                "ck_attachment_published_requires_dates",
+                "status <> 'PUBLISHED' OR (publish_date IS NOT NULL AND effective_date IS NOT NULL)"
             );
 
             table.HasCheckConstraint(
@@ -67,6 +67,10 @@ public sealed class AttachmentVersionConfiguration
             .HasMaxLength(20)
             .IsRequired();
 
+        builder.Property(x => x.PublishDate)
+            .HasColumnName("publish_date")
+            .HasColumnType("date");
+
         builder.Property(x => x.EffectiveDate)
             .HasColumnName("effective_date")
             .HasColumnType("date");
@@ -108,19 +112,19 @@ public sealed class AttachmentVersionConfiguration
             .HasColumnType("timestamp with time zone")
             .HasDefaultValueSql("now()");
 
-        builder.HasIndex(x => new
-        {
-            x.AttachmentId,
-            x.VersionMajor,
-            x.VersionMinor
-        })
+        builder.HasIndex(x => new { x.AttachmentId, x.Version })
         .IsUnique()
         .HasDatabaseName("uq_attachment_versions");
 
-        builder.HasIndex(x => x.AttachmentId)
+        builder.HasIndex(x => x.AttachmentId, "IX_attachment_versions_single_published")
             .IsUnique()
             .HasDatabaseName("uq_attachment_single_published")
             .HasFilter("status = 'PUBLISHED'");
+
+        builder.HasIndex(x => x.AttachmentId, "IX_attachment_versions_single_draft")
+            .IsUnique()
+            .HasDatabaseName("uq_attachment_single_draft")
+            .HasFilter("status = 'DRAFT'");
 
         builder.HasOne<Attachment>()
             .WithMany()

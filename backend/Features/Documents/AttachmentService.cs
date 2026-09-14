@@ -257,10 +257,13 @@ public sealed class AttachmentService(
             attachment.Name,
             attachment.IsActive,
             versions.Select(version => new AttachmentVersionSummary(
+                version.Id,
                 version.Version,
                 version.Status,
+                version.PublishDate,
                 version.EffectiveDate,
-                version.ExpiredDate)).ToArray()));
+                version.ExpiredDate,
+                version.FileKey is not null)).ToArray()));
     }
 
     public async Task<Result> DeleteAsync(

@@ -52,6 +52,42 @@ public sealed class EfDocumentStore(IsoDbContext dbContext) : IDocumentStore
             .ThenByDescending(version => version.VersionMinor)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<DocumentAttachmentRecord>> ListAttachmentsAsync(
+        Guid documentId,
+        CancellationToken cancellationToken)
+    {
+        var attachments = await dbContext.Attachments
+            .AsNoTracking()
+            .Where(attachment => attachment.DocumentId == documentId && attachment.IsActive)
+            .OrderBy(attachment => attachment.AttachmentNo)
+            .ThenBy(attachment => attachment.Id)
+            .ToListAsync(cancellationToken);
+
+        if (attachments.Count == 0)
+        {
+            return [];
+        }
+
+        var attachmentIds = attachments.Select(attachment => attachment.Id).ToArray();
+        var representativeVersions = await dbContext.AttachmentVersions
+            .AsNoTracking()
+            .Where(version => attachmentIds.Contains(version.AttachmentId)
+                && (version.Status == "PUBLISHED" || version.Status == "DRAFT"))
+            .OrderBy(version => version.Status == "PUBLISHED" ? 0 : 1)
+            .ThenByDescending(version => version.VersionMajor)
+            .ThenByDescending(version => version.VersionMinor)
+            .ToListAsync(cancellationToken);
+        var currentVersions = representativeVersions
+            .GroupBy(version => version.AttachmentId)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        return attachments
+            .Select(attachment => new DocumentAttachmentRecord(
+                attachment,
+                currentVersions.GetValueOrDefault(attachment.Id)))
+            .ToArray();
+    }
+
     public void Add(Document document) => dbContext.Documents.Add(document);
 
     public void Add(DocumentVersion version) => dbContext.DocumentVersions.Add(version);

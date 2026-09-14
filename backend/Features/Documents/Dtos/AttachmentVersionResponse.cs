@@ -6,6 +6,7 @@ public sealed record AttachmentVersionDetailResponse(
     Guid VersionId,
     string Version,
     string Status,
+    DateOnly? PublishDate,
     DateOnly? EffectiveDate,
     DateOnly? ExpiredDate,
     bool HasFile);

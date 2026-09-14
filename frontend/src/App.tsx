@@ -21,6 +21,9 @@ import { LoginPage } from './pages/login/LoginPage'
 const ComponentPreview = import.meta.env.DEV
   ? lazy(() => import('./pages/_ComponentPreview'))
   : null
+const UiKitPage = import.meta.env.DEV
+  ? lazy(() => import('./pages/ui-kit/UiKitPage'))
+  : null
 
 const ADMIN_ROLES = [USER_ROLE.CompanyAdmin, USER_ROLE.SystemAdmin] as const
 
@@ -29,7 +32,14 @@ function App() {
     <BrowserRouter basename="/ISO">
       <Suspense fallback={<PageLoading />}>
         <Routes>
-          <Route path="/" element={<HomePage />} />
+          <Route
+            path="/"
+            element={(
+              <LoginGuard>
+                <HomePage />
+              </LoginGuard>
+            )}
+          />
           <Route path="/login" element={<LoginPage />} />
           <Route
             path="/change-password"
@@ -59,6 +69,16 @@ function App() {
           </Route>
           {ComponentPreview && (
             <Route path="/_component-preview" element={<ComponentPreview />} />
+          )}
+          {UiKitPage && (
+            <Route
+              path="/ui-kit"
+              element={(
+                <LoginGuard>
+                  <UiKitPage />
+                </LoginGuard>
+              )}
+            />
           )}
         </Routes>
       </Suspense>

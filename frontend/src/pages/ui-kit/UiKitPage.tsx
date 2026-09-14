@@ -13,79 +13,73 @@ import {
 import { useCurrentUser, useLogout } from "@/features/auth/queries";
 import { USER_ROLE, USER_ROLE_LABEL } from "@/features/auth/types";
 import {
-  useAvailableDocuments,
-  useDownloadAttachment,
-  useDownloadDocument,
-} from "@/features/documents/queries";
-import type {
-  AvailableDocumentAttachment,
-  AvailableDocumentResponse,
-  ListAvailableDocumentsParams,
-} from "@/features/documents/types";
+  MOCK_ATTACHMENTS_BY_DOCUMENT,
+  MOCK_AVAILABLE_DOCUMENTS,
+  type MockDocumentAttachment,
+} from "@/features/documents/mockData";
+import type { AvailableDocumentResponse } from "@/features/documents/types";
 
-const PAGE_SIZE = 20;
-const SEARCH_DEBOUNCE_MS = 350;
+const PAGE_SIZE = 6;
 
 function formatDate(value: string | null): string {
   return value?.replaceAll("-", "/") ?? "－";
 }
 
-function errorMessage(error: unknown, fallback: string): string {
-  if (error instanceof ApiError) {
-    return error.detail ?? error.title ?? fallback;
-  }
-
-  return fallback;
-}
-
-export function HomePage() {
+export function UiKitPage() {
   const navigate = useNavigate();
   const currentUser = useCurrentUser();
   const logoutMutation = useLogout();
-  const downloadDocumentMutation = useDownloadDocument();
-  const downloadAttachmentMutation = useDownloadAttachment();
   const [keyword, setKeyword] = useState("");
-  const [debouncedKeyword, setDebouncedKeyword] = useState("");
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState<string>();
+  const [isLoading, setIsLoading] = useState(true);
   const [expandedDocumentIds, setExpandedDocumentIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
 
   useEffect(() => {
-    const timer = window.setTimeout(
-      () => setDebouncedKeyword(keyword.trim()),
-      SEARCH_DEBOUNCE_MS,
-    );
+    if (!isLoading) return;
+
+    const timer = window.setTimeout(() => setIsLoading(false), 650);
     return () => window.clearTimeout(timer);
+  }, [isLoading]);
+
+  const filteredDocuments = useMemo(() => {
+    const normalizedKeyword = keyword.trim().toLocaleLowerCase("zh-TW");
+    if (normalizedKeyword.length === 0) return MOCK_AVAILABLE_DOCUMENTS;
+
+    return MOCK_AVAILABLE_DOCUMENTS.filter((document) =>
+      [document.documentNo, document.name, document.companyName].some((value) =>
+        value.toLocaleLowerCase("zh-TW").includes(normalizedKeyword),
+      ),
+    );
   }, [keyword]);
 
-  const queryParams = useMemo<ListAvailableDocumentsParams>(
-    () => ({
-      page,
-      pageSize: PAGE_SIZE,
-      keyword: debouncedKeyword || undefined,
-    }),
-    [debouncedKeyword, page],
+  const pageCount = Math.max(
+    1,
+    Math.ceil(filteredDocuments.length / PAGE_SIZE),
   );
-  const documentsQuery = useAvailableDocuments(queryParams);
-  const documents = documentsQuery.data?.items ?? [];
-  const totalCount = documentsQuery.data?.totalCount ?? 0;
+  const currentPage = Math.min(page, pageCount);
+  const pageDocuments = filteredDocuments.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
 
-  useEffect(() => {
-    if (
-      documentsQuery.error instanceof ApiError &&
-      documentsQuery.error.status === 401
-    ) {
-      navigate("/login", { replace: true });
-    }
-  }, [documentsQuery.error, navigate]);
+  function attachmentsFor(
+    documentId: string,
+  ): ReadonlyArray<MockDocumentAttachment> {
+    return MOCK_ATTACHMENTS_BY_DOCUMENT[documentId] ?? [];
+  }
 
   function updateKeyword(value: string) {
     setKeyword(value);
     setPage(1);
     setNotice(undefined);
     setExpandedDocumentIds(new Set());
+  }
+
+  function previewDownload(label: string) {
+    setNotice(`假資料預覽：正式串接後將下載「${label}」。`);
   }
 
   function toggleDocument(document: AvailableDocumentResponse) {
@@ -100,52 +94,6 @@ export function HomePage() {
     });
   }
 
-  function handleRequestError(error: unknown, fallback: string) {
-    if (error instanceof ApiError && error.status === 401) {
-      navigate("/login", { replace: true });
-      return;
-    }
-
-    setNotice(errorMessage(error, fallback));
-  }
-
-  function handleDocumentDownload(document: AvailableDocumentResponse) {
-    if (!document.currentVersion.hasFile) return;
-
-    setNotice(undefined);
-    downloadDocumentMutation.mutate(
-      {
-        documentId: document.documentId,
-        versionId: document.currentVersion.versionId,
-        fallbackFileName: `${document.documentNo}.pdf`,
-      },
-      {
-        onSuccess: (result) => setNotice(`已下載「${result.fileName}」。`),
-        onError: (error) =>
-          handleRequestError(error, "主文件下載失敗，請稍後再試。"),
-      },
-    );
-  }
-
-  function handleAttachmentDownload(attachment: AvailableDocumentAttachment) {
-    const version = attachment.currentVersion;
-    if (version?.hasFile !== true) return;
-
-    setNotice(undefined);
-    downloadAttachmentMutation.mutate(
-      {
-        attachmentId: attachment.attachmentId,
-        versionId: version.versionId,
-        fallbackFileName: attachment.name,
-      },
-      {
-        onSuccess: (result) => setNotice(`已下載「${result.fileName}」。`),
-        onError: (error) =>
-          handleRequestError(error, "附件下載失敗，請稍後再試。"),
-      },
-    );
-  }
-
   function handleLogout() {
     if (logoutMutation.isPending) return;
 
@@ -153,83 +101,67 @@ export function HomePage() {
     logoutMutation.mutate(undefined, {
       onSuccess: () => navigate("/login", { replace: true }),
       onError: (error) => {
-        setNotice(errorMessage(error, "目前無法連線到系統，請稍後再試。"));
+        setNotice(
+          error instanceof ApiError
+            ? (error.detail ?? "登出失敗，請稍後再試。")
+            : "目前無法連線到系統，請稍後再試。",
+        );
       },
     });
   }
 
-  const attachmentColumns: ReadonlyArray<
-    TableColumn<AvailableDocumentAttachment>
-  > = [
-    {
-      key: "status",
-      header: "檔案狀態",
-      headerClassName: "w-28",
-      render: (attachment) => {
-        const hasFile = attachment.currentVersion?.hasFile === true;
-        return (
+  const attachmentColumns: ReadonlyArray<TableColumn<MockDocumentAttachment>> =
+    [
+      {
+        key: "status",
+        header: "檔案狀態",
+        headerClassName: "w-28",
+        render: (attachment) => (
           <span
             className={
-              hasFile
+              attachment.hasFile
                 ? "text-label font-medium text-state-active"
                 : "text-label text-state-expiring"
             }
           >
-            {hasFile ? "可下載" : "待補檔"}
+            {attachment.hasFile ? "可下載" : "待補檔"}
           </span>
-        );
+        ),
       },
-    },
-    {
-      key: "attachmentNo",
-      header: "附件編號",
-      headerClassName: "w-44",
-      cellClassName: "font-mono text-code tabular",
-      render: (attachment) => attachment.attachmentNo,
-    },
-    {
-      key: "name",
-      header: "附件名稱",
-      render: (attachment) => (
-        <span className="font-medium">{attachment.name}</span>
-      ),
-    },
-    {
-      key: "version",
-      header: "版本",
-      headerClassName: "w-20",
-      cellClassName: "font-mono text-revision tabular",
-      render: (attachment) =>
-        attachment.currentVersion
-          ? `V${attachment.currentVersion.version}`
-          : "－",
-    },
-    {
-      key: "download",
-      header: "操作",
-      headerClassName: "w-24",
-      render: (attachment) => {
-        const canDownload = attachment.currentVersion?.hasFile === true;
-        const isDownloading =
-          downloadAttachmentMutation.isPending &&
-          downloadAttachmentMutation.variables?.attachmentId ===
-            attachment.attachmentId;
-
-        return canDownload ? (
-          <button
-            type="button"
-            className="h-control-sm rounded-sm px-2 text-control font-medium text-primary hover:bg-primary-subtle disabled:cursor-wait disabled:text-ink-disabled"
-            disabled={isDownloading}
-            onClick={() => handleAttachmentDownload(attachment)}
-          >
-            {isDownloading ? "下載中" : "下載"}
-          </button>
-        ) : (
-          <span className="text-ink-disabled">－</span>
-        );
+      {
+        key: "attachmentNo",
+        header: "附件編號",
+        headerClassName: "w-44",
+        cellClassName: "font-mono text-code tabular",
+        render: (attachment) => attachment.attachmentNo,
       },
-    },
-  ];
+      {
+        key: "name",
+        header: "附件名稱",
+        render: (attachment) => (
+          <span className="font-medium">{attachment.name}</span>
+        ),
+      },
+      {
+        key: "download",
+        header: "操作",
+        headerClassName: "w-24",
+        render: (attachment) =>
+          attachment.hasFile ? (
+            <button
+              type="button"
+              className="h-control-sm rounded-sm px-2 text-control font-medium text-primary hover:bg-primary-subtle"
+              onClick={() =>
+                previewDownload(`${attachment.attachmentNo} ${attachment.name}`)
+              }
+            >
+              下載
+            </button>
+          ) : (
+            <span className="text-ink-disabled">－</span>
+          ),
+      },
+    ];
 
   const documentColumns: ReadonlyArray<TableColumn<AvailableDocumentResponse>> =
     [
@@ -280,27 +212,17 @@ export function HomePage() {
         key: "name",
         header: "名稱",
         headerClassName: "min-w-72",
-        render: (document) => {
-          const isDownloading =
-            downloadDocumentMutation.isPending &&
-            downloadDocumentMutation.variables?.documentId ===
-              document.documentId;
-
-          return document.currentVersion.hasFile ? (
-            <button
-              type="button"
-              className="h-control-sm rounded-sm px-1 text-left text-cell font-medium text-primary hover:underline disabled:cursor-wait disabled:text-ink-disabled"
-              disabled={isDownloading}
-              onClick={() => handleDocumentDownload(document)}
-            >
-              {isDownloading ? "下載中…" : document.name}
-            </button>
-          ) : (
-            <span className="font-medium text-ink-disabled">
-              {document.name}
-            </span>
-          );
-        },
+        render: (document) => (
+          <button
+            type="button"
+            className="h-control-sm rounded-sm px-1 text-left text-cell font-medium text-primary hover:underline"
+            onClick={() =>
+              previewDownload(`${document.documentNo} ${document.name} PDF`)
+            }
+          >
+            {document.name}
+          </button>
+        ),
       },
       {
         key: "pageCount",
@@ -368,7 +290,9 @@ export function HomePage() {
           </div>
           <div className="border-l-2 border-primary pl-3 text-right">
             <p className="text-fine text-ink-muted">ISO文件列表</p>
-            <p className="tabular text-page-title text-ink">{totalCount}</p>
+            <p className="tabular text-page-title text-ink">
+              {MOCK_AVAILABLE_DOCUMENTS.length}
+            </p>
           </div>
         </section>
 
@@ -387,7 +311,7 @@ export function HomePage() {
               <Input
                 id="document-keyword"
                 type="search"
-                placeholder="搜尋文件編號或名稱"
+                placeholder="搜尋文件編號、名稱或公司"
                 value={keyword}
                 onChange={(event) => updateKeyword(event.target.value)}
               />
@@ -399,12 +323,12 @@ export function HomePage() {
             )}
             <Button
               variant="secondary"
-              loading={documentsQuery.isFetching}
+              loading={isLoading}
               loadingText="載入中"
               onClick={() => {
                 setNotice(undefined);
                 setExpandedDocumentIds(new Set());
-                void documentsQuery.refetch();
+                setIsLoading(true);
               }}
             >
               重新整理
@@ -420,23 +344,11 @@ export function HomePage() {
             </div>
           )}
 
-          {documentsQuery.isError && documentsQuery.data === undefined && (
-            <div
-              className="border-b border-line bg-danger-subtle px-4 py-3 text-meta text-danger"
-              role="alert"
-            >
-              {errorMessage(
-                documentsQuery.error,
-                "文件清單載入失敗，請稍後再試。",
-              )}
-            </div>
-          )}
-
           <Table
             className="border-0"
             columns={documentColumns}
-            data={documents}
-            loading={documentsQuery.isPending}
+            data={isLoading ? [] : pageDocuments}
+            loading={isLoading}
             skeletonRows={PAGE_SIZE}
             getRowKey={(document) => document.documentId}
             caption="目前使用者可閱讀的 ISO 文件"
@@ -459,7 +371,8 @@ export function HomePage() {
               index % 2 === 1 ? "bg-surface-zebra" : undefined
             }
             expansion={{
-              canExpand: (document) => document.attachments.length > 0,
+              canExpand: (document) =>
+                attachmentsFor(document.documentId).length > 0,
               isExpanded: (document) =>
                 expandedDocumentIds.has(document.documentId),
               onToggle: toggleDocument,
@@ -471,13 +384,13 @@ export function HomePage() {
                       {document.documentNo} 附件清單
                     </h2>
                     <span className="text-meta text-ink-muted">
-                      共 {document.attachments.length} 筆
+                      共 {attachmentsFor(document.documentId).length} 筆
                     </span>
                   </div>
                   <Table
                     className="border-line"
                     columns={attachmentColumns}
-                    data={document.attachments}
+                    data={attachmentsFor(document.documentId)}
                     getRowKey={(attachment) => attachment.attachmentId}
                     emptyMessage="此版本沒有附件"
                     caption={`${document.documentNo} 附件清單`}
@@ -489,9 +402,9 @@ export function HomePage() {
 
           <Pagination
             className="border-t border-line px-4"
-            page={page}
+            page={currentPage}
             pageSize={PAGE_SIZE}
-            totalCount={totalCount}
+            totalCount={filteredDocuments.length}
             onPageChange={(nextPage) => {
               setPage(nextPage);
               setNotice(undefined);
@@ -499,9 +412,14 @@ export function HomePage() {
             }}
           />
         </section>
+
+        <p className="mt-3 text-fine text-ink-muted">
+          目前使用 API 同欄位假資料預覽；附件列為展開元件示意，正式附件清單仍待
+          API 提供。
+        </p>
       </main>
     </div>
   );
 }
 
-export default HomePage;
+export default UiKitPage;

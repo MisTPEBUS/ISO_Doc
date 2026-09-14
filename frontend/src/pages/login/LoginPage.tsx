@@ -79,7 +79,7 @@ export function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen bg-canvas lg:grid-cols-[minmax(320px,42%)_1fr]">
+    <main className="grid min-h-[90.9091vh] w-[90.9091%] bg-canvas [zoom:1.1] lg:grid-cols-[minmax(320px,42%)_1fr]">
       <section
         className="relative hidden overflow-hidden bg-shell-900 px-12 py-10 text-on-shell lg:flex lg:flex-col"
         aria-label="系統簡介"
@@ -147,7 +147,7 @@ export function LoginPage() {
         </p>
       </section>
 
-      <section className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-8">
+      <section className="flex items-center justify-center px-4 py-8 sm:px-8">
         <div className="w-full max-w-md">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
             <span className="flex size-10 items-center justify-center rounded-sm bg-primary font-mono text-section-label font-semibold text-on-primary">

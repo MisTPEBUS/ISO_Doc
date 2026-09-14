@@ -14,6 +14,8 @@ public interface IDocumentStore
     Task<Document?> FindByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<DocumentVersion>> ListVersionsAsync(
         Guid documentId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<DocumentAttachmentRecord>> ListAttachmentsAsync(
+        Guid documentId, CancellationToken cancellationToken);
     void Add(Document document);
     void Add(DocumentVersion version);
     void Detach(Document document);
@@ -21,6 +23,10 @@ public interface IDocumentStore
     Task SaveChangesAsync(CancellationToken cancellationToken);
     Task<IDocumentTransaction> BeginTransactionAsync(CancellationToken cancellationToken);
 }
+
+public sealed record DocumentAttachmentRecord(
+    Attachment Attachment,
+    AttachmentVersion? CurrentVersion);
 
 public interface IDocumentTransaction : IAsyncDisposable
 {

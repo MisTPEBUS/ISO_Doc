@@ -30,7 +30,9 @@ export const MOCK_AVAILABLE_DOCUMENTS: ReadonlyArray<AvailableDocumentResponse> 
     version: String(version),
     effectiveDate: String(effectiveDate),
     pageCount: typeof pageCount === 'number' ? pageCount : null,
+    hasFile: true,
   },
+  attachments: [],
 }))
 
 export const MOCK_ATTACHMENTS_BY_DOCUMENT: Readonly<

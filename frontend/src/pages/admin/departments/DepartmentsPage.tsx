@@ -253,32 +253,27 @@ export function DepartmentsPage() {
 
       {isSystemAdmin && (
         <div className="mb-4 border border-line-strong bg-surface p-4">
-          <FormField
-            label="公司"
-            htmlFor="department-company-filter"
-            hint="選擇公司以查詢該公司的部門。"
-          >
-            <Select
-              id="department-company-filter"
-              className="max-w-md"
-              value={selectedCompanyId}
-              disabled={companies.isPending || companies.isError}
-              onChange={(event) => {
-                setSelectedCompanyId(event.target.value)
-                setPage(1)
-                setSuccessMessage(undefined)
-              }}
-            >
-              {companies.isPending && <option value="">公司載入中</option>}
-              {companies.isError && <option value="">無法載入公司</option>}
-              {companies.data?.items.length === 0 && <option value="">查無公司</option>}
-              {companies.data?.items.map((company) => (
-                <option key={company.id} value={company.id}>
-                  {company.code} — {company.name}
-                </option>
-              ))}
-            </Select>
-          </FormField>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <FormField label="公司" htmlFor="department-company-filter">
+              <Select
+                id="department-company-filter"
+                value={selectedCompanyId}
+                disabled={companies.isPending || companies.isError}
+                onChange={(event) => {
+                  setSelectedCompanyId(event.target.value)
+                  setPage(1)
+                  setSuccessMessage(undefined)
+                }}
+              >
+                {companies.isPending && <option value="">公司載入中</option>}
+                {companies.data?.items.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.code} — {company.name}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+          </div>
         </div>
       )}
 

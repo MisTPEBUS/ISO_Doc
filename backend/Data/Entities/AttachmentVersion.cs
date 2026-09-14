@@ -14,6 +14,8 @@ public sealed class AttachmentVersion
 
     public string Status { get; set; } = null!;
 
+    public DateOnly? PublishDate { get; set; }
+
     public DateOnly? EffectiveDate { get; set; }
 
     public DateOnly? ExpiredDate { get; set; }

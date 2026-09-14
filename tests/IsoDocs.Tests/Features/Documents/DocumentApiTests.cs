@@ -123,6 +123,30 @@ public sealed class DocumentApiTests
     }
 
     [Fact]
+    public async Task Get_WithPublishedAttachment_ReturnsDownloadableCurrentVersion()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        var document = factory.DocumentStore.AddSeed(
+            factory.CompanyA, "ISO-001", "Quality Manual");
+        var attachment = factory.DocumentStore.AddAttachmentSeed(
+            document.Id, "ISO-001-A", "Checklist");
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+
+        var response = await client.GetAsync($"/api/documents/{document.Id}");
+        var body = await response.Content.ReadFromJsonAsync<DocumentDetailResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        var attachmentBody = Assert.Single(body.Attachments);
+        Assert.Equal(attachment.Id, attachmentBody.AttachmentId);
+        Assert.Equal("Checklist", attachmentBody.Name);
+        Assert.NotNull(attachmentBody.CurrentVersion);
+        Assert.Equal("1.0", attachmentBody.CurrentVersion.Version);
+        Assert.True(attachmentBody.CurrentVersion.HasFile);
+    }
+
+    [Fact]
     public async Task Get_WithUnknownDocument_ReturnsNotFound()
     {
         await using var factory = new DocumentWebApplicationFactory(UserRole.SYSTEM_ADMIN);
@@ -472,6 +496,7 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
 
     public List<Document> Documents { get; } = [];
     public List<DocumentVersion> DocumentVersions { get; } = [];
+    public List<DocumentAttachmentRecord> Attachments { get; } = [];
     public int BegunTransactionCount { get; private set; }
     public int CommittedTransactionCount { get; private set; }
     public string? DocumentNoToFailOnSave { get; set; }
@@ -492,6 +517,45 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
         };
         Documents.Add(document);
         return document;
+    }
+
+    public Attachment AddAttachmentSeed(
+        Guid documentId,
+        string attachmentNo,
+        string name)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var attachment = new Attachment
+        {
+            Id = Guid.NewGuid(),
+            DocumentId = documentId,
+            AttachmentNo = attachmentNo,
+            Name = name,
+            IsActive = true,
+            CreatedBy = Guid.NewGuid(),
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        var version = new AttachmentVersion
+        {
+            Id = Guid.NewGuid(),
+            AttachmentId = attachment.Id,
+            Version = "1.0",
+            VersionMajor = 1,
+            VersionMinor = 0,
+            Status = "PUBLISHED",
+            PublishDate = DateOnly.FromDateTime(now.UtcDateTime),
+            EffectiveDate = DateOnly.FromDateTime(now.UtcDateTime),
+            FileKey = "store/checklist.pdf",
+            OriginalFileName = "checklist.pdf",
+            ContentType = "application/pdf",
+            FileSize = 10,
+            Checksum = "checksum",
+            CreatedBy = Guid.NewGuid(),
+            CreatedAt = now
+        };
+        Attachments.Add(new(attachment, version));
+        return attachment;
     }
 
     public Task<bool> CompanyExistsAsync(Guid companyId, CancellationToken cancellationToken)
@@ -554,6 +618,15 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
             .Concat(DocumentVersions.Where(version => version.DocumentId == documentId))
             .ToArray();
         return Task.FromResult(versions);
+    }
+
+    public Task<IReadOnlyList<DocumentAttachmentRecord>> ListAttachmentsAsync(
+        Guid documentId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult<IReadOnlyList<DocumentAttachmentRecord>>(
+            Attachments.Where(item => item.Attachment.DocumentId == documentId).ToArray());
     }
 
     public void Add(Document document) => Documents.Add(document);

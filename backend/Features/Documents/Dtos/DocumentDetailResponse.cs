@@ -10,4 +10,5 @@ public sealed record DocumentDetailResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     DocumentVersionSummary? CurrentVersion,
-    IReadOnlyList<DocumentVersionSummary> Versions);
+    IReadOnlyList<DocumentVersionSummary> Versions,
+    IReadOnlyList<DocumentAttachmentSummary> Attachments);
