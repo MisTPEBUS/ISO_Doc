@@ -24,6 +24,23 @@ export function buildVersionFormData(input: VersionFormDataInput): FormData {
   return formData
 }
 
+export interface UploadDraftVersionFileFormDataInput {
+  effectiveDate: string
+  file: File
+}
+
+export function buildUploadDraftVersionFileFormData(
+  input: UploadDraftVersionFileFormDataInput,
+): FormData {
+  const formData = new FormData()
+
+  if (input.effectiveDate.length > 0) {
+    formData.append('effectiveDate', input.effectiveDate)
+  }
+  formData.append('file', input.file, input.file.name)
+  return formData
+}
+
 export interface AttachmentVersionFormDataInput {
   changeType: 'MAJOR' | 'MINOR'
   effectiveDate: string

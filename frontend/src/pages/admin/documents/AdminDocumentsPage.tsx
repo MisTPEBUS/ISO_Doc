@@ -225,7 +225,7 @@ export function AdminDocumentsPage() {
   const columns: ReadonlyArray<TableColumn<AdminDocument>> = [
     {
       key: "status",
-      header: "狀態",
+      header: "文件狀態",
       headerClassName: "w-24",
       render: (document) => (
         <Badge variant={document.isActive ? "success" : "danger"}>

@@ -231,6 +231,78 @@ public sealed class DocumentVersionApiTests
     }
 
     [Fact]
+    public async Task SupplementImportedDraft_PreservesVersionAndHistoricalEffectiveDate()
+    {
+        await using var factory = new DocumentVersionWebApplicationFactory();
+        var draft = factory.VersionStore.AddVersionSeed(3, 2, "DRAFT");
+        var historicalEffectiveDate = UtcToday().AddYears(-2);
+        draft.PublishDate = null;
+        draft.EffectiveDate = historicalEffectiveDate;
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateSupplementRequest(
+            factory.Document.Id, draft.Id, token, null, "GA-I-01_3.2.pdf", ValidPdf());
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<DocumentVersionResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal(draft.Id, body.VersionId);
+        Assert.Equal("3.2", body.Version);
+        Assert.Equal("PUBLISHED", body.Status);
+        Assert.Equal("PUBLISHED", draft.Status);
+        Assert.Equal(UtcToday(), draft.PublishDate);
+        Assert.Equal(historicalEffectiveDate, draft.EffectiveDate);
+        Assert.NotNull(draft.FileKey);
+        Assert.Equal("GA-I-01_3.2.pdf", draft.OriginalFileName);
+        Assert.Single(factory.Storage.WrittenKeys);
+        Assert.Equal(AuditActions.PublishDocumentVersion, Assert.Single(factory.Audit.Entries).Action);
+    }
+
+    [Fact]
+    public async Task SupplementDraftWithoutEffectiveDate_RequiresEffectiveDate()
+    {
+        await using var factory = new DocumentVersionWebApplicationFactory();
+        var draft = factory.VersionStore.AddVersionSeed(1, 0, "DRAFT");
+        draft.PublishDate = null;
+        draft.EffectiveDate = null;
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateSupplementRequest(
+            factory.Document.Id, draft.Id, token, null, "manual.pdf", ValidPdf());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("DRAFT", draft.Status);
+        Assert.Empty(factory.Storage.WrittenKeys);
+    }
+
+    [Fact]
+    public async Task SupplementHistoricalDraft_WhenPublishedVersionExists_ReturnsBadRequest()
+    {
+        await using var factory = new DocumentVersionWebApplicationFactory();
+        factory.VersionStore.AddVersionSeed(1, 0, "PUBLISHED");
+        var draft = factory.VersionStore.AddVersionSeed(2, 0, "DRAFT");
+        draft.PublishDate = null;
+        draft.EffectiveDate = UtcToday().AddDays(-1);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateSupplementRequest(
+            factory.Document.Id, draft.Id, token, null, "manual.pdf", ValidPdf());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("DRAFT", draft.Status);
+        Assert.Empty(factory.Storage.WrittenKeys);
+    }
+
+    [Fact]
     public async Task DeleteDraftVersion_HardDeletesRowAndMovesFileToTrash()
     {
         await using var factory = new DocumentVersionWebApplicationFactory();
@@ -326,6 +398,36 @@ public sealed class DocumentVersionApiTests
         var request = new HttpRequestMessage(
             HttpMethod.Post,
             $"/api/documents/{documentId}/versions")
+        {
+            Content = multipart
+        };
+        request.Headers.Add("X-XSRF-TOKEN", token);
+        return request;
+    }
+
+    private static HttpRequestMessage CreateSupplementRequest(
+        Guid documentId,
+        Guid versionId,
+        string token,
+        DateOnly? effectiveDate,
+        string fileName,
+        byte[] contents)
+    {
+        var multipart = new MultipartFormDataContent();
+        if (effectiveDate.HasValue)
+        {
+            multipart.Add(
+                new StringContent(effectiveDate.Value.ToString("yyyy-MM-dd")),
+                "effectiveDate");
+        }
+
+        var file = new ByteArrayContent(contents);
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        multipart.Add(file, "file", fileName);
+
+        var request = new HttpRequestMessage(
+            HttpMethod.Put,
+            $"/api/documents/{documentId}/versions/{versionId}/file")
         {
             Content = multipart
         };

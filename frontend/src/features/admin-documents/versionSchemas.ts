@@ -8,6 +8,11 @@ export interface VersionFormValues {
   file: File | null
 }
 
+export interface UploadDraftVersionFileFormValues {
+  effectiveDate: string
+  file: File | null
+}
+
 export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10)
 }
@@ -52,5 +57,12 @@ export const createVersionFormSchema = z.object({
   memo: z.string()
     .trim()
     .transform((value) => value.length === 0 ? undefined : value),
+  file: pdfFileSchema,
+})
+
+export const uploadDraftVersionFileFormSchema = z.object({
+  effectiveDate: z.string()
+    .min(1, '請輸入生效日期。')
+    .regex(/^\d{4}-\d{2}-\d{2}$/, '生效日期格式不正確。'),
   file: pdfFileSchema,
 })

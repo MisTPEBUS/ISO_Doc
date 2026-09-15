@@ -365,7 +365,7 @@ export function AdminDocumentImportPage() {
           )
         }
         if (row.status === 'success') {
-          return <Badge variant="success">成功</Badge>
+          return <Badge variant="success">成功（待補檔）</Badge>
         }
         if (row.status === 'failed') {
           return (

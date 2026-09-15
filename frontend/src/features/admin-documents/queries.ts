@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
   buildAttachmentVersionFormData,
+  buildUploadDraftVersionFileFormData,
   buildVersionFormData,
   type AttachmentVersionFormDataInput,
+  type UploadDraftVersionFileFormDataInput,
   type VersionFormDataInput,
 } from '@/api/formData'
 
@@ -106,6 +108,30 @@ export function useCreateVersion() {
   return useMutation({
     mutationFn: ({ documentId, input }: CreateVersionVariables) =>
       versionsApi.createVersion(documentId, buildVersionFormData(input)),
+    onSuccess: async (_version, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: adminDocumentKeys.detail(variables.documentId),
+      })
+    },
+  })
+}
+
+interface UploadDraftVersionFileVariables {
+  documentId: string
+  versionId: string
+  input: UploadDraftVersionFileFormDataInput
+}
+
+export function useUploadDraftVersionFile() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ documentId, versionId, input }: UploadDraftVersionFileVariables) =>
+      versionsApi.uploadDraftFile(
+        documentId,
+        versionId,
+        buildUploadDraftVersionFileFormData(input),
+      ),
     onSuccess: async (_version, variables) => {
       await queryClient.invalidateQueries({
         queryKey: adminDocumentKeys.detail(variables.documentId),

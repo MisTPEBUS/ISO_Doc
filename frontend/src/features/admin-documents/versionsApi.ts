@@ -11,3 +11,14 @@ export function createVersion(
     formData,
   )
 }
+
+export function uploadDraftFile(
+  documentId: string,
+  versionId: string,
+  formData: FormData,
+): Promise<CreateDocumentVersionResponse> {
+  return httpClient.put<CreateDocumentVersionResponse, FormData>(
+    `/documents/${documentId}/versions/${versionId}/file`,
+    formData,
+  )
+}

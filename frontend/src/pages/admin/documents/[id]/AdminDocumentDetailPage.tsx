@@ -23,15 +23,19 @@ import {
   useCreateAttachmentVersion,
   useCreateVersion,
   useDeleteAttachment,
+  useUploadDraftVersionFile,
 } from "@/features/admin-documents/queries";
 import {
   createVersionFormSchema,
   todayUtc,
+  uploadDraftVersionFileFormSchema,
+  type UploadDraftVersionFileFormValues,
   type VersionFormValues,
 } from "@/features/admin-documents/versionSchemas";
 import {
   DOCUMENT_VERSION_STATUS,
   type Attachment,
+  type DocumentVersionSummary,
   type DocumentVersionStatus,
 } from "@/features/admin-documents/types";
 import { useCurrentUser } from "@/features/auth/queries";
@@ -202,6 +206,19 @@ export function AdminDocumentDetailPage() {
   const [versionFieldErrors, setVersionFieldErrors] =
     useState<VersionFieldErrors>({});
   const [versionFormError, setVersionFormError] = useState<string>();
+  const uploadDraftVersionFile = useUploadDraftVersionFile();
+  const [draftVersionTarget, setDraftVersionTarget] =
+    useState<DocumentVersionSummary>();
+  const [draftFileFormKey, setDraftFileFormKey] = useState(0);
+  const [draftFileValues, setDraftFileValues] =
+    useState<UploadDraftVersionFileFormValues>({
+      effectiveDate: "",
+      file: null,
+    });
+  const [draftFileFieldErrors, setDraftFileFieldErrors] = useState<
+    Partial<Record<keyof UploadDraftVersionFileFormValues, string>>
+  >({});
+  const [draftFileFormError, setDraftFileFormError] = useState<string>();
 
   const deleteAttachment = useDeleteAttachment();
   const createAttachmentVersion = useCreateAttachmentVersion();
@@ -227,6 +244,69 @@ export function AdminDocumentDetailPage() {
     useState<Partial<Record<keyof AttachmentVersionFormValues, string>>>({});
   const [attachmentVersionFormError, setAttachmentVersionFormError] =
     useState<string>();
+
+  function openDraftFileModal(version: DocumentVersionSummary) {
+    setDraftVersionTarget(version);
+    setDraftFileValues({
+      effectiveDate: version.effectiveDate ?? todayUtc(),
+      file: null,
+    });
+    setDraftFileFieldErrors({});
+    setDraftFileFormError(undefined);
+    setDraftFileFormKey((current) => current + 1);
+  }
+
+  function closeDraftFileModal() {
+    if (!uploadDraftVersionFile.isPending) setDraftVersionTarget(undefined);
+  }
+
+  function handleDraftFileSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setDraftFileFormError(undefined);
+
+    const parsed = uploadDraftVersionFileFormSchema.safeParse(draftFileValues);
+    if (!parsed.success) {
+      const errors = parsed.error.flatten().fieldErrors;
+      setDraftFileFieldErrors({
+        effectiveDate: firstMessage(errors.effectiveDate),
+        file: firstMessage(errors.file),
+      });
+      return;
+    }
+
+    if (id === undefined || draftVersionTarget === undefined) {
+      setDraftFileFormError("找不到這個草稿版本，請重新整理頁面後再試。");
+      return;
+    }
+
+    uploadDraftVersionFile.mutate(
+      {
+        documentId: id,
+        versionId: draftVersionTarget.versionId,
+        input: parsed.data,
+      },
+      {
+        onSuccess: () => setDraftVersionTarget(undefined),
+        onError: (error) => {
+          if (error instanceof ApiError && error.status === 400) {
+            const errors = error.fieldErrors();
+            setDraftFileFieldErrors({
+              effectiveDate: apiFieldMessage(errors, "effectiveDate"),
+              file: apiFieldMessage(errors, "file"),
+            });
+            setDraftFileFormError(
+              Object.keys(errors).length === 0
+                ? (error.detail ?? "欄位或檔案內容不正確，請檢查後重試。")
+                : undefined,
+            );
+            return;
+          }
+
+          setDraftFileFormError(versionErrorMessage(error));
+        },
+      },
+    );
+  }
 
   function confirmDeleteAttachment() {
     if (id === undefined || deleteAttachmentTarget === undefined) return;
@@ -676,10 +756,15 @@ export function AdminDocumentDetailPage() {
           <ol className="divide-y divide-line">
             {detail.versions.map((version) => {
               const status = getVersionStatusPresentation(version.status);
+              const canSupplementFile =
+                typeof version.status === "string" &&
+                version.status.toUpperCase() === DOCUMENT_VERSION_STATUS.Draft &&
+                !version.hasFile &&
+                detail.isActive;
               return (
                 <li
                   key={version.version}
-                  className="grid gap-3 px-4 py-3 md:grid-cols-[8rem_1fr_1fr] md:items-center"
+                  className="grid gap-3 px-4 py-3 md:grid-cols-[8rem_1fr_1fr_auto] md:items-center"
                 >
                   <div className="flex items-center gap-2">
                     <span
@@ -712,12 +797,135 @@ export function AdminDocumentDetailPage() {
                       </p>
                     </div>
                   </div>
+                  <div className="md:justify-self-end">
+                    {canSupplementFile && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openDraftFileModal(version)}
+                      >
+                        補主文檔
+                      </Button>
+                    )}
+                  </div>
                 </li>
               );
             })}
           </ol>
         )}
       </section>
+
+      <Modal
+        open={draftVersionTarget !== undefined}
+        onClose={closeDraftFileModal}
+        title="補主文檔"
+        description={
+          draftVersionTarget
+            ? `${detail.documentNo}｜版本 ${draftVersionTarget.version}`
+            : undefined
+        }
+        size="md"
+        closeOnBackdrop={!uploadDraftVersionFile.isPending}
+        closeOnEscape={!uploadDraftVersionFile.isPending}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              disabled={uploadDraftVersionFile.isPending}
+              onClick={closeDraftFileModal}
+            >
+              取消
+            </Button>
+            <Button
+              type="submit"
+              form="upload-draft-version-file-form"
+              loading={uploadDraftVersionFile.isPending}
+              loadingText="補檔中"
+            >
+              補檔並發布
+            </Button>
+          </>
+        }
+      >
+        <form
+          key={draftFileFormKey}
+          id="upload-draft-version-file-form"
+          className="space-y-4"
+          onSubmit={handleDraftFileSubmit}
+        >
+          {draftFileFormError && (
+            <Alert variant="error" title="無法補上主文檔">
+              {draftFileFormError}
+            </Alert>
+          )}
+
+          <Alert variant="info" title="保留原版本號">
+            補檔會將此草稿版本轉為已發布，不會建立新版本或變更版本號。
+          </Alert>
+
+          <FormField label="版本號">
+            <p className="h-control border border-line bg-surface-header px-3 py-2 font-mono text-code text-ink">
+              {draftVersionTarget?.version}
+            </p>
+          </FormField>
+
+          <FormField
+            label="生效日期"
+            htmlFor="draft-version-effective-date"
+            error={draftFileFieldErrors.effectiveDate}
+            hint={
+              draftVersionTarget?.effectiveDate
+                ? "沿用 Excel 匯入的生效日期。"
+                : "Excel 未提供生效日期，請於補檔時設定。"
+            }
+            required
+          >
+            <Input
+              id="draft-version-effective-date"
+              type="date"
+              value={draftFileValues.effectiveDate}
+              disabled={draftVersionTarget?.effectiveDate !== null}
+              error={draftFileFieldErrors.effectiveDate !== undefined}
+              onChange={(event) => {
+                setDraftFileValues((current) => ({
+                  ...current,
+                  effectiveDate: event.target.value,
+                }));
+                setDraftFileFieldErrors((current) => ({
+                  ...current,
+                  effectiveDate: undefined,
+                }));
+                setDraftFileFormError(undefined);
+              }}
+            />
+          </FormField>
+
+          <FormField
+            label="PDF 檔案"
+            htmlFor="draft-version-file"
+            error={draftFileFieldErrors.file}
+            required
+          >
+            <Input
+              id="draft-version-file"
+              type="file"
+              accept=".pdf,application/pdf"
+              error={draftFileFieldErrors.file !== undefined}
+              onChange={(event) => {
+                setDraftFileValues((current) => ({
+                  ...current,
+                  file: event.target.files?.[0] ?? null,
+                }));
+                setDraftFileFieldErrors((current) => ({
+                  ...current,
+                  file: undefined,
+                }));
+                setDraftFileFormError(undefined);
+              }}
+            />
+          </FormField>
+        </form>
+      </Modal>
 
       <Modal
         open={deleteAttachmentTarget !== undefined}
