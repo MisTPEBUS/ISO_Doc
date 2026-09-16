@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { classNames } from './classNames'
 
 export interface SidebarNavItem {
@@ -75,9 +76,9 @@ export function SidebarNav({
                   || activeHref?.startsWith(`${item.href}/`) === true
 
                 return (
-                  <a
+                  <Link
                     key={item.key}
-                    href={item.href}
+                    to={item.href}
                     aria-current={active ? 'page' : undefined}
                     title={item.label}
                     className={classNames(
@@ -90,7 +91,7 @@ export function SidebarNav({
                       {item.icon}
                     </span>
                     <span className={classNames('truncate', collapsed && 'hidden')}>{item.label}</span>
-                  </a>
+                  </Link>
                 )
               })}
             </div>

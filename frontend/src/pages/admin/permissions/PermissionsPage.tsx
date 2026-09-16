@@ -2,6 +2,8 @@ import { useState } from "react";
 
 import { ApiError } from "@/api/httpClient";
 import { Alert, Button, FormField, Select } from "@/components/common";
+import { useCurrentUser } from "@/features/auth/queries";
+import { USER_ROLE } from "@/features/auth/types";
 import { useCompanies } from "@/features/companies/queries";
 import { PermissionMatrixTable } from "@/features/permissions/components/PermissionMatrixTable";
 import {
@@ -64,12 +66,18 @@ export function PermissionsPage() {
   const [saveError, setSaveError] = useState<string>();
   const [successMessage, setSuccessMessage] = useState<string>();
 
-  const companies = useCompanies({ page: 1, pageSize: 100 });
-  const selectedCompanyCode =
-    requestedCompanyCode || companies.data?.items[0]?.code || "";
+  const currentUser = useCurrentUser();
+  // /api/companies 僅 SYSTEM_ADMIN 可呼叫；COMPANY_ADMIN 沒有跨公司選擇的需求，
+  // 後端會依登入者自己的 companyId 強制限縮範圍（忽略傳入的 companyCode）。
+  const isSystemAdmin = currentUser.data?.role === USER_ROLE.SystemAdmin;
+  const isCompanyAdmin = currentUser.data?.role === USER_ROLE.CompanyAdmin;
+  const companies = useCompanies({ page: 1, pageSize: 100 }, isSystemAdmin);
+  const selectedCompanyCode = isSystemAdmin
+    ? requestedCompanyCode || companies.data?.items[0]?.code || ""
+    : "";
   const matrix = usePermissionMatrix(
     { companyCode: selectedCompanyCode, page, pageSize },
-    selectedCompanyCode.length > 0,
+    isSystemAdmin ? selectedCompanyCode.length > 0 : isCompanyAdmin,
   );
   const updateMatrix = useUpdatePermissionMatrix();
 
@@ -172,30 +180,38 @@ export function PermissionsPage() {
             勾選可查看各主文的部門；勾選後按「儲存」才會真正套用。
           </p>
         </div>
-        <FormField
-          className="w-full shrink-0 sm:w-64"
-          label="選擇公司"
-          htmlFor="permission-company"
-        >
-          <Select
-            id="permission-company"
-            value={selectedCompanyCode}
-            disabled={companies.isPending || companies.isError}
-            onChange={(event) => selectCompany(event.target.value)}
+        {isSystemAdmin ? (
+          <FormField
+            className="w-full shrink-0 sm:w-64"
+            label="選擇公司"
+            htmlFor="permission-company"
           >
-            <option value="">
-              {companies.isPending ? "公司載入中" : "請選擇公司"}
-            </option>
-            {companies.data?.items.map((company) => (
-              <option key={company.id} value={company.code}>
-                {company.name}
+            <Select
+              id="permission-company"
+              value={selectedCompanyCode}
+              disabled={companies.isPending || companies.isError}
+              onChange={(event) => selectCompany(event.target.value)}
+            >
+              <option value="">
+                {companies.isPending ? "公司載入中" : "請選擇公司"}
               </option>
-            ))}
-          </Select>
-        </FormField>
+              {companies.data?.items.map((company) => (
+                <option key={company.id} value={company.code}>
+                  {company.name}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+        ) : (
+          currentUser.data && (
+            <FormField className="w-full shrink-0 sm:w-64" label="公司">
+              <p className="text-cell text-ink">{currentUser.data.companyName}</p>
+            </FormField>
+          )
+        )}
       </div>
 
-      {companies.isError && (
+      {isSystemAdmin && companies.isError && (
         <Alert className="mb-4" variant="error" title="無法載入公司">
           {errorMessage(companies.error, "請稍後重新整理頁面。")}
         </Alert>
@@ -206,7 +222,7 @@ export function PermissionsPage() {
           <Alert className="m-4" variant="error" title="無法載入權限矩陣">
             {errorMessage(matrix.error, "請稍後重新整理頁面。")}
           </Alert>
-        ) : selectedCompanyCode.length === 0 ? (
+        ) : isSystemAdmin && selectedCompanyCode.length === 0 ? (
           <div className="p-12 text-center">
             <p className="text-cell font-medium text-ink">請先選擇公司</p>
             <p className="mt-1 text-meta text-ink-muted">

@@ -268,12 +268,12 @@ export function UiKitPage() {
           currentUser.data.role !== USER_ROLE.User
             ? {
                 label: "管理介面",
-                href: `${import.meta.env.BASE_URL}admin/documents`,
+                href: "/admin/documents",
               }
             : undefined
         }
         changePasswordHref={
-          currentUser.data ? `${import.meta.env.BASE_URL}change-password` : null
+          currentUser.data ? "/change-password" : null
         }
         logoutLabel={logoutMutation.isPending ? "登出中" : "登出"}
         onLogout={handleLogout}

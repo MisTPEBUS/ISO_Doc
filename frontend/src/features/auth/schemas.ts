@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const loginSchema = z.object({
-  empno: z.string().trim().min(1, "請輸入帳號"),
+  empno: z.string().trim().min(1, "請輸入員工帳號"),
   password: z.string().min(1, "請輸入密碼"),
 });
 

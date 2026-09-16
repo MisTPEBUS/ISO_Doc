@@ -295,7 +295,7 @@ export function AdminAttachmentImportPage() {
                 選擇資料夾
               </Button>
             </div>
-            <p className="mt-4 text-fine text-ink-faint">
+            <p className="mt-4 text-fine text-ink-muted">
               範例：GA-P-01文件與紀錄管制程序.pdf、GA-P-01-01B文件登記表.xls
             </p>
           </div>
@@ -517,7 +517,7 @@ export function AdminAttachmentImportPage() {
                                     {file.file.name}
                                   </p>
                                   <p
-                                    className="mt-0.5 truncate text-fine text-ink-faint"
+                                    className="mt-0.5 truncate text-fine text-ink-muted"
                                     title={file.relativePath}
                                   >
                                     {file.relativePath}

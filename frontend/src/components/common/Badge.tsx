@@ -6,11 +6,11 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 const variantClasses: Record<NonNullable<BadgeProps['variant']>, string> = {
-  neutral: 'bg-slate-100 text-slate-700 ring-slate-300',
-  info: 'bg-blue-50 text-blue-700 ring-blue-200',
-  success: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  warning: 'bg-amber-50 text-amber-800 ring-amber-200',
-  danger: 'bg-red-50 text-red-700 ring-red-200',
+  neutral: 'bg-state-obsolete-subtle text-state-obsolete ring-state-obsolete',
+  info: 'bg-state-review-subtle text-state-review ring-state-review',
+  success: 'bg-state-active-subtle text-state-active ring-state-active',
+  warning: 'bg-state-expiring-subtle text-state-expiring ring-state-expiring',
+  danger: 'bg-state-danger-subtle text-state-danger ring-state-danger',
 }
 
 export function Badge({

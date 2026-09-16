@@ -14,7 +14,7 @@ export function AdminLayout() {
   const user = currentUser.data
   const logoutMutation = useLogout()
   const [logoutError, setLogoutError] = useState<string>()
-  const activeHref = `${import.meta.env.BASE_URL.replace(/\/$/, '')}${location.pathname}`
+  const activeHref = location.pathname
 
   function handleLogout() {
     if (logoutMutation.isPending) return
@@ -38,8 +38,8 @@ export function AdminLayout() {
         departmentName={user?.deptName}
         userName={user?.name ?? '使用者'}
         roleLabel={user ? USER_ROLE_LABEL[user.role] : undefined}
-        modeLink={{ label: '前台查閱', href: import.meta.env.BASE_URL }}
-        changePasswordHref={`${import.meta.env.BASE_URL}change-password`}
+        modeLink={{ label: '前台查閱', href: '/' }}
+        changePasswordHref="/change-password"
         logoutLabel={logoutMutation.isPending ? '登出中' : '登出'}
         onLogout={handleLogout}
       />

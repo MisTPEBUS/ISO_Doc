@@ -23,19 +23,20 @@
   --color-ink-faint: #94a3b8;
   --color-ink-disabled: #cbd5e1;
 
-  --color-state-active: #059669;
+  --color-state-active: #047857;
   --color-state-active-subtle: #ecfdf5;
   --color-state-review: #2563eb;
   --color-state-review-subtle: #eff6ff;
-  --color-state-expiring: #d97706;
+  --color-state-expiring: #92400e;
   --color-state-expiring-subtle: #fffbeb;
   --color-state-obsolete: #64748b;
   --color-state-obsolete-subtle: #f1f5f9;
-  --color-state-danger: #dc2626;
+  --color-state-danger: #b91c1c;
   --color-state-danger-subtle: #fef2f2;
 
   --color-line: #e2e8f0;
   --color-line-strong: #cbd5e1;
+  --color-control-border: #8492a6;
 
   --font-sans: "Inter", "Noto Sans TC", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;

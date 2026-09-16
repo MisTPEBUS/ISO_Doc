@@ -13,7 +13,7 @@ const variantClasses: Record<NonNullable<ButtonProps['variant']>, string> = {
   primary:
     'border-primary bg-primary text-on-primary hover:border-primary-hover hover:bg-primary-hover focus-visible:outline-primary',
   secondary:
-    'border-line bg-surface text-ink hover:bg-surface-header focus-visible:outline-primary',
+    'border-control-border bg-surface text-ink hover:bg-surface-header focus-visible:outline-primary',
   danger:
     'border-state-danger bg-state-danger text-on-primary hover:brightness-95 focus-visible:outline-state-danger',
   ghost:

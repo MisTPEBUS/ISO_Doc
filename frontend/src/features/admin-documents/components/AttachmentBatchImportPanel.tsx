@@ -354,7 +354,7 @@ export function AttachmentBatchImportPanel({
           <p className="font-semibold text-ink">
             拖曳多個檔案到這裡，或點擊選擇檔案
           </p>
-          <p className="mt-1 text-fine text-ink-faint">
+          <p className="mt-1 text-fine text-ink-muted">
             支援 {ALLOWED_ATTACHMENT_EXTENSIONS.join("、")}
           </p>
         </div>

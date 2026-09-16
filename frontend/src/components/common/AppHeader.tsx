@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 import { classNames } from './classNames'
 
 export interface AppHeaderLink {
@@ -69,20 +71,20 @@ export function AppHeader({
           )}
         </span>
         {modeLink && (
-          <a
-            href={modeLink.href}
+          <Link
+            to={modeLink.href}
             className="text-primary-on-shell hover:text-on-shell hover:underline focus-visible:rounded-xs"
           >
             {modeLink.label}
-          </a>
+          </Link>
         )}
         {changePasswordHref && (
-          <a
-            href={changePasswordHref}
+          <Link
+            to={changePasswordHref}
             className="text-primary-on-shell hover:text-on-shell hover:underline focus-visible:rounded-xs"
           >
             修改密碼
-          </a>
+          </Link>
         )}
         <button
           type="button"

@@ -1,7 +1,5 @@
 import type { SidebarNavGroup } from '@/components/common'
 
-const baseUrl = import.meta.env.BASE_URL
-
 export const adminNavGroups: ReadonlyArray<SidebarNavGroup> = [
   {
     key: 'documents',
@@ -10,19 +8,19 @@ export const adminNavGroups: ReadonlyArray<SidebarNavGroup> = [
       {
         key: 'documents',
         label: 'ISO 文件維護',
-        href: `${baseUrl}admin/documents`,
+        href: '/admin/documents',
         icon: '文',
       },
       {
         key: 'permissions',
         label: '權限維護',
-        href: `${baseUrl}admin/permissions`,
+        href: '/admin/permissions',
         icon: '權',
       },
       {
         key: 'backup',
         label: 'ISO 文件備份',
-        href: `${baseUrl}admin/backup`,
+        href: '/admin/backup',
         icon: '備',
       },
     ],
@@ -34,13 +32,13 @@ export const adminNavGroups: ReadonlyArray<SidebarNavGroup> = [
       {
         key: 'departments',
         label: '部門維護',
-        href: `${baseUrl}admin/departments`,
+        href: '/admin/departments',
         icon: '部',
       },
       {
         key: 'users',
         label: '使用者維護',
-        href: `${baseUrl}admin/users`,
+        href: '/admin/users',
         icon: '人',
       },
     ],
