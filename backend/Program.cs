@@ -81,17 +81,18 @@ builder.Services.AddControllersWithViews(options =>
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-XSRF-TOKEN";
-    options.Cookie.SecurePolicy =
-        builder.Environment.IsDevelopment()
-            ? CookieSecurePolicy.SameAsRequest
-            : CookieSecurePolicy.Always;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
 });
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
         options.Cookie.Name = "isodocs.auth";
         options.Cookie.HttpOnly = true;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+
+        // HTTP -> 非 Secure
+        // HTTPS -> Secure
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
@@ -127,6 +128,7 @@ builder.Services.AddScoped<IValidator<UpdateDeptRequest>, UpdateDeptRequestValid
 builder.Services.AddScoped<IValidator<CreateDocumentRequest>, CreateDocumentRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateDocumentRequest>, UpdateDocumentRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateDocumentVersionRequest>, CreateDocumentVersionRequestValidator>();
+builder.Services.AddScoped<IValidator<UploadDocumentVersionFileRequest>, UploadDocumentVersionFileRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateAttachmentRequest>, CreateAttachmentRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateAttachmentVersionRequest>, CreateAttachmentVersionRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateDocumentDeptPermissionsRequest>, UpdateDocumentDeptPermissionsRequestValidator>();
@@ -210,7 +212,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseStatusCodePages();
-app.UseHttpsRedirection();
+/* app.UseHttpsRedirection(); */
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
