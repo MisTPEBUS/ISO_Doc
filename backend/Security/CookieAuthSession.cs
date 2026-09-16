@@ -57,7 +57,10 @@ public sealed class CookieAuthSession(
             new CookieOptions
             {
                 HttpOnly = false,
-                Secure = true,
+                // 與 isodocs.auth 一致：HTTP -> 非 Secure，HTTPS -> Secure。
+                // 寫死 true 會導致純 HTTP（例如用區網 IP 存取）時瀏覽器直接不存這顆 cookie，
+                // 使前端讀不到 token、後續非 GET 請求（如登出）的 CSRF 驗證失敗。
+                Secure = httpContext.Request.IsHttps,
                 SameSite = SameSiteMode.Lax,
                 IsEssential = true,
                 Path = "/"

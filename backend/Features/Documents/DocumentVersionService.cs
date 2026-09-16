@@ -17,6 +17,7 @@ public sealed class DocumentVersionService(
     StorageKeyBuilder storageKeyBuilder,
     ICurrentUser currentUser,
     IValidator<CreateDocumentVersionRequest> validator,
+    IValidator<UploadDocumentVersionFileRequest> uploadValidator,
     IOperationAuditLogService auditLogService,
     TimeProvider timeProvider) : IDocumentVersionService
 {
@@ -169,6 +170,166 @@ public sealed class DocumentVersionService(
 
             return Result<DocumentVersionResponse>.Conflict(
                 "此文件已存在相同的版本號。");
+        }
+        catch (Exception exception) when (IsPublishedVersionConflict(exception))
+        {
+            if (writtenObjectKey is not null)
+            {
+                await TryMoveToTrashAsync(writtenObjectKey);
+            }
+
+            return Result<DocumentVersionResponse>.Conflict(
+                "另一個版本已同時發佈，請重新載入文件後再試一次。");
+        }
+        catch
+        {
+            if (writtenObjectKey is not null)
+            {
+                await TryMoveToTrashAsync(writtenObjectKey);
+            }
+
+            throw;
+        }
+    }
+
+    public async Task<Result<DocumentVersionResponse>> UploadDraftFileAsync(
+        Guid documentId,
+        Guid versionId,
+        UploadDocumentVersionFileRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await uploadValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return Result<DocumentVersionResponse>.ValidationFailed(ToErrors(validation));
+        }
+
+        if (!await HasPdfMagicBytesAsync(request.File!, cancellationToken))
+        {
+            return Result<DocumentVersionResponse>.ValidationFailed(new(StringComparer.Ordinal)
+            {
+                ["file"] = ["文件內容不是有效的 PDF 檔案。"]
+            });
+        }
+
+        var version = await versionStore.FindVersionAsync(versionId, cancellationToken);
+        if (version is null || version.DocumentId != documentId)
+        {
+            return Result<DocumentVersionResponse>.NotFound("找不到指定的文件版本。");
+        }
+
+        var document = await versionStore.FindDocumentAsync(documentId, cancellationToken);
+        if (document is null)
+        {
+            return Result<DocumentVersionResponse>.NotFound("找不到指定的文件。");
+        }
+
+        if (!document.IsActive)
+        {
+            return Result<DocumentVersionResponse>.Conflict("已停用的文件無法補上主文檔。");
+        }
+
+        if (!currentUser.CanAccessCompany(document.CompanyId))
+        {
+            return Result<DocumentVersionResponse>.Forbidden(
+                "您沒有為此文件補上主文檔的權限。");
+        }
+
+        if (currentUser.UserId is null)
+        {
+            return Result<DocumentVersionResponse>.Unauthorized("請先登入後再操作。");
+        }
+
+        if (version.Status != "DRAFT")
+        {
+            return Result<DocumentVersionResponse>.Conflict("只有草稿版本可以補上主文檔。");
+        }
+
+        if (version.FileKey is not null)
+        {
+            return Result<DocumentVersionResponse>.Conflict("此草稿版本已有主文檔。");
+        }
+
+        var effectiveDate = version.EffectiveDate ?? request.EffectiveDate;
+        if (!effectiveDate.HasValue)
+        {
+            return Result<DocumentVersionResponse>.ValidationFailed(new(StringComparer.Ordinal)
+            {
+                ["effectiveDate"] = ["此版本尚未設定生效日期，請輸入生效日期。"]
+            });
+        }
+
+        var previousPublished = await versionStore.ListPublishedVersionsAsync(
+            documentId, cancellationToken);
+        var publishDate = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        if (previousPublished.Count > 0 && effectiveDate.Value < publishDate)
+        {
+            return Result<DocumentVersionResponse>.ValidationFailed(new(StringComparer.Ordinal)
+            {
+                ["effectiveDate"] = ["已有發布版本時，生效日期不可早於補檔日期。"]
+            });
+        }
+
+        var companyCode = await versionStore.FindCompanyCodeAsync(
+            document.CompanyId, cancellationToken);
+        if (companyCode is null)
+        {
+            return Result<DocumentVersionResponse>.NotFound("找不到文件所屬的公司。");
+        }
+
+        string? writtenObjectKey = null;
+        try
+        {
+            await using var transaction = await versionStore.BeginTransactionAsync(cancellationToken);
+            var objectKey = storageKeyBuilder.BuildMainKey(
+                companyCode,
+                document.DocumentNo,
+                version.Version,
+                Guid.NewGuid(),
+                request.File!.FileName);
+
+            await using var fileStream = request.File.OpenReadStream();
+            var writeResult = await documentStorage.WriteAsync(
+                objectKey, fileStream, cancellationToken);
+            writtenObjectKey = objectKey;
+
+            foreach (var previous in previousPublished)
+            {
+                previous.Status = "OBSOLETE";
+                previous.ExpiredDate = effectiveDate.Value;
+            }
+
+            version.Status = "PUBLISHED";
+            version.PublishDate = publishDate;
+            version.EffectiveDate = effectiveDate.Value;
+            version.FileKey = objectKey;
+            version.OriginalFileName = request.File.FileName;
+            version.ContentType = "application/pdf";
+            version.FileSize = writeResult.FileSize;
+            version.Checksum = writeResult.Checksum;
+
+            await versionStore.SaveChangesAsync(cancellationToken);
+            await auditLogService.WriteAsync(
+                new AuditLogWriteRequest(
+                    document.CompanyId,
+                    AuditActions.PublishDocumentVersion,
+                    AuditResourceTypes.DocumentVersion,
+                    version.Id,
+                    new
+                    {
+                        document_id = document.Id,
+                        version = version.Version,
+                        effective_date = version.EffectiveDate,
+                        supplemented_draft = true,
+                        previous_published_version_ids = previousPublished
+                            .Select(previous => previous.Id)
+                            .ToArray()
+                    }),
+                cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return Result<DocumentVersionResponse>.Success(new(
+                version.Id, version.Version, version.Status));
         }
         catch (Exception exception) when (IsPublishedVersionConflict(exception))
         {

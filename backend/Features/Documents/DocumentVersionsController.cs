@@ -30,6 +30,17 @@ public sealed class DocumentVersionsController(
         return result.ToCreatedResult(this, location);
     }
 
+    [HttpPut("{versionId:guid}/file")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadDraftFile(
+        Guid documentId,
+        Guid versionId,
+        [FromForm] UploadDocumentVersionFileRequest request,
+        CancellationToken cancellationToken) =>
+        (await documentVersionService.UploadDraftFileAsync(
+            documentId, versionId, request, cancellationToken))
+        .ToOkResult(this);
+
     [HttpDelete("{versionId:guid}")]
     public async Task<IActionResult> Delete(
         Guid documentId,

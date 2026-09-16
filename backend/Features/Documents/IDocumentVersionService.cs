@@ -10,6 +10,12 @@ public interface IDocumentVersionService
         CreateDocumentVersionRequest request,
         CancellationToken cancellationToken);
 
+    Task<Result<DocumentVersionResponse>> UploadDraftFileAsync(
+        Guid documentId,
+        Guid versionId,
+        UploadDocumentVersionFileRequest request,
+        CancellationToken cancellationToken);
+
     Task<Result> DeleteDraftAsync(
         Guid documentId,
         Guid versionId,
