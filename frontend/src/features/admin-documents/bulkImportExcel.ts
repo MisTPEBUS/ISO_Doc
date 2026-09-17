@@ -61,6 +61,67 @@ function cellText(value: unknown): string {
   return String(value).trim()
 }
 
+const MILLISECONDS_PER_DAY = 86_400_000
+const EXCEL_EPOCH_UTC = Date.UTC(1899, 11, 30)
+
+function toIsoDate(year: number, month: number, day: number): string | undefined {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return undefined
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day))
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== month - 1
+    || date.getUTCDate() !== day
+  ) {
+    return undefined
+  }
+
+  return [year, month, day]
+    .map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0'))
+    .join('-')
+}
+
+/**
+ * 將 Excel 匯入的日期正規化為 API DateOnly 使用的 yyyy-MM-dd。
+ * 支援西元日期、民國日期，以及未套用日期格式的 Excel 日期序號。
+ * 無法辨識或日期不合法時保留原值，讓使用者仍可在表格中修正。
+ */
+export function normalizeImportedEffectiveDate(value: string): string {
+  const trimmed = value.trim().replace(/^'/, '')
+  if (trimmed === '') return ''
+
+  const dateParts = trimmed.match(
+    /^(?:民國\s*)?(\d{1,4})\s*(?:[./-]|年)\s*(\d{1,2})\s*(?:[./-]|月)\s*(\d{1,2})\s*日?$/,
+  )
+  if (dateParts) {
+    const yearText = dateParts[1]
+    const monthText = dateParts[2]
+    const dayText = dateParts[3]
+    if (yearText && monthText && dayText) {
+      const parsedYear = Number(yearText)
+      const year = yearText.length <= 3 ? parsedYear + 1911 : parsedYear
+      return toIsoDate(year, Number(monthText), Number(dayText)) ?? trimmed
+    }
+  }
+
+  if (/^\d+(?:\.\d+)?$/.test(trimmed)) {
+    const serial = Number(trimmed)
+    if (Number.isFinite(serial) && serial >= 1 && serial <= 2_958_465) {
+      const date = new Date(EXCEL_EPOCH_UTC + Math.floor(serial) * MILLISECONDS_PER_DAY)
+      const normalized = toIsoDate(
+        date.getUTCFullYear(),
+        date.getUTCMonth() + 1,
+        date.getUTCDate(),
+      )
+      if (normalized) return normalized
+    }
+  }
+
+  return trimmed
+}
+
 function normalize(value: string): string {
   return value
     .replace(/\s+/g, '')
@@ -198,7 +259,10 @@ export function buildRowsFromMapping(
       for (const target of MAPPING_TARGETS) {
         const columnIndex = mapping[target.key]
         if (columnIndex !== null) {
-          row[target.key] = (sourceRow[columnIndex] ?? '').trim()
+          const value = (sourceRow[columnIndex] ?? '').trim()
+          row[target.key] = target.key === 'effectiveDate'
+            ? normalizeImportedEffectiveDate(value)
+            : value
         }
       }
       return row

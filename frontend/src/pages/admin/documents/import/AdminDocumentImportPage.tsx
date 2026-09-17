@@ -488,6 +488,9 @@ export function AdminDocumentImportPage() {
                 <p className="mt-1.5 text-meta text-ink-muted">
                   支援 .xlsx / .xls，會自動尋找表頭。
                 </p>
+                <p className="mt-1 text-fine text-ink-muted">
+                  生效日期支援西元 2025-04-11、2025/04/11，以及民國 114/04/11。
+                </p>
               </div>
             </div>
             {parsing && <p className="mt-3 text-meta text-ink-muted">正在解析 Excel…</p>}

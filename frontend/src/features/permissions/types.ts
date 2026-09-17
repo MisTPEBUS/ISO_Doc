@@ -52,10 +52,19 @@ export interface PermissionMatrixResponse {
   pagination: PermissionMatrixPagination
 }
 
+export interface PermissionMatrixScopeParams {
+  companyCode: string
+}
+
 export interface PermissionMatrixParams {
   companyCode: string
   page: number
   pageSize: number
+}
+
+export interface AllPermissionMatrixItems {
+  departments: PermissionMatrixDepartment[]
+  items: PermissionMatrixItem[]
 }
 
 export interface UpdateDocumentPermissionMatrixItemRequest {

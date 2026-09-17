@@ -7,6 +7,7 @@ import { USER_ROLE } from "@/features/auth/types";
 import { useCompanies } from "@/features/companies/queries";
 import { PermissionMatrixTable } from "@/features/permissions/components/PermissionMatrixTable";
 import {
+  useAllPermissionMatrixItems,
   usePermissionMatrix,
   useUpdatePermissionMatrix,
 } from "@/features/permissions/queries";
@@ -75,9 +76,16 @@ export function PermissionsPage() {
   const selectedCompanyCode = isSystemAdmin
     ? requestedCompanyCode || companies.data?.items[0]?.code || ""
     : "";
+  const matrixEnabled = isSystemAdmin
+    ? selectedCompanyCode.length > 0
+    : isCompanyAdmin;
   const matrix = usePermissionMatrix(
     { companyCode: selectedCompanyCode, page, pageSize },
-    isSystemAdmin ? selectedCompanyCode.length > 0 : isCompanyAdmin,
+    matrixEnabled,
+  );
+  const allMatrixItems = useAllPermissionMatrixItems(
+    { companyCode: selectedCompanyCode },
+    matrixEnabled,
   );
   const updateMatrix = useUpdatePermissionMatrix();
 
@@ -170,6 +178,33 @@ export function PermissionsPage() {
     });
   }
 
+  function toggleDepartmentForAllDocuments(departmentId: string) {
+    const documents = allMatrixItems.data?.items ?? [];
+    if (documents.length === 0) return;
+
+    setSelectionOverrides((current) => {
+      const allDocumentsSelected = documents.every((document) => {
+        const selectedDepartmentIds =
+          current[document.documentId] ?? new Set(document.departmentIds);
+        return selectedDepartmentIds.has(departmentId);
+      });
+
+      return documents.reduce<SelectionOverrides>((next, document) => {
+        const nextSelection = new Set(
+          next[document.documentId] ?? document.departmentIds,
+        );
+
+        if (allDocumentsSelected) {
+          nextSelection.delete(departmentId);
+        } else {
+          nextSelection.add(departmentId);
+        }
+
+        return applyDepartmentSelection(next, document, nextSelection);
+      }, current);
+    });
+  }
+
   return (
     <section>
       <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -177,7 +212,7 @@ export function PermissionsPage() {
           <p className="mb-1 text-label font-medium text-primary">文件管理</p>
           <h1 className="text-page-title text-ink">ISO 文件權限矩陣</h1>
           <p className="mt-1 text-meta text-ink-muted">
-            勾選可查看各主文的部門；勾選後按「儲存」才會真正套用。
+            勾選可查看各主文的部門；表頭勾選可一次套用該部門的所有文件，按「儲存」後才會生效。
           </p>
         </div>
         {isSystemAdmin ? (
@@ -217,6 +252,12 @@ export function PermissionsPage() {
         </Alert>
       )}
 
+      {allMatrixItems.isError && !matrix.isError && (
+        <Alert className="mb-4" variant="error" title="無法載入全部文件">
+          部門整欄全選目前無法使用；你仍可逐份文件調整權限。
+        </Alert>
+      )}
+
       <div className="overflow-hidden rounded-md border border-line-strong bg-surface">
         {matrix.isError ? (
           <Alert className="m-4" variant="error" title="無法載入權限矩陣">
@@ -233,13 +274,16 @@ export function PermissionsPage() {
           <PermissionMatrixTable
             departments={matrix.data?.departments ?? []}
             items={matrix.data?.items ?? []}
+            allItems={allMatrixItems.data?.items ?? []}
             selectionOverrides={selectionOverrides}
             loading={matrix.isPending}
+            allItemsLoading={allMatrixItems.isPending || allMatrixItems.isError}
             page={matrix.data?.pagination.page ?? page}
             pageSize={matrix.data?.pagination.pageSize ?? pageSize}
             totalCount={matrix.data?.pagination.totalCount ?? 0}
             onToggle={togglePermission}
             onToggleAll={toggleAllDepartments}
+            onToggleDepartmentAll={toggleDepartmentForAllDocuments}
             onPageChange={setPage}
             onPageSizeChange={(nextPageSize) => {
               setPageSize(nextPageSize);
@@ -262,7 +306,7 @@ export function PermissionsPage() {
       )}
 
       {isDirty && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-line-strong bg-surface px-4 py-3">
+        <div className="sticky bottom-0 z-30 mt-4 flex flex-wrap items-center justify-between gap-3 border border-line-strong bg-surface px-4 py-3 shadow-float">
           <div className="min-w-0">
             <p className="text-meta text-ink-muted">
               {dirtyDocumentIds.length} 份文件的權限尚未儲存。

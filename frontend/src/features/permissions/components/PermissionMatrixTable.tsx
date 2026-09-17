@@ -15,13 +15,16 @@ import type {
 interface PermissionMatrixTableProps {
   departments: ReadonlyArray<PermissionMatrixDepartment>
   items: ReadonlyArray<PermissionMatrixItem>
+  allItems: ReadonlyArray<PermissionMatrixItem>
   selectionOverrides: Readonly<Record<string, ReadonlySet<string>>>
   loading?: boolean
+  allItemsLoading?: boolean
   page: number
   pageSize: number
   totalCount: number
   onToggle: (document: PermissionMatrixItem, departmentId: string) => void
   onToggleAll: (document: PermissionMatrixItem) => void
+  onToggleDepartmentAll: (departmentId: string) => void
   onPageChange: (page: number) => void
   onPageSizeChange: (pageSize: number) => void
 }
@@ -111,18 +114,21 @@ function MatrixLoading() {
 export function PermissionMatrixTable({
   departments,
   items,
+  allItems,
   selectionOverrides,
   loading = false,
+  allItemsLoading = false,
   page,
   pageSize,
   totalCount,
   onToggle,
   onToggleAll,
+  onToggleDepartmentAll,
   onPageChange,
   onPageSizeChange,
 }: PermissionMatrixTableProps) {
   return (
-    <div className="bg-surface">
+    <div className="flex min-h-0 flex-col bg-surface">
       {loading ? (
         <MatrixLoading />
       ) : items.length === 0 ? (
@@ -132,9 +138,9 @@ export function PermissionMatrixTable({
         </div>
       ) : (
         <div
-          className="overflow-x-auto"
+          className="max-h-[calc(100dvh-19rem)] min-h-0 overflow-auto"
           tabIndex={0}
-          aria-label="ISO 文件權限矩陣，可水平捲動"
+          aria-label="ISO 文件權限矩陣，可水平及垂直捲動"
         >
           <table className="w-max min-w-full border-collapse text-left text-cell">
             <caption className="sr-only">ISO 文件與部門檢視權限</caption>
@@ -142,28 +148,59 @@ export function PermissionMatrixTable({
               <tr>
                 <th
                   scope="col"
-                  className="sticky left-0 z-20 h-table-header w-52 min-w-52 max-w-52 border-r border-b border-line-strong bg-surface-header px-4 text-table-header"
+                  className="sticky top-0 left-0 z-30 h-16 w-52 min-w-52 max-w-52 border-r border-b border-line-strong bg-surface-header px-4 text-table-header shadow-sticky-y"
                 >
                   ISO 主文
                 </th>
                 <th
                   scope="col"
-                  className="sticky left-52 z-20 h-table-header w-20 min-w-20 max-w-20 border-r border-b border-line-strong bg-surface-header px-4 text-center text-table-header whitespace-nowrap shadow-sticky-x"
+                  className="sticky top-0 left-52 z-30 h-16 w-20 min-w-20 max-w-20 border-r border-b border-line-strong bg-surface-header px-4 text-center text-table-header whitespace-nowrap shadow-sticky-x"
                 >
                   全選
                 </th>
-                <th scope="col" className="h-table-header min-w-48 border-b border-line-strong px-4 text-table-header">
+                <th scope="col" className="sticky top-0 z-20 h-16 min-w-48 border-b border-line-strong bg-surface-header px-4 text-table-header shadow-sticky-y">
                   狀態
                 </th>
-                {departments.map((department) => (
-                  <th
-                    key={department.id}
-                    scope="col"
-                    className="h-table-header min-w-32 border-b border-line-strong px-4 text-center text-table-header whitespace-nowrap"
-                  >
-                    {department.name}
-                  </th>
-                ))}
+                {departments.map((department) => {
+                  const selectedDocumentCount = allItems.reduce((count, document) => {
+                    const selectedDepartmentIds = selectionOverrides[document.documentId]
+                      ?? new Set(document.departmentIds)
+                    return count + Number(selectedDepartmentIds.has(department.id))
+                  }, 0)
+                  const allDocumentsSelected = allItems.length > 0
+                    && selectedDocumentCount === allItems.length
+                  const someDocumentsSelected = selectedDocumentCount > 0
+                    && !allDocumentsSelected
+                  const checkboxDisabled = allItemsLoading || allItems.length === 0
+
+                  return (
+                    <th
+                      key={department.id}
+                      scope="col"
+                      className="sticky top-0 z-20 h-16 min-w-32 border-b border-line-strong bg-surface-header px-4 text-center text-table-header whitespace-nowrap shadow-sticky-y"
+                    >
+                      <div className="flex flex-col items-center justify-center gap-1">
+                        <label
+                          className={`inline-flex size-6 items-center justify-center rounded-sm focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary ${checkboxDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-primary-subtle'}`}
+                          title={`全選或取消全選${department.name}可查看的所有文件`}
+                        >
+                          <input
+                            ref={(input) => {
+                              if (input !== null) input.indeterminate = someDocumentsSelected
+                            }}
+                            type="checkbox"
+                            className="size-4 cursor-inherit rounded-xs border-line-strong accent-primary"
+                            checked={allDocumentsSelected}
+                            disabled={checkboxDisabled}
+                            onChange={() => onToggleDepartmentAll(department.id)}
+                            aria-label={`${allDocumentsSelected ? '取消' : ''}全選${department.name}可查看的所有文件`}
+                          />
+                        </label>
+                        <span>{department.name}</span>
+                      </div>
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-line text-ink">
@@ -262,7 +299,7 @@ export function PermissionMatrixTable({
       )}
 
       <Pagination
-        className="border-t border-line px-4"
+        className="shrink-0 border-t border-line bg-surface px-4"
         page={page}
         pageSize={pageSize}
         pageSizeOptions={[10, 20, 50, 100]}
