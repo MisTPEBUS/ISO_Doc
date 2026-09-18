@@ -32,17 +32,28 @@ public sealed partial class StorageKeyBuilder
     public string BuildAttachmentKey(
         string companyCode,
         string documentNo,
-        string attachmentNo,
+        string? attachmentNo,
+        Guid attachmentId,
         string version,
         Guid fileId,
         string originalFileName)
     {
         ValidateIdentifier(companyCode, nameof(companyCode));
         ValidateIdentifier(documentNo, nameof(documentNo));
-        ValidateIdentifier(attachmentNo, nameof(attachmentNo));
         ValidateVersion(version);
 
-        return $"store/{companyCode}/{documentNo}/att/{attachmentNo}/v{version}/{fileId:N}_{ToSafeName(originalFileName)}";
+        string attachmentSegment;
+        if (string.IsNullOrWhiteSpace(attachmentNo))
+        {
+            attachmentSegment = $"_{attachmentId:N}";
+        }
+        else
+        {
+            ValidateIdentifier(attachmentNo, nameof(attachmentNo));
+            attachmentSegment = attachmentNo;
+        }
+
+        return $"store/{companyCode}/{documentNo}/att/{attachmentSegment}/v{version}/{fileId:N}_{ToSafeName(originalFileName)}";
     }
 
     public string ToSafeName(string originalFileName)

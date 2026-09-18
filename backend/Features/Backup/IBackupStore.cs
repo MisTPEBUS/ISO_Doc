@@ -8,6 +8,7 @@ public sealed record BackupSourceFile(
     string VersionStatus,
     string? FileKey,
     string? OriginalFileName,
+    Guid? AttachmentId,
     string? AttachmentNo);
 
 public interface IBackupStore

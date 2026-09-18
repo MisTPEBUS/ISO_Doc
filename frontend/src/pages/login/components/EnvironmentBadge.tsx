@@ -1,36 +1,36 @@
-import type { AppEnvironment } from '@/config/env'
+import type { AppEnvironment } from "@/config/env";
 
 interface EnvironmentStyle {
-  label: string
-  englishLabel: string
-  className: string
+  label: string;
+  englishLabel: string;
+  className: string;
 }
 
 const ENVIRONMENT_STYLES: Record<AppEnvironment, EnvironmentStyle> = {
   development: {
-    label: '開發環境',
-    englishLabel: 'Development',
-    className: 'border-line-strong bg-surface-header text-ink-muted',
+    label: "開發環境",
+    englishLabel: "Development",
+    className: "border-line-strong bg-surface-header text-ink-muted",
   },
   uat: {
-    label: '驗收環境',
-    englishLabel: 'UAT',
+    label: "驗收環境",
+    englishLabel: "UAT",
     className:
-      'border-line-strong bg-state-expiring-subtle text-state-expiring',
+      "border-line-strong bg-state-expiring-subtle text-state-expiring",
   },
   production: {
-    label: '正式環境',
-    englishLabel: 'Production',
-    className: 'border-line-strong bg-primary-subtle text-primary',
+    label: "測試環境",
+    englishLabel: "Development",
+    className: "border-line-strong bg-primary-subtle text-primary",
   },
-}
+};
 
 export interface EnvironmentBadgeProps {
-  environment: AppEnvironment
+  environment: AppEnvironment;
 }
 
 export function EnvironmentBadge({ environment }: EnvironmentBadgeProps) {
-  const style = ENVIRONMENT_STYLES[environment]
+  const style = ENVIRONMENT_STYLES[environment];
 
   return (
     <span
@@ -40,5 +40,5 @@ export function EnvironmentBadge({ environment }: EnvironmentBadgeProps) {
       <span aria-hidden="true">·</span>
       <span lang="en">{style.englishLabel}</span>
     </span>
-  )
+  );
 }

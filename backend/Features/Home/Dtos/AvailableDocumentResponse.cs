@@ -17,7 +17,7 @@ public sealed record AvailableDocumentVersionResponse(
 
 public sealed record AvailableAttachmentResponse(
     Guid AttachmentId,
-    string AttachmentNo,
+    string? AttachmentNo,
     string Name,
     AvailableAttachmentVersionResponse? CurrentVersion);
 

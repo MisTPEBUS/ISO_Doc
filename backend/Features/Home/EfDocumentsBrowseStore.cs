@@ -203,7 +203,7 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
 
         public Guid AttachmentId { get; init; }
 
-        public string AttachmentNo { get; init; } = string.Empty;
+        public string? AttachmentNo { get; init; }
 
         public string Name { get; init; } = string.Empty;
 

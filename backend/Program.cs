@@ -2,6 +2,10 @@ using FluentValidation;
 using IsoDocument.Api.Common;
 using IsoDocument.Api.Data;
 using IsoDocument.Api.Data.Entities;
+using IsoDocument.Api.Features.AiImport;
+using IsoDocument.Api.Features.AiImport.Dtos;
+using IsoDocument.Api.Features.AiImport.Llm;
+using IsoDocument.Api.Features.AiImport.Validators;
 using IsoDocument.Api.Features.Auth;
 using IsoDocument.Api.Features.Auth.Dtos;
 using IsoDocument.Api.Features.Auth.Validators;
@@ -150,6 +154,8 @@ builder.Services.AddOptions<StorageOptions>()
         options => !string.IsNullOrWhiteSpace(options.RootPath),
         "Storage:RootPath must be configured.")
     .ValidateOnStart();
+builder.Services.AddOptions<AiImportLlmOptions>()
+    .BindConfiguration(AiImportLlmOptions.SectionName);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<StoragePathGuard>();
 builder.Services.AddSingleton<StorageKeyBuilder>();
@@ -188,6 +194,13 @@ builder.Services.AddScoped<IBackupStore, EfBackupStore>();
 builder.Services.AddScoped<IBackupService, BackupService>();
 builder.Services.AddScoped<IDocumentsBrowseStore, EfDocumentsBrowseStore>();
 builder.Services.AddScoped<IDocumentsBrowseService, DocumentsBrowseService>();
+builder.Services.AddScoped<IAiImportStore, EfAiImportStore>();
+builder.Services.AddScoped<IAiImportService, AiImportService>();
+builder.Services.AddScoped<ILlmImportAnalyzer, OpenAiImportAnalyzer>();
+builder.Services.AddScoped<IValidator<AnalyzeImportRequest>, AnalyzeImportRequestValidator>();
+builder.Services.AddScoped<IValidator<CommitImportRequest>, CommitImportRequestValidator>();
+builder.Services.AddScoped<IValidator<CommitImportDocumentItem>, CommitImportDocumentItemValidator>();
+builder.Services.AddScoped<IValidator<CommitImportAttachmentItem>, CommitImportAttachmentItemValidator>();
 builder.Services.AddScoped<IDownloadAuditLogService>(serviceProvider =>
     serviceProvider.GetRequiredService<IAuditLogService>() as IDownloadAuditLogService
     ?? throw new InvalidOperationException("The audit log service does not support download auditing."));

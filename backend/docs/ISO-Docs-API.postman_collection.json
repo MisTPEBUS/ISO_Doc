@@ -828,6 +828,121 @@
           }
         }
       ]
+    },
+    {
+      "name": "Admin - AI Import",
+      "item": [
+        {
+          "name": "Analyze",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  if (body.analysisId) pm.environment.set('analysisId', body.analysisId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"files\": [\n    {\n      \"originalFileName\": \"GA-P-01文件與紀錄管制程序.pdf\",\n      \"relativePath\": \"GA-P-01 文件與紀錄管制程序/GA-P-01文件與紀錄管制程序.pdf\",\n      \"size\": 524288,\n      \"role\": \"MAIN\",\n      \"documentNo\": \"GA-P-01\",\n      \"attachmentNo\": \"\",\n      \"displayName\": \"文件與紀錄管制程序\",\n      \"extension\": \"pdf\",\n      \"parseStatus\": \"OK\",\n      \"checksum\": \"b1946ac92492d2347c6235b4d2611184\"\n    },\n    {\n      \"originalFileName\": \"GA-P-01-01文件登記表.xlsx\",\n      \"relativePath\": \"GA-P-01 文件與紀錄管制程序/GA-P-01-01文件登記表.xlsx\",\n      \"size\": 32768,\n      \"role\": \"ATTACHMENT\",\n      \"documentNo\": \"GA-P-01\",\n      \"attachmentNo\": \"GA-P-01-01\",\n      \"displayName\": \"文件登記表\",\n      \"extension\": \"xlsx\",\n      \"parseStatus\": \"OK\",\n      \"checksum\": \"9e107d9d372bb6826bd81d3542a419d6\"\n    },\n    {\n      \"originalFileName\": \"7.3系統文件編碼表(北客).doc\",\n      \"relativePath\": \"散落檔案/7.3系統文件編碼表(北客).doc\",\n      \"size\": 51200,\n      \"role\": \"UNRESOLVED\",\n      \"documentNo\": \"\",\n      \"attachmentNo\": \"\",\n      \"displayName\": \"7.3系統文件編碼表(北客)\",\n      \"extension\": \"doc\",\n      \"parseStatus\": \"WARNING\",\n      \"checksum\": \"c4ca4238a0b923820dcc509a6f75849b\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/ai-import/analyze",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "ai-import", "analyze"]
+            },
+            "description": "CompanyAdminScope + CSRF。唯讀，不寫入 DB、不需檔案內容。後端會呼叫 gpt-5.6-terra 修正 parseStatus=WARNING / role=UNRESOLVED / MAIN_CANDIDATE 的項目，並依 DB 現況算出每筆的 predictedAction（NEW_DOCUMENT / UPLOAD_DRAFT_FILE / NEW_VERSION / SKIP_UNCHANGED，附件對應 NEW_ATTACHMENT / NEW_VERSION / SKIP_UNCHANGED）與 suggestedVersion。200 AnalyzeImportResponse { analysisId, documents[], unresolved[] }。403 非本人公司。500 呼叫 LLM 失敗。"
+          }
+        },
+        {
+          "name": "Commit (multipart)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "companyId", "value": "{{companyId}}", "type": "text" },
+                {
+                  "key": "analysisId",
+                  "value": "{{analysisId}}",
+                  "type": "text",
+                  "description": "選填，對應 Analyze 回應的 analysisId，供稽核追溯"
+                },
+                { "key": "documents[0].documentNo", "value": "GA-P-01", "type": "text" },
+                { "key": "documents[0].name", "value": "文件與紀錄管制程序", "type": "text" },
+                {
+                  "key": "documents[0].version",
+                  "value": "1.3",
+                  "type": "text",
+                  "description": "使用者在 Human Confirm 畫面確認/編輯過的最終版號；有帶 mainFile 時必填"
+                },
+                {
+                  "key": "documents[0].effectiveDate",
+                  "value": "2026-01-01",
+                  "type": "text",
+                  "description": "yyyy-MM-dd。AI 匯入允許歷史生效日，不受限於今天"
+                },
+                { "key": "documents[0].pageCount", "value": "12", "type": "text" },
+                {
+                  "key": "documents[0].mainFile",
+                  "type": "file",
+                  "src": [],
+                  "description": "選填，.pdf；不給表示這筆只更新中繼資料或維持草稿無檔"
+                },
+                {
+                  "key": "documents[0].attachments[0].attachmentNo",
+                  "value": "GA-P-01-01",
+                  "type": "text"
+                },
+                {
+                  "key": "documents[0].attachments[0].name",
+                  "value": "文件登記表",
+                  "type": "text"
+                },
+                {
+                  "key": "documents[0].attachments[0].version",
+                  "value": "1.1",
+                  "type": "text",
+                  "description": "有帶 file 時必填"
+                },
+                {
+                  "key": "documents[0].attachments[0].file",
+                  "type": "file",
+                  "src": [],
+                  "description": "選填；內容與現有最新版 checksum 相同會被判定 SKIP_UNCHANGED，即使填了 version 也會被忽略"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/ai-import/commit",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "documents", "ai-import", "commit"]
+            },
+            "description": "CompanyAdminScope + CSRF。multipart/form-data，真正寫入 DB / 檔案。以「一個主文＋它的附件」為單位各自獨立成功/失敗；主文那筆失敗時，它底下的附件會標記 skipped(reason=PARENT_DOCUMENT_FAILED)。200 CommitImportResponse { documents{ total, successCount, failureCount, succeeded[], failed[] }, attachments{ total, successCount, skippedCount, failureCount, succeeded[], skipped[], failed[] } }。\n\n請自行在 mainFile / attachments[0].file 欄位選檔案（mainFile 需為合法 PDF；附件副檔名限 jpg/jpeg/png/pdf/doc/docx/xls/xlsx/odt/ods）。"
+          }
+        }
+      ]
     }
   ]
 }

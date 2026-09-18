@@ -80,6 +80,7 @@ public sealed class AttachmentVersionService(
                 context.CompanyCode,
                 context.DocumentNo,
                 context.AttachmentNo,
+                context.AttachmentId,
                 versionText,
                 Guid.NewGuid(),
                 request.File!.FileName);

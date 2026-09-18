@@ -29,6 +29,7 @@ public sealed class EfBackupStore(IsoDbContext dbContext) : IBackupStore
                 version.Status,
                 version.FileKey,
                 version.OriginalFileName,
+                null,
                 null))
             .ToListAsync(cancellationToken);
 
@@ -45,6 +46,7 @@ public sealed class EfBackupStore(IsoDbContext dbContext) : IBackupStore
                 version.Status,
                 version.FileKey,
                 version.OriginalFileName,
+                attachment.Id,
                 attachment.AttachmentNo))
             .ToListAsync(cancellationToken);
 

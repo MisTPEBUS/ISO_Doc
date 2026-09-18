@@ -20,6 +20,8 @@ export interface SidebarNavProps {
   activeHref?: string
   ariaLabel?: string
   className?: string
+  collapsed?: boolean
+  onCollapsedChange?: (collapsed: boolean) => void
 }
 
 export function SidebarNav({
@@ -27,12 +29,23 @@ export function SidebarNav({
   activeHref,
   ariaLabel = '管理導覽',
   className,
+  collapsed: controlledCollapsed,
+  onCollapsedChange,
 }: SidebarNavProps) {
-  const [collapsed, setCollapsed] = useState(() =>
+  const [internalCollapsed, setInternalCollapsed] = useState(() =>
     typeof window !== 'undefined' &&
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(max-width: 1279px)').matches,
   )
+  const collapsed = controlledCollapsed ?? internalCollapsed
+
+  function toggleCollapsed() {
+    const nextCollapsed = !collapsed
+    if (controlledCollapsed === undefined) {
+      setInternalCollapsed(nextCollapsed)
+    }
+    onCollapsedChange?.(nextCollapsed)
+  }
 
   return (
     <aside
@@ -50,7 +63,7 @@ export function SidebarNav({
           aria-label={collapsed ? '展開側邊導覽' : '收合側邊導覽'}
           aria-expanded={!collapsed}
           title={collapsed ? '展開側邊導覽' : '收合側邊導覽'}
-          onClick={() => setCollapsed((current) => !current)}
+          onClick={toggleCollapsed}
         >
           <svg
             viewBox="0 0 20 20"

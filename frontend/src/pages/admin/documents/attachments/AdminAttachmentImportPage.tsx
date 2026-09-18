@@ -1,17 +1,33 @@
 import {
+  CheckCircle2,
   ChevronRight,
+  Circle,
   FileArchive,
   FileStack,
   FolderOpen,
+  LoaderCircle,
+  MinusCircle,
   Paperclip,
   Search,
+  Sparkles,
   Trash2,
   Upload,
+  XCircle,
 } from "lucide-react";
-import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+} from "react";
 import { useNavigate } from "react-router-dom";
 
+import { ApiError } from "@/api/httpClient";
+import { buildAiImportCommitFormData } from "@/api/formData";
 import { Alert, Badge, Button, Input, Select } from "@/components/common";
+import { computeFileChecksum } from "@/features/admin-attachments/checksum";
 import {
   attachmentFileGroups,
   FILE_ROLE,
@@ -27,6 +43,12 @@ import {
   type GroupStatusFilter,
   type ParsedAttachmentFile,
 } from "@/features/admin-attachments/folderImport";
+import {
+  useAnalyzeImport,
+  useCommitImport,
+} from "@/features/admin-attachments/queries";
+import type { AnalyzeImportResponse } from "@/features/admin-attachments/types";
+import { useCurrentUser } from "@/features/auth/queries";
 
 const ROLE_LABELS: Record<FileRole, string> = {
   [FILE_ROLE.Main]: "主文",
@@ -34,6 +56,41 @@ const ROLE_LABELS: Record<FileRole, string> = {
   [FILE_ROLE.MainCandidate]: "疑似主文",
   [FILE_ROLE.Unresolved]: "未判斷",
 };
+
+const IMPORT_STATUS = {
+  Running: "RUNNING",
+  Completed: "COMPLETED",
+} as const;
+
+type ImportRunStatus = (typeof IMPORT_STATUS)[keyof typeof IMPORT_STATUS];
+
+interface ImportProgress {
+  status: ImportRunStatus;
+  processedCount: number;
+  totalCount: number;
+  currentGroupLabel: string | null;
+  processingFileIds: ReadonlySet<string>;
+  completedFileIds: ReadonlySet<string>;
+  failedFileIds: ReadonlySet<string>;
+  skippedFileIds: ReadonlySet<string>;
+  fileMessages: ReadonlyMap<string, string>;
+}
+
+interface CommitSummary {
+  documents: { total: number; success: number; failed: number };
+  attachments: {
+    total: number;
+    success: number;
+    skipped: number;
+    failed: number;
+  };
+}
+
+interface AnalysisHint {
+  suggestedVersion: string | null;
+  effectiveDate: string | null;
+  predictedAction: string;
+}
 
 function fileIdentity(file: ParsedAttachmentFile): string {
   return `${file.relativePath}|${file.file.size}|${file.file.lastModified}`;
@@ -55,10 +112,108 @@ function statusBadge(group: AttachmentFileGroup) {
   return <Badge variant="warning">待確認</Badge>;
 }
 
+function duplicateMainFileIds(
+  groups: readonly AttachmentFileGroup[],
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const group of groups) {
+    const mains = group.files.filter((file) => file.role === FILE_ROLE.Main);
+    if (mains.length <= 1) continue;
+    for (const file of mains) ids.add(file.id);
+  }
+  return ids;
+}
+
+function describeError(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    return error.detail ?? fallback;
+  }
+  return "目前無法連線到系統，請稍後再試。";
+}
+
+function formatFieldErrors(errors: Record<string, string[]>): string {
+  return Object.values(errors).flat().join("；");
+}
+
+function describeSkipReason(reason: string): string {
+  if (reason === "UNCHANGED") return "內容與現有版本相同，未建立新版本。";
+  if (reason === "PARENT_DOCUMENT_FAILED")
+    return "對應的主文未成功建立，已略過。";
+  return reason;
+}
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function buildAnalysisHints(
+  analysis: AnalyzeImportResponse | undefined,
+): Map<string, AnalysisHint> {
+  const hints = new Map<string, AnalysisHint>();
+  if (analysis === undefined) return hints;
+
+  for (const document of analysis.documents) {
+    if (document.mainFile) {
+      hints.set(document.mainFile.relativePath, {
+        suggestedVersion: document.suggestedVersion,
+        effectiveDate: document.effectiveDate,
+        predictedAction: document.predictedAction,
+      });
+    }
+    for (const attachment of document.attachments) {
+      hints.set(attachment.relativePath, {
+        suggestedVersion: attachment.suggestedVersion,
+        effectiveDate: attachment.effectiveDate,
+        predictedAction: attachment.predictedAction,
+      });
+    }
+  }
+
+  return hints;
+}
+
+function applyAnalysisToFiles(
+  files: ParsedAttachmentFile[],
+  response: AnalyzeImportResponse,
+): ParsedAttachmentFile[] {
+  const updates = new Map<string, Partial<ParsedAttachmentFile>>();
+
+  for (const document of response.documents) {
+    if (document.mainFile) {
+      updates.set(document.mainFile.relativePath, {
+        role: FILE_ROLE.Main,
+        documentCode: document.documentNo,
+        displayName: document.name,
+        attachmentCode: "",
+      });
+    }
+    for (const attachment of document.attachments) {
+      updates.set(attachment.relativePath, {
+        role: FILE_ROLE.Attachment,
+        documentCode: document.documentNo,
+        attachmentCode: attachment.attachmentNo,
+        displayName: attachment.name,
+      });
+    }
+  }
+
+  for (const unresolved of response.unresolved) {
+    if (!updates.has(unresolved.relativePath)) {
+      updates.set(unresolved.relativePath, { role: FILE_ROLE.Unresolved });
+    }
+  }
+
+  return files.map((file) => {
+    const patch = updates.get(file.relativePath);
+    return patch ? recalculateFile({ ...file, ...patch }) : file;
+  });
+}
+
 export function AdminAttachmentImportPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const submissionRunRef = useRef(0);
   const [files, setFiles] = useState<ParsedAttachmentFile[]>([]);
   const [openGroupKeys, setOpenGroupKeys] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -69,8 +224,25 @@ export function AdminAttachmentImportPage() {
   );
   const [isDragging, setIsDragging] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [analysis, setAnalysis] = useState<AnalyzeImportResponse>();
+  const [importProgress, setImportProgress] = useState<ImportProgress>();
+  const [summary, setSummary] = useState<CommitSummary>();
+  const [submitError, setSubmitError] = useState<string>();
+
+  const currentUser = useCurrentUser();
+  const companyId = currentUser.data?.companyId;
+  const analyzeImport = useAnalyzeImport();
+  const commitImport = useCommitImport();
+
+  useEffect(
+    () => () => {
+      submissionRunRef.current += 1;
+    },
+    [],
+  );
 
   const groups = attachmentFileGroups(files);
+  const analysisHints = buildAnalysisHints(analysis);
   const normalizedKeyword = keyword.trim().toLowerCase();
   const visibleGroups = groups.filter((group) => {
     if (statusFilter !== GROUP_STATUS.All && group.status !== statusFilter)
@@ -95,18 +267,39 @@ export function AdminAttachmentImportPage() {
   const attachmentCount = files.filter(
     (file) => file.role === FILE_ROLE.Attachment,
   ).length;
+  const duplicateMainIds = duplicateMainFileIds(groups);
   const warningCount = files.filter(
     (file) =>
       file.parseStatus !== PARSE_STATUS.Ok ||
       file.role === FILE_ROLE.MainCandidate ||
-      file.role === FILE_ROLE.Unresolved,
+      file.role === FILE_ROLE.Unresolved ||
+      duplicateMainIds.has(file.id),
   ).length;
   const missingMainCount = groups.filter(
     (group) => group.status === GROUP_STATUS.MissingMain,
   ).length;
+  const isAnalyzing = analyzeImport.isPending;
+  const isSubmitting = importProgress?.status === IMPORT_STATUS.Running;
+  const isBusy = isSubmitting || isAnalyzing;
+  const canSubmit =
+    files.length > 0 && warningCount === 0 && missingMainCount === 0;
+  const progressPercentage =
+    importProgress === undefined
+      ? 0
+      : Math.round(
+          (importProgress.processedCount / importProgress.totalCount) * 100,
+        );
+
+  function resetProgress() {
+    submissionRunRef.current += 1;
+    setImportProgress(undefined);
+    setSubmitError(undefined);
+    setSummary(undefined);
+    setAnalysis(undefined);
+  }
 
   function addFiles(selectedFiles: File[]) {
-    if (selectedFiles.length === 0) return;
+    if (selectedFiles.length === 0 || isBusy) return;
 
     const existing = new Set(files.map(fileIdentity));
     const additions = selectedFiles
@@ -115,6 +308,7 @@ export function AdminAttachmentImportPage() {
     const nextFiles = resolveMainCandidates([...files, ...additions]);
     const nextGroups = attachmentFileGroups(nextFiles);
     setFiles(nextFiles);
+    resetProgress();
     setOpenGroupKeys(new Set(nextGroups.map((group) => group.key)));
     setMessage(
       additions.length === 0
@@ -131,17 +325,41 @@ export function AdminAttachmentImportPage() {
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setIsDragging(false);
+    if (isBusy) return;
     addFiles(Array.from(event.dataTransfer.files));
   }
 
   function updateFile(id: string, patch: Partial<ParsedAttachmentFile>) {
-    setFiles((current) =>
-      resolveMainCandidates(
-        current.map((file) =>
-          file.id === id ? recalculateFile({ ...file, ...patch }) : file,
-        ),
-      ),
-    );
+    if (isBusy) return;
+    resetProgress();
+    setFiles((current) => {
+      const targetGroup = attachmentFileGroups(current).find((group) =>
+        group.files.some((file) => file.id === id),
+      );
+      const targetGroupIds = new Set(
+        targetGroup?.files.map((file) => file.id) ?? [],
+      );
+      const nextFiles = current.map((file) => {
+        if (file.id === id) {
+          return recalculateFile({ ...file, ...patch });
+        }
+        if (
+          patch.role === FILE_ROLE.Main &&
+          targetGroupIds.has(file.id) &&
+          file.role === FILE_ROLE.Main
+        ) {
+          return recalculateFile({
+            ...file,
+            role: FILE_ROLE.Attachment,
+            attachmentCode: "",
+            attachmentSequence: "",
+          });
+        }
+        return file;
+      });
+
+      return resolveMainCandidates(nextFiles);
+    });
   }
 
   function updateAttachmentCode(file: ParsedAttachmentFile, value: string) {
@@ -155,6 +373,8 @@ export function AdminAttachmentImportPage() {
   }
 
   function updateGroupDocumentCode(group: AttachmentFileGroup, value: string) {
+    if (isBusy) return;
+    resetProgress();
     const documentCode = value.trim().toUpperCase();
     const ids = new Set(group.files.map((file) => file.id));
     const nextFiles = files.map((file) => {
@@ -195,13 +415,231 @@ export function AdminAttachmentImportPage() {
     URL.revokeObjectURL(url);
   }
 
+  async function runAiAnalysis() {
+    if (files.length === 0 || isBusy) return;
+    if (companyId === undefined) {
+      setMessage("找不到目前使用者的公司資訊，請重新登入後再試。");
+      return;
+    }
+
+    resetProgress();
+    setMessage(undefined);
+
+    try {
+      const descriptors = await Promise.all(
+        files.map(async (file) => ({
+          originalFileName: file.file.name,
+          relativePath: file.relativePath,
+          size: file.file.size,
+          role: file.role,
+          documentNo: file.documentCode,
+          attachmentNo: file.attachmentCode,
+          displayName: file.displayName,
+          extension: file.extension,
+          parseStatus: file.parseStatus,
+          checksum: await computeFileChecksum(file.file),
+        })),
+      );
+
+      const response = await analyzeImport.mutateAsync({
+        companyId,
+        files: descriptors,
+      });
+      setAnalysis(response);
+      setFiles((current) =>
+        resolveMainCandidates(applyAnalysisToFiles(current, response)),
+      );
+      setMessage(
+        response.unresolved.length === 0
+          ? `AI 分析完成，共比對 ${response.documents.length} 個主文群組。`
+          : `AI 分析完成，共比對 ${response.documents.length} 個主文群組，${response.unresolved.length} 個檔案仍待人工指定。`,
+      );
+    } catch (error) {
+      alert(error);
+      setMessage(describeError(error, "無法完成 AI 分析。"));
+    }
+  }
+
+  async function runCommit() {
+    if (!canSubmit || isBusy) return;
+    if (companyId === undefined) {
+      setMessage("找不到目前使用者的公司資訊，請重新登入後再試。");
+      return;
+    }
+
+    const queue = groups;
+    const runId = submissionRunRef.current + 1;
+    submissionRunRef.current = runId;
+    const completedFileIds = new Set<string>();
+    const failedFileIds = new Set<string>();
+    const skippedFileIds = new Set<string>();
+    const fileMessages = new Map<string, string>();
+    setMessage(undefined);
+    setSubmitError(undefined);
+    setSummary(undefined);
+
+    const documentTotals = { total: 0, success: 0, failed: 0 };
+    const attachmentTotals = { total: 0, success: 0, skipped: 0, failed: 0 };
+
+    try {
+      for (let index = 0; index < queue.length; index += 1) {
+        const group = queue[index];
+        if (group === undefined || submissionRunRef.current !== runId) return;
+
+        setImportProgress({
+          status: IMPORT_STATUS.Running,
+          processedCount: index,
+          totalCount: queue.length,
+          currentGroupLabel:
+            group.documentCode || group.sourceFolder || "未命名群組",
+          processingFileIds: new Set(group.files.map((file) => file.id)),
+          completedFileIds: new Set(completedFileIds),
+          failedFileIds: new Set(failedFileIds),
+          skippedFileIds: new Set(skippedFileIds),
+          fileMessages: new Map(fileMessages),
+        });
+
+        const mainFile = group.files.find(
+          (file) => file.role === FILE_ROLE.Main,
+        );
+        const attachmentFiles = group.files.filter(
+          (file) => file.role === FILE_ROLE.Attachment,
+        );
+        const mainHint = mainFile
+          ? analysisHints.get(mainFile.relativePath)
+          : undefined;
+
+        const formData = buildAiImportCommitFormData({
+          companyId,
+          analysisId: analysis?.analysisId,
+          documents: [
+            {
+              documentNo: group.documentCode,
+              name: mainFile?.displayName || group.documentCode,
+              version: mainHint?.suggestedVersion ?? "1.0",
+              effectiveDate: mainHint?.effectiveDate ?? todayIsoDate(),
+              mainFile: mainFile?.file,
+              attachments: attachmentFiles.map((file) => {
+                const hint = analysisHints.get(file.relativePath);
+                return {
+                  attachmentNo: file.attachmentCode,
+                  name: file.displayName,
+                  version: hint?.suggestedVersion ?? "1.0",
+                  effectiveDate: hint?.effectiveDate ?? undefined,
+                  file: file.file,
+                };
+              }),
+            },
+          ],
+        });
+
+        try {
+          const response = await commitImport.mutateAsync(formData);
+          if (submissionRunRef.current !== runId) return;
+
+          documentTotals.total += response.documents.total;
+          documentTotals.success += response.documents.successCount;
+          documentTotals.failed += response.documents.failureCount;
+          attachmentTotals.total += response.attachments.total;
+          attachmentTotals.success += response.attachments.successCount;
+          attachmentTotals.skipped += response.attachments.skippedCount;
+          attachmentTotals.failed += response.attachments.failureCount;
+
+          const documentFailure = response.documents.failed[0];
+          const failedByNo = new Map(
+            response.attachments.failed.map((item) => [
+              item.attachmentNo,
+              item,
+            ]),
+          );
+          const skippedByNo = new Map(
+            response.attachments.skipped.map((item) => [
+              item.attachmentNo,
+              item,
+            ]),
+          );
+
+          for (const file of group.files) {
+            if (file.role === FILE_ROLE.Main) {
+              if (documentFailure) {
+                failedFileIds.add(file.id);
+                fileMessages.set(
+                  file.id,
+                  formatFieldErrors(documentFailure.errors),
+                );
+              } else {
+                completedFileIds.add(file.id);
+              }
+              continue;
+            }
+
+            const failure = failedByNo.get(file.attachmentCode);
+            const skipped = skippedByNo.get(file.attachmentCode);
+            if (failure) {
+              failedFileIds.add(file.id);
+              fileMessages.set(file.id, formatFieldErrors(failure.errors));
+            } else if (skipped) {
+              skippedFileIds.add(file.id);
+              fileMessages.set(file.id, describeSkipReason(skipped.reason));
+            } else {
+              completedFileIds.add(file.id);
+            }
+          }
+        } catch (error) {
+          documentTotals.total += 1;
+          documentTotals.failed += 1;
+          const groupErrorMessage = describeError(
+            error,
+            "無法完成這個主文群組的儲存。",
+          );
+          for (const file of group.files) {
+            failedFileIds.add(file.id);
+            fileMessages.set(file.id, groupErrorMessage);
+          }
+        }
+
+        setImportProgress({
+          status: IMPORT_STATUS.Running,
+          processedCount: index + 1,
+          totalCount: queue.length,
+          currentGroupLabel: null,
+          processingFileIds: new Set(),
+          completedFileIds: new Set(completedFileIds),
+          failedFileIds: new Set(failedFileIds),
+          skippedFileIds: new Set(skippedFileIds),
+          fileMessages: new Map(fileMessages),
+        });
+      }
+
+      setImportProgress({
+        status: IMPORT_STATUS.Completed,
+        processedCount: queue.length,
+        totalCount: queue.length,
+        currentGroupLabel: null,
+        processingFileIds: new Set(),
+        completedFileIds: new Set(completedFileIds),
+        failedFileIds: new Set(failedFileIds),
+        skippedFileIds: new Set(skippedFileIds),
+        fileMessages: new Map(fileMessages),
+      });
+      setSummary({
+        documents: documentTotals,
+        attachments: attachmentTotals,
+      });
+    } catch {
+      setImportProgress(undefined);
+      setSubmitError("無法完成儲存，請重新執行。");
+    }
+  }
+
   return (
-    <section>
+    <section className="pb-72 sm:pb-56 lg:pb-40">
       <input
         ref={fileInputRef}
         type="file"
         multiple
         hidden
+        disabled={isBusy}
         onChange={handleFileChange}
       />
       <input
@@ -213,6 +651,7 @@ export function AdminAttachmentImportPage() {
         type="file"
         multiple
         hidden
+        disabled={isBusy}
         onChange={handleFileChange}
       />
 
@@ -223,42 +662,47 @@ export function AdminAttachmentImportPage() {
         </div>
         <Button
           variant="secondary"
+          disabled={isBusy}
           onClick={() => navigate("/admin/documents")}
         >
           返回 ISO 文件維護
         </Button>
       </div>
 
-      <Alert
-        className="mb-4"
-        variant="info"
-        title=" 選取檔案或資料夾，自動辨識主文歸屬與附件編號，再人工確認匯入資料。"
-      ></Alert>
+      <Alert className="mb-4" variant="info" title="AI 輔助批次匯入">
+        選取檔案或資料夾後確認辨識結果；「AI
+        分析」會呼叫後端修正待確認項目並取得建議版號，「儲存」會依主文群組逐批寫入資料庫與檔案。
+      </Alert>
 
       <section className="border border-line-strong bg-surface">
         <div
           role="button"
-          tabIndex={0}
+          tabIndex={isBusy ? -1 : 0}
+          aria-disabled={isBusy}
           aria-label="拖曳檔案到這裡"
-          className={`m-4 grid min-h-48 cursor-pointer place-items-center rounded-sm border-2 border-dashed px-6 py-8 text-center transition-colors ${
-            isDragging
-              ? "border-primary bg-primary-subtle"
-              : "border-line-strong bg-canvas hover:border-primary hover:bg-primary-subtle"
+          className={`m-4 grid min-h-48 place-items-center rounded-sm border-2 border-dashed px-6 py-8 text-center transition-colors ${
+            isBusy
+              ? "cursor-not-allowed border-line bg-surface-header text-ink-disabled"
+              : isDragging
+                ? "cursor-pointer border-primary bg-primary-subtle"
+                : "cursor-pointer border-line-strong bg-canvas hover:border-primary hover:bg-primary-subtle"
           }`}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => {
+            if (!isBusy) fileInputRef.current?.click();
+          }}
           onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
+            if (!isBusy && (event.key === "Enter" || event.key === " ")) {
               event.preventDefault();
               fileInputRef.current?.click();
             }
           }}
           onDragEnter={(event) => {
             event.preventDefault();
-            setIsDragging(true);
+            if (!isBusy) setIsDragging(true);
           }}
           onDragOver={(event) => {
             event.preventDefault();
-            setIsDragging(true);
+            if (!isBusy) setIsDragging(true);
           }}
           onDragLeave={(event) => {
             event.preventDefault();
@@ -276,6 +720,8 @@ export function AdminAttachmentImportPage() {
             </p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               <Button
+                variant="secondary"
+                disabled={isBusy}
                 onClick={(event) => {
                   event.stopPropagation();
                   fileInputRef.current?.click();
@@ -286,6 +732,7 @@ export function AdminAttachmentImportPage() {
               </Button>
               <Button
                 variant="secondary"
+                disabled={isBusy}
                 onClick={(event) => {
                   event.stopPropagation();
                   folderInputRef.current?.click();
@@ -305,56 +752,174 @@ export function AdminAttachmentImportPage() {
           <p className="px-4 pb-4 text-meta text-ink-muted">{message}</p>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="neutral">主文群組 {groups.length}</Badge>
-            <Badge variant="neutral">檔案 {files.length}</Badge>
-            <Badge variant="success">主文 {mainCount}</Badge>
-            <Badge variant="info">附件 {attachmentCount}</Badge>
-            <Badge variant="warning">待確認 {warningCount}</Badge>
-            <Badge variant="danger">缺主文 {missingMainCount}</Badge>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={files.length === 0}
-              onClick={() =>
-                setOpenGroupKeys(new Set(groups.map((group) => group.key)))
-              }
-            >
-              全部展開
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={files.length === 0}
-              onClick={() => setOpenGroupKeys(new Set())}
-            >
-              全部收合
-            </Button>
-            <Button
-              size="sm"
-              disabled={files.length === 0}
-              onClick={exportJson}
-            >
-              匯出 JSON
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-state-danger hover:bg-state-danger-subtle hover:text-state-danger"
-              disabled={files.length === 0}
-              onClick={() => {
-                setFiles([]);
-                setOpenGroupKeys(new Set());
-                setMessage("資料已清除。");
-              }}
-            >
-              清除
-            </Button>
+        <div className="fixed right-0 bottom-0 left-[var(--admin-sidebar-width)] z-40 border-t border-line-strong bg-surface">
+          <div className="flex max-h-[40dvh] flex-wrap items-center justify-between gap-3 overflow-y-auto px-4 py-3 lg:px-6">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="neutral">主文群組 {groups.length}</Badge>
+              <Badge variant="neutral">檔案 {files.length}</Badge>
+              <Badge variant="success">主文 {mainCount}</Badge>
+              <Badge variant="info">附件 {attachmentCount}</Badge>
+              <Badge variant="warning">待確認 {warningCount}</Badge>
+              <Badge variant="danger">缺主文 {missingMainCount}</Badge>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div
+                className="flex flex-wrap gap-1"
+                role="group"
+                aria-label="檢視與資料工具"
+              >
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={files.length === 0 || isBusy}
+                  onClick={() =>
+                    setOpenGroupKeys(new Set(groups.map((group) => group.key)))
+                  }
+                >
+                  全部展開
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={files.length === 0 || isBusy}
+                  onClick={() => setOpenGroupKeys(new Set())}
+                >
+                  全部收合
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={files.length === 0 || isBusy}
+                  onClick={exportJson}
+                >
+                  匯出 JSON
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={files.length === 0 || isBusy}
+                  onClick={() => {
+                    resetProgress();
+                    setFiles([]);
+                    setOpenGroupKeys(new Set());
+                    setMessage("資料已清除。");
+                  }}
+                >
+                  清除
+                </Button>
+              </div>
+              <span
+                className="hidden h-8 w-px bg-line sm:block"
+                aria-hidden="true"
+              />
+              <div
+                className="flex flex-wrap gap-2"
+                role="group"
+                aria-label="分析與送出"
+              >
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={isAnalyzing}
+                  loadingText="AI 分析中"
+                  disabled={files.length === 0 || isSubmitting}
+                  onClick={() => void runAiAnalysis()}
+                >
+                  <Sparkles
+                    className="size-4 text-primary"
+                    aria-hidden="true"
+                  />
+                  AI 分析
+                </Button>
+                <Button
+                  size="sm"
+                  loading={isSubmitting}
+                  loadingText={`處理中 ${importProgress?.processedCount ?? 0}/${groups.length}`}
+                  disabled={!canSubmit || isAnalyzing}
+                  onClick={() => void runCommit()}
+                >
+                  {importProgress?.status === IMPORT_STATUS.Completed
+                    ? "重新儲存"
+                    : "儲存"}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
+
+        {!canSubmit && files.length > 0 && !isBusy && (
+          <p
+            className="border-t border-line px-4 py-2 text-meta text-state-danger"
+            role="status"
+          >
+            尚有待確認或缺少主文的資料，請完成修正後再儲存。
+          </p>
+        )}
+
+        {importProgress !== undefined && (
+          <section
+            className="border-t border-line bg-surface px-4 py-3"
+            aria-labelledby="import-progress-title"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2
+                  id="import-progress-title"
+                  className="text-section-label text-ink"
+                >
+                  儲存進度
+                </h2>
+                <p className="mt-1 text-meta text-ink-muted" aria-live="polite">
+                  {importProgress.status === IMPORT_STATUS.Completed
+                    ? `已處理 ${importProgress.totalCount} 個主文群組。`
+                    : `正在處理主文群組 ${importProgress.processedCount + 1}/${importProgress.totalCount}：${importProgress.currentGroupLabel ?? "準備下一個群組"}`}
+                </p>
+              </div>
+              <span className="text-meta text-ink-muted tabular">
+                {importProgress.processedCount}/{importProgress.totalCount}（
+                {progressPercentage}%）
+              </span>
+            </div>
+            <div
+              className="mt-3 h-2 overflow-hidden rounded-xs bg-line"
+              role="progressbar"
+              aria-label="儲存進度"
+              aria-valuemin={0}
+              aria-valuemax={importProgress.totalCount}
+              aria-valuenow={importProgress.processedCount}
+              aria-valuetext={`${importProgress.processedCount} / ${importProgress.totalCount}`}
+            >
+              <div
+                className={`h-full transition-[width] duration-150 ease-out motion-reduce:transition-none ${importProgress.status === IMPORT_STATUS.Completed ? "bg-state-active" : "bg-primary"}`}
+                style={{ width: `${progressPercentage}%` }}
+              />
+            </div>
+          </section>
+        )}
+
+        {importProgress?.status === IMPORT_STATUS.Completed && summary && (
+          <Alert
+            className="mx-4 mt-4"
+            variant={
+              summary.documents.failed === 0 && summary.attachments.failed === 0
+                ? "success"
+                : "warning"
+            }
+            title="儲存完成"
+          >
+            主文：共 {summary.documents.total} 筆，成功{" "}
+            {summary.documents.success} 筆，失敗 {summary.documents.failed}{" "}
+            筆。附件：共 {summary.attachments.total} 筆，成功{" "}
+            {summary.attachments.success} 筆，跳過 {summary.attachments.skipped}{" "}
+            筆，失敗 {summary.attachments.failed} 筆。
+          </Alert>
+        )}
+
+        {submitError !== undefined && (
+          <Alert className="mx-4 mt-4" variant="error" title="儲存失敗">
+            {submitError}
+          </Alert>
+        )}
 
         <div className="grid gap-3 border-t border-line bg-surface-header p-4 md:grid-cols-[minmax(16rem,1fr)_14rem]">
           <label className="relative block">
@@ -392,7 +957,7 @@ export function AdminAttachmentImportPage() {
             <div className="grid min-h-40 place-items-center text-center">
               <div>
                 <Paperclip
-                  className="mx-auto size-8 text-ink-faint"
+                  className="mx-auto size-8 text-ink-muted"
                   aria-hidden="true"
                 />
                 <p className="mt-2 text-cell font-medium text-ink">
@@ -475,6 +1040,7 @@ export function AdminAttachmentImportPage() {
                           className="w-48 font-mono"
                           value={group.documentCode}
                           placeholder="GA-P-01"
+                          disabled={isBusy}
                           onChange={(event) =>
                             updateGroupDocumentCode(group, event.target.value)
                           }
@@ -485,11 +1051,10 @@ export function AdminAttachmentImportPage() {
                       </div>
 
                       <div className="overflow-x-auto">
-                        <table className="w-full min-w-[76rem] border-collapse text-cell">
+                        <table className="w-full min-w-[66rem] border-collapse text-cell">
                           <thead>
                             <tr className="h-table-header border-b border-line bg-surface-header text-left text-table-header text-ink-muted">
                               <th className="w-12 px-3">#</th>
-                              <th className="min-w-72 px-3">原始檔名／路徑</th>
                               <th className="w-36 px-3">類型</th>
                               <th className="w-40 px-3">主文編號</th>
                               <th className="w-44 px-3">附件編號</th>
@@ -497,131 +1062,243 @@ export function AdminAttachmentImportPage() {
                               <th className="w-20 px-3">副檔名</th>
                               <th className="w-24 px-3">大小</th>
                               <th className="w-28 px-3">狀態</th>
+                              <th className="w-32 px-3">送出進度</th>
                               <th className="w-24 px-3">操作</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-line">
-                            {group.files.map((file, index) => (
-                              <tr
-                                key={file.id}
-                                className="hover:bg-surface-hover"
-                              >
-                                <td className="px-3 py-2 text-meta text-ink-muted tabular">
-                                  {index + 1}
-                                </td>
-                                <td className="max-w-80 px-3 py-2">
-                                  <p
-                                    className="truncate font-medium text-ink"
-                                    title={file.file.name}
-                                  >
-                                    {file.file.name}
-                                  </p>
-                                  <p
-                                    className="mt-0.5 truncate text-fine text-ink-muted"
-                                    title={file.relativePath}
-                                  >
-                                    {file.relativePath}
-                                  </p>
-                                </td>
-                                <td className="px-3 py-2">
-                                  <Select
-                                    value={file.role}
-                                    aria-label={`${file.file.name} 類型`}
-                                    onChange={(event) => {
-                                      if (isFileRole(event.target.value)) {
-                                        updateFile(file.id, {
-                                          role: event.target.value,
-                                        });
-                                      }
-                                    }}
-                                  >
-                                    {Object.entries(ROLE_LABELS).map(
-                                      ([value, label]) => (
-                                        <option key={value} value={value}>
-                                          {label}
-                                        </option>
-                                      ),
-                                    )}
-                                  </Select>
-                                </td>
-                                <td className="px-3 py-2">
-                                  <Input
-                                    className="font-mono"
-                                    value={file.documentCode}
-                                    aria-label={`${file.file.name} 主文編號`}
-                                    onChange={(event) =>
-                                      updateFile(file.id, {
-                                        documentCode:
-                                          event.target.value.toUpperCase(),
-                                      })
+                          <tbody>
+                            {group.files.map((file, index) => {
+                              const rowIsProcessing =
+                                importProgress?.processingFileIds.has(
+                                  file.id,
+                                ) === true;
+
+                              return (
+                                <Fragment key={file.id}>
+                                  <tr
+                                    className={
+                                      rowIsProcessing
+                                        ? "bg-primary-subtle hover:bg-surface-hover"
+                                        : "hover:bg-surface-hover"
                                     }
-                                  />
-                                </td>
-                                <td className="px-3 py-2">
-                                  <Input
-                                    className="font-mono"
-                                    value={file.attachmentCode}
-                                    disabled={file.role === FILE_ROLE.Main}
-                                    aria-label={`${file.file.name} 附件編號`}
-                                    onChange={(event) =>
-                                      updateAttachmentCode(
-                                        file,
-                                        event.target.value,
-                                      )
-                                    }
-                                  />
-                                </td>
-                                <td className="px-3 py-2">
-                                  <Input
-                                    value={file.displayName}
-                                    aria-label={`${file.file.name} 顯示名稱`}
-                                    onChange={(event) =>
-                                      updateFile(file.id, {
-                                        displayName: event.target.value,
-                                      })
-                                    }
-                                  />
-                                </td>
-                                <td className="px-3 py-2 font-mono text-code text-ink-muted">
-                                  {file.extension || "－"}
-                                </td>
-                                <td className="px-3 py-2 text-meta text-ink-muted tabular">
-                                  {formatFileSize(file.file.size)}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {file.parseStatus === PARSE_STATUS.Ok ? (
-                                    <Badge variant="success">已辨識</Badge>
-                                  ) : file.role === FILE_ROLE.MainCandidate ? (
-                                    <Badge variant="info">疑似主文</Badge>
-                                  ) : (
-                                    <Badge variant="warning">待確認</Badge>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-state-danger hover:bg-state-danger-subtle hover:text-state-danger"
-                                    aria-label={`移除 ${file.file.name}`}
-                                    onClick={() =>
-                                      setFiles((current) =>
-                                        resolveMainCandidates(
-                                          current.filter(
-                                            (item) => item.id !== file.id,
+                                  >
+                                    <td className="px-3 py-2 text-meta text-ink-muted tabular">
+                                      {index + 1}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <Select
+                                        value={file.role}
+                                        disabled={isBusy}
+                                        aria-label={`${file.file.name} 類型`}
+                                        onChange={(event) => {
+                                          if (isFileRole(event.target.value)) {
+                                            updateFile(file.id, {
+                                              role: event.target.value,
+                                            });
+                                          }
+                                        }}
+                                      >
+                                        {Object.entries(ROLE_LABELS).map(
+                                          ([value, label]) => (
+                                            <option key={value} value={value}>
+                                              {label}
+                                            </option>
                                           ),
-                                        ),
-                                      )
-                                    }
+                                        )}
+                                      </Select>
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <Input
+                                        className="font-mono"
+                                        value={file.documentCode}
+                                        disabled={isBusy}
+                                        aria-label={`${file.file.name} 主文編號`}
+                                        onChange={(event) =>
+                                          updateFile(file.id, {
+                                            documentCode:
+                                              event.target.value.toUpperCase(),
+                                          })
+                                        }
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <Input
+                                        className="font-mono"
+                                        value={file.attachmentCode}
+                                        disabled={
+                                          isBusy || file.role === FILE_ROLE.Main
+                                        }
+                                        aria-label={`${file.file.name} 附件編號`}
+                                        onChange={(event) =>
+                                          updateAttachmentCode(
+                                            file,
+                                            event.target.value,
+                                          )
+                                        }
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <Input
+                                        value={file.displayName}
+                                        disabled={isBusy}
+                                        aria-label={`${file.file.name} 顯示名稱`}
+                                        onChange={(event) =>
+                                          updateFile(file.id, {
+                                            displayName: event.target.value,
+                                          })
+                                        }
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2 font-mono text-code text-ink-muted">
+                                      {file.extension || "－"}
+                                    </td>
+                                    <td className="px-3 py-2 text-meta text-ink-muted tabular">
+                                      {formatFileSize(file.file.size)}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      {duplicateMainIds.has(file.id) ? (
+                                        <Badge variant="warning">
+                                          主文重複
+                                        </Badge>
+                                      ) : file.parseStatus ===
+                                        PARSE_STATUS.Ok ? (
+                                        <Badge variant="success">已辨識</Badge>
+                                      ) : file.role ===
+                                        FILE_ROLE.MainCandidate ? (
+                                        <Badge variant="info">疑似主文</Badge>
+                                      ) : (
+                                        <Badge variant="warning">待確認</Badge>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      {importProgress?.failedFileIds.has(
+                                        file.id,
+                                      ) ? (
+                                        <div className="space-y-0.5">
+                                          <span className="inline-flex items-center gap-1.5 text-label text-state-danger">
+                                            <XCircle
+                                              className="size-4"
+                                              aria-hidden="true"
+                                            />
+                                            失敗
+                                          </span>
+                                          {importProgress.fileMessages.get(
+                                            file.id,
+                                          ) && (
+                                            <p className="text-fine text-state-danger">
+                                              {importProgress.fileMessages.get(
+                                                file.id,
+                                              )}
+                                            </p>
+                                          )}
+                                        </div>
+                                      ) : importProgress?.skippedFileIds.has(
+                                          file.id,
+                                        ) ? (
+                                        <div className="space-y-0.5">
+                                          <span className="inline-flex items-center gap-1.5 text-label text-ink-muted">
+                                            <MinusCircle
+                                              className="size-4"
+                                              aria-hidden="true"
+                                            />
+                                            已跳過
+                                          </span>
+                                          {importProgress.fileMessages.get(
+                                            file.id,
+                                          ) && (
+                                            <p className="text-fine text-ink-muted">
+                                              {importProgress.fileMessages.get(
+                                                file.id,
+                                              )}
+                                            </p>
+                                          )}
+                                        </div>
+                                      ) : importProgress?.completedFileIds.has(
+                                          file.id,
+                                        ) ? (
+                                        <span className="inline-flex items-center gap-1.5 text-label text-state-active">
+                                          <CheckCircle2
+                                            className="size-4"
+                                            aria-hidden="true"
+                                          />
+                                          已完成
+                                        </span>
+                                      ) : importProgress?.processingFileIds.has(
+                                          file.id,
+                                        ) ? (
+                                        <span className="inline-flex items-center gap-1.5 text-label text-primary">
+                                          <LoaderCircle
+                                            className="size-4 animate-spin motion-reduce:animate-none"
+                                            aria-hidden="true"
+                                          />
+                                          處理中
+                                        </span>
+                                      ) : importProgress !== undefined ? (
+                                        <span className="inline-flex items-center gap-1.5 text-label text-ink-muted">
+                                          <Circle
+                                            className="size-4"
+                                            aria-hidden="true"
+                                          />
+                                          等待處理
+                                        </span>
+                                      ) : (
+                                        <span className="text-meta text-ink-muted">
+                                          尚未送出
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        aria-label={`移除 ${file.file.name}`}
+                                        disabled={isBusy}
+                                        onClick={() => {
+                                          resetProgress();
+                                          setFiles((current) =>
+                                            resolveMainCandidates(
+                                              current.filter(
+                                                (item) => item.id !== file.id,
+                                              ),
+                                            ),
+                                          );
+                                        }}
+                                      >
+                                        <Trash2
+                                          className="size-4"
+                                          aria-hidden="true"
+                                        />
+                                        移除
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                  <tr
+                                    className={`border-b border-line ${rowIsProcessing ? "bg-primary-subtle" : "bg-surface-zebra"}`}
                                   >
-                                    <Trash2
-                                      className="size-4"
-                                      aria-hidden="true"
-                                    />
-                                    移除
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))}
+                                    <td colSpan={10} className="px-3 pt-0 pb-2">
+                                      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 border-l-2 border-line-strong pl-3 text-fine text-ink-muted">
+                                        <span className="min-w-0">
+                                          <span className="font-medium text-ink">
+                                            原始檔名：
+                                          </span>
+                                          <span title={file.file.name}>
+                                            {file.file.name}
+                                          </span>
+                                        </span>
+                                        <span className="min-w-0 break-all">
+                                          <span className="font-medium text-ink">
+                                            路徑：
+                                          </span>
+                                          <code title={file.relativePath}>
+                                            {file.relativePath}
+                                          </code>
+                                        </span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                </Fragment>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

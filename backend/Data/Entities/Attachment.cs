@@ -6,7 +6,7 @@ public sealed class Attachment
 
     public Guid DocumentId { get; set; }
 
-    public string AttachmentNo { get; set; } = null!;
+    public string? AttachmentNo { get; set; }
 
     public string Name { get; set; } = null!;
 

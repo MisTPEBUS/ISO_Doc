@@ -32,7 +32,7 @@ public sealed class BackupService(
                 && !string.IsNullOrWhiteSpace(file.FileKey))
             .OrderBy(file => file.DocumentNo, StringComparer.Ordinal)
             .ThenBy(file => file.Version, StringComparer.Ordinal)
-            .ThenBy(file => file.AttachmentNo is not null)
+            .ThenBy(file => file.AttachmentId is not null)
             .ThenBy(file => file.AttachmentNo, StringComparer.Ordinal)
             .Select(ToArchiveEntry)
             .ToArray();
@@ -78,12 +78,17 @@ public sealed class BackupService(
         var version = storageKeyBuilder.ToSafeName(source.Version);
         var originalFileName = storageKeyBuilder.ToSafeName(
             source.OriginalFileName ?? "file");
-        var entryName = source.AttachmentNo is null
+        var entryName = source.AttachmentId is null
             ? $"{documentNo}/v{version}/main/{originalFileName}"
             : $"{documentNo}/v{version}/attachments/" +
-                $"{storageKeyBuilder.ToSafeName(source.AttachmentNo)}_{originalFileName}";
+                $"{AttachmentSegment(source)}_{originalFileName}";
         return new BackupArchiveEntry(source.FileKey!, entryName);
     }
+
+    private string AttachmentSegment(BackupSourceFile source) =>
+        string.IsNullOrWhiteSpace(source.AttachmentNo)
+            ? $"_{source.AttachmentId:N}"
+            : storageKeyBuilder.ToSafeName(source.AttachmentNo);
 
     private sealed class ZipArchiveOutputStream(Stream destination) : Stream
     {

@@ -4,7 +4,7 @@ namespace IsoDocument.Api.Features.Documents;
 
 public sealed record AttachmentVersionCreateContext(
     Guid AttachmentId,
-    string AttachmentNo,
+    string? AttachmentNo,
     bool AttachmentIsActive,
     Guid DocumentId,
     Guid CompanyId,

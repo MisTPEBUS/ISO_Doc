@@ -25,8 +25,7 @@ public sealed class AttachmentConfiguration
         builder.Property(x => x.AttachmentNo)
             .HasColumnName("attachment_no")
             .HasColumnType("character varying(100)")
-            .HasMaxLength(100)
-            .IsRequired();
+            .HasMaxLength(100);
 
         builder.Property(x => x.Name)
             .HasColumnName("name")

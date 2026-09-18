@@ -144,7 +144,11 @@ function groupingKey(file: ParsedAttachmentFile): string {
 
 export function resolveMainCandidates(files: ParsedAttachmentFile[]): ParsedAttachmentFile[] {
   const candidatesByGroup = new Map<string, ParsedAttachmentFile[]>()
+  const groupsWithMain = new Set<string>()
   for (const file of files) {
+    if (file.role === FILE_ROLE.Main) {
+      groupsWithMain.add(groupingKey(file))
+    }
     if (file.role !== FILE_ROLE.MainCandidate) continue
     const key = groupingKey(file)
     const candidates = candidatesByGroup.get(key) ?? []
@@ -154,17 +158,57 @@ export function resolveMainCandidates(files: ParsedAttachmentFile[]): ParsedAtta
 
   const singleCandidateIds = new Set(
     [...candidatesByGroup.values()]
-      .filter((candidates) => candidates.length === 1)
+      .filter(
+        (candidates) =>
+          candidates.length === 1
+          && !groupsWithMain.has(groupingKey(candidates[0]!)),
+      )
       .map((candidates) => candidates[0]?.id)
       .filter((id) => id !== undefined),
   )
 
-  return files.map((file) => {
+  const promoted = files.map((file) => {
     if (file.role !== FILE_ROLE.MainCandidate) return file
     return singleCandidateIds.has(file.id)
       ? { ...file, role: FILE_ROLE.Main, parseStatus: PARSE_STATUS.Ok }
       : { ...file, parseStatus: PARSE_STATUS.Warning }
   })
+
+  return resolveDuplicateMains(promoted)
+}
+
+/**
+ * 一個主文編號只能有一個主文檔案。同一群組出現多個 role=MAIN 時，
+ * 後端要求主文必須是 PDF，所以剛好只有一個 PDF 時優先保留它；
+ * 其餘情況保留群組中的第一筆，其他檔案一律降為附件並待使用者補附件編號。
+ */
+function resolveDuplicateMains(files: ParsedAttachmentFile[]): ParsedAttachmentFile[] {
+  const mainsByGroup = new Map<string, ParsedAttachmentFile[]>()
+  for (const file of files) {
+    if (file.role !== FILE_ROLE.Main) continue
+    const key = groupingKey(file)
+    const mains = mainsByGroup.get(key) ?? []
+    mains.push(file)
+    mainsByGroup.set(key, mains)
+  }
+
+  const demoteToAttachmentIds = new Set<string>()
+  for (const mains of mainsByGroup.values()) {
+    if (mains.length <= 1) continue
+    const pdfMains = mains.filter((file) => file.extension === 'pdf')
+    const keptId = pdfMains.length === 1 ? pdfMains[0]?.id : mains[0]?.id
+    for (const file of mains) {
+      if (file.id !== keptId) demoteToAttachmentIds.add(file.id)
+    }
+  }
+
+  if (demoteToAttachmentIds.size === 0) return files
+
+  return files.map((file) =>
+    demoteToAttachmentIds.has(file.id)
+      ? recalculateFile({ ...file, role: FILE_ROLE.Attachment, attachmentCode: '', attachmentSequence: '' })
+      : file,
+  )
 }
 
 export function recalculateFile(file: ParsedAttachmentFile): ParsedAttachmentFile {
