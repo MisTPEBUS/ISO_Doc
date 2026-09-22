@@ -90,7 +90,29 @@ public sealed class DocumentService(
             CreatedAt = now,
             UpdatedAt = now
         };
+
+        // 文件建立與「預設全開」部門權限必須在同一個 transaction 內完成，
+        // 避免文件建立成功但權限沒建立（或相反）的不一致狀態。
+        await using var transaction = await documentStore.BeginTransactionAsync(cancellationToken);
         documentStore.Add(document);
+
+        var deptIds = await documentStore.ListCompanyDeptIdsAsync(
+            request.CompanyId, cancellationToken);
+        var permissions = deptIds
+            .Select(deptId => new DocumentDeptPermission
+            {
+                Id = Guid.NewGuid(),
+                DocumentId = document.Id,
+                DeptId = deptId,
+                GrantedBy = userId,
+                CreatedAt = now
+            })
+            .ToArray();
+        if (permissions.Length > 0)
+        {
+            documentStore.AddRange(permissions);
+        }
+
         try
         {
             await documentStore.SaveChangesAsync(cancellationToken);
@@ -108,6 +130,24 @@ public sealed class DocumentService(
                 document.Id,
                 new { new_value = ToAuditValue(document) }),
             cancellationToken);
+
+        if (permissions.Length > 0)
+        {
+            await auditLogService.WriteAsync(
+                new AuditLogWriteRequest(
+                    document.CompanyId,
+                    AuditActions.UpdateDocumentDeptPermissions,
+                    AuditResourceTypes.Document,
+                    document.Id,
+                    new
+                    {
+                        old_value = Array.Empty<Guid>(),
+                        new_value = deptIds
+                    }),
+                cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
 
         return Result<DocumentResponse>.Success(ToResponse(document));
     }
@@ -141,6 +181,9 @@ public sealed class DocumentService(
         }
 
         var now = timeProvider.GetUtcNow();
+        // 同一批次共用一個 companyId（見 BulkImportDocumentsRequest），部門清單只需查一次。
+        var companyDeptIds = await documentStore.ListCompanyDeptIdsAsync(
+            request.CompanyId, cancellationToken);
         var reservedDocumentNos = new HashSet<string>(StringComparer.Ordinal);
         var succeeded = new List<BulkImportDocumentSuccess>();
         var failed = new List<BulkImportDocumentFailure>();
@@ -217,12 +260,27 @@ public sealed class DocumentService(
                 CreatedAt = now
             };
 
+            var permissions = companyDeptIds
+                .Select(deptId => new DocumentDeptPermission
+                {
+                    Id = Guid.NewGuid(),
+                    DocumentId = document.Id,
+                    DeptId = deptId,
+                    GrantedBy = userId,
+                    CreatedAt = now
+                })
+                .ToArray();
+
             try
             {
                 await using var transaction = await documentStore.BeginTransactionAsync(
                     cancellationToken);
                 documentStore.Add(document);
                 documentStore.Add(documentVersion);
+                if (permissions.Length > 0)
+                {
+                    documentStore.AddRange(permissions);
+                }
                 await documentStore.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
             }
@@ -230,6 +288,7 @@ public sealed class DocumentService(
             {
                 documentStore.Detach(document);
                 documentStore.Detach(documentVersion);
+                documentStore.DetachRange(permissions);
                 failed.Add(new(index, item, DuplicateDocumentNoError()));
                 continue;
             }
@@ -237,6 +296,7 @@ public sealed class DocumentService(
             {
                 documentStore.Detach(document);
                 documentStore.Detach(documentVersion);
+                documentStore.DetachRange(permissions);
                 failed.Add(new(index, item,
                     FieldError("item", "此筆資料寫入失敗，未建立文件及版本。")));
                 continue;
@@ -262,6 +322,23 @@ public sealed class DocumentService(
                         bulk_import = true
                     }),
                 cancellationToken);
+
+            if (permissions.Length > 0)
+            {
+                await auditLogService.WriteAsync(
+                    new AuditLogWriteRequest(
+                        document.CompanyId,
+                        AuditActions.UpdateDocumentDeptPermissions,
+                        AuditResourceTypes.Document,
+                        document.Id,
+                        new
+                        {
+                            old_value = Array.Empty<Guid>(),
+                            new_value = companyDeptIds
+                        }),
+                    cancellationToken);
+            }
+
             succeeded.Add(new(index,
                 new(
                     document.Id,

@@ -48,7 +48,47 @@ public sealed class DocumentApiTests
         Assert.True(body.IsActive);
         Assert.Equal(factory.AuthStore.User.Id, body.CreatedBy);
         Assert.Contains(factory.DocumentStore.Documents, document => document.Id == body.Id);
+        // 公司底下沒有任何部門時，不建立任何權限，也不多寫一筆 audit。
+        Assert.Empty(factory.DocumentStore.DocumentDeptPermissions);
         AssertAudit(factory.Audit, AuditActions.CreateDocument, body.Id);
+    }
+
+    [Fact]
+    public async Task Create_WithCompanyDepartments_GrantsAllDepartmentsPermissionInSameTransaction()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        var deptA = factory.DocumentStore.AddDeptSeed(factory.CompanyA);
+        var deptB = factory.DocumentStore.AddDeptSeed(factory.CompanyA);
+        factory.DocumentStore.AddDeptSeed(factory.CompanyB); // 不同公司，不應被授權
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWriteRequest(
+            HttpMethod.Post,
+            "/api/documents",
+            token,
+            new CreateDocumentRequest(factory.CompanyA, "ISO-001", "Quality Manual"));
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<DocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal(
+            new[] { deptA, deptB }.OrderBy(id => id),
+            factory.DocumentStore.DocumentDeptPermissions.Select(p => p.DeptId).OrderBy(id => id));
+        Assert.All(factory.DocumentStore.DocumentDeptPermissions, permission =>
+        {
+            Assert.Equal(body.Id, permission.DocumentId);
+            Assert.Equal(factory.AuthStore.User.Id, permission.GrantedBy);
+        });
+        // 文件與權限同一個 transaction：只開、只 commit 一次。
+        Assert.Equal(1, factory.DocumentStore.BegunTransactionCount);
+        Assert.Equal(1, factory.DocumentStore.CommittedTransactionCount);
+        Assert.Equal(2, factory.Audit.Entries.Count);
+        Assert.Equal(AuditActions.CreateDocument, factory.Audit.Entries[0].Action);
+        Assert.Equal(AuditActions.UpdateDocumentDeptPermissions, factory.Audit.Entries[1].Action);
+        Assert.Equal(body.Id, factory.Audit.Entries[1].ResourceId);
     }
 
     [Fact]
@@ -247,6 +287,8 @@ public sealed class DocumentApiTests
     public async Task BulkImport_WithValidItems_CreatesDraftVersionsInPerItemTransactions()
     {
         await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        var deptA = factory.DocumentStore.AddDeptSeed(factory.CompanyA);
+        var deptB = factory.DocumentStore.AddDeptSeed(factory.CompanyA);
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
         var token = await GetAntiforgeryTokenAsync(client);
@@ -295,6 +337,17 @@ public sealed class DocumentApiTests
         Assert.Equal("DRAFT", body.Succeeded[0].Document.Status);
         Assert.Equal(effectiveDate, body.Succeeded[0].Document.EffectiveDate);
         Assert.Equal(0, body.Succeeded[1].Document.PageCount);
+        // 每份成功建立的文件都套用同一批部門的預設全開權限（2 份文件 x 2 個部門）。
+        Assert.Equal(4, factory.DocumentStore.DocumentDeptPermissions.Count);
+        Assert.All(factory.DocumentStore.Documents, document =>
+        {
+            var deptIds = factory.DocumentStore.DocumentDeptPermissions
+                .Where(permission => permission.DocumentId == document.Id)
+                .Select(permission => permission.DeptId)
+                .OrderBy(id => id)
+                .ToArray();
+            Assert.Equal(new[] { deptA, deptB }.OrderBy(id => id), deptIds);
+        });
         Assert.All(factory.DocumentStore.DocumentVersions, version =>
         {
             Assert.Equal("DRAFT", version.Status);
@@ -355,6 +408,7 @@ public sealed class DocumentApiTests
     public async Task BulkImport_WhenOneWriteFails_RollsBackThatItemAndContinues()
     {
         await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        var deptA = factory.DocumentStore.AddDeptSeed(factory.CompanyA);
         factory.DocumentStore.DocumentNoToFailOnSave = "HR-I-01";
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
@@ -389,6 +443,10 @@ public sealed class DocumentApiTests
         Assert.Equal(succeededDocument.Id, succeededVersion.DocumentId);
         Assert.Equal(2, factory.DocumentStore.BegunTransactionCount);
         Assert.Equal(1, factory.DocumentStore.CommittedTransactionCount);
+        // 失敗那筆連同它的「預設全開」權限一起 rollback，不會留下沒有對應文件的權限列。
+        var permission = Assert.Single(factory.DocumentStore.DocumentDeptPermissions);
+        Assert.Equal(succeededDocument.Id, permission.DocumentId);
+        Assert.Equal(deptA, permission.DeptId);
     }
 
     private static BulkImportDocumentItem ValidBulkItem(string documentNo) => new()
@@ -493,13 +551,28 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
 {
     private readonly HashSet<Guid> _companyIds = [.. companyIds];
     private readonly Dictionary<Guid, List<DocumentVersion>> _versions = [];
+    private readonly Dictionary<Guid, List<Guid>> _deptIdsByCompany = [];
 
     public List<Document> Documents { get; } = [];
     public List<DocumentVersion> DocumentVersions { get; } = [];
     public List<DocumentAttachmentRecord> Attachments { get; } = [];
+    public List<DocumentDeptPermission> DocumentDeptPermissions { get; } = [];
     public int BegunTransactionCount { get; private set; }
     public int CommittedTransactionCount { get; private set; }
     public string? DocumentNoToFailOnSave { get; set; }
+
+    public Guid AddDeptSeed(Guid companyId)
+    {
+        var deptId = Guid.NewGuid();
+        if (!_deptIdsByCompany.TryGetValue(companyId, out var deptIds))
+        {
+            deptIds = [];
+            _deptIdsByCompany[companyId] = deptIds;
+        }
+
+        deptIds.Add(deptId);
+        return deptId;
+    }
 
     public Document AddSeed(Guid companyId, string documentNo, string name)
     {
@@ -629,13 +702,35 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
             Attachments.Where(item => item.Attachment.DocumentId == documentId).ToArray());
     }
 
+    public Task<IReadOnlyList<Guid>> ListCompanyDeptIdsAsync(
+        Guid companyId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        IReadOnlyList<Guid> deptIds = _deptIdsByCompany.TryGetValue(companyId, out var stored)
+            ? [.. stored]
+            : [];
+        return Task.FromResult(deptIds);
+    }
+
     public void Add(Document document) => Documents.Add(document);
 
     public void Add(DocumentVersion version) => DocumentVersions.Add(version);
 
+    public void AddRange(IEnumerable<DocumentDeptPermission> permissions) =>
+        DocumentDeptPermissions.AddRange(permissions);
+
     public void Detach(Document document) => Documents.Remove(document);
 
     public void Detach(DocumentVersion version) => DocumentVersions.Remove(version);
+
+    public void DetachRange(IEnumerable<DocumentDeptPermission> permissions)
+    {
+        foreach (var permission in permissions)
+        {
+            DocumentDeptPermissions.Remove(permission);
+        }
+    }
 
     public Task SaveChangesAsync(CancellationToken cancellationToken)
     {

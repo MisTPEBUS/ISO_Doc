@@ -16,10 +16,18 @@ public interface IDocumentStore
         Guid documentId, CancellationToken cancellationToken);
     Task<IReadOnlyList<DocumentAttachmentRecord>> ListAttachmentsAsync(
         Guid documentId, CancellationToken cancellationToken);
+    /// <summary>
+    /// 該公司底下全部部門的 id，用於文件建立時預設全開 document_dept_permissions。
+    /// depts 沒有 is_active 欄位，因此不分啟用／停用，回傳該公司全部部門。
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ListCompanyDeptIdsAsync(
+        Guid companyId, CancellationToken cancellationToken);
     void Add(Document document);
     void Add(DocumentVersion version);
+    void AddRange(IEnumerable<DocumentDeptPermission> permissions);
     void Detach(Document document);
     void Detach(DocumentVersion version);
+    void DetachRange(IEnumerable<DocumentDeptPermission> permissions);
     Task SaveChangesAsync(CancellationToken cancellationToken);
     Task<IDocumentTransaction> BeginTransactionAsync(CancellationToken cancellationToken);
 }

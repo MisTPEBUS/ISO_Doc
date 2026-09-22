@@ -88,15 +88,35 @@ public sealed class EfDocumentStore(IsoDbContext dbContext) : IDocumentStore
             .ToArray();
     }
 
+    public async Task<IReadOnlyList<Guid>> ListCompanyDeptIdsAsync(
+        Guid companyId,
+        CancellationToken cancellationToken) =>
+        await dbContext.Depts
+            .Where(dept => dept.CompanyId == companyId)
+            .OrderBy(dept => dept.Id)
+            .Select(dept => dept.Id)
+            .ToListAsync(cancellationToken);
+
     public void Add(Document document) => dbContext.Documents.Add(document);
 
     public void Add(DocumentVersion version) => dbContext.DocumentVersions.Add(version);
+
+    public void AddRange(IEnumerable<DocumentDeptPermission> permissions) =>
+        dbContext.DocumentDeptPermissions.AddRange(permissions);
 
     public void Detach(Document document) =>
         dbContext.Entry(document).State = EntityState.Detached;
 
     public void Detach(DocumentVersion version) =>
         dbContext.Entry(version).State = EntityState.Detached;
+
+    public void DetachRange(IEnumerable<DocumentDeptPermission> permissions)
+    {
+        foreach (var permission in permissions)
+        {
+            dbContext.Entry(permission).State = EntityState.Detached;
+        }
+    }
 
     public Task SaveChangesAsync(CancellationToken cancellationToken) =>
         dbContext.SaveChangesAsync(cancellationToken);

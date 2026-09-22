@@ -387,10 +387,14 @@ internal sealed class FakeAttachmentDocumentStore(Document seed, Guid userId)
     public Task<IReadOnlyList<DocumentAttachmentRecord>> ListAttachmentsAsync(
         Guid documentId, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<DocumentAttachmentRecord>>([]);
+    public Task<IReadOnlyList<Guid>> ListCompanyDeptIdsAsync(Guid companyId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<Guid>>([]);
     public void Add(Document document) => Documents.Add(document);
     public void Add(DocumentVersion version) { }
+    public void AddRange(IEnumerable<DocumentDeptPermission> permissions) { }
     public void Detach(Document document) => Documents.Remove(document);
     public void Detach(DocumentVersion version) { }
+    public void DetachRange(IEnumerable<DocumentDeptPermission> permissions) { }
     public Task<IDocumentTransaction> BeginTransactionAsync(CancellationToken ct) =>
         Task.FromResult<IDocumentTransaction>(new DocumentTransaction());
 
