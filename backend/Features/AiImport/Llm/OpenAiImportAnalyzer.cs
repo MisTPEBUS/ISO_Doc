@@ -67,7 +67,7 @@ public sealed class OpenAiImportAnalyzer(IOptions<AiImportLlmOptions> options) :
         var prompt = $"""
             你是 ISO 文件管理系統的匯入助理。以下是使用者拖曳進來、經過本地規則初步解析的檔案清單（JSON 陣列）。
             請針對每一個檔案修正或確認它的分類，尤其是 parseStatus 為 WARNING 或 role 為 UNRESOLVED / MAIN_CANDIDATE 的項目：
-            - role 只能是 MAIN（主文）、ATTACHMENT（附件）或 UNRESOLVED（無法判斷所屬主文）。
+            - role 只能是 MAIN（ISO管理程序）、ATTACHMENT（表單及附件）或 UNRESOLVED（無法判斷所屬ISO管理程序）。
             - documentNo／attachmentNo 請盡量從檔名或路徑推斷；無法判斷時回傳 null。
             - effectiveDate 若能從檔名/內容判斷生效日期就填 yyyy-MM-dd，否則回傳 null。
             - confidence 反映你對這筆判斷的信心程度。

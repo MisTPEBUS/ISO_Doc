@@ -84,12 +84,12 @@ export default {
         "filter-bar": "104px", // h-filter-bar：篩選列（兩排）
         "table-header": "40px", // h-table-header：表頭列高
         row: "44px", // h-row：資料列（16px 內文基準的直接成本）
-        "row-sub": "36px", // h-row-sub：展開面板內的附件列
+        "row-sub": "36px", // h-row-sub：展開面板內的表單及附件列
         control: "36px", // h-control：按鈕／輸入框／導覽項
         "control-sm": "32px", // h-control-sm：表格列內、工具列 ghost 按鈕
         pagination: "48px", // h-pagination
 
-        // 主表與附件展開面板共用的欄寬（DESIGN.md §4.4 欄位表 / §4.5 面板 grid）。
+        // 主表與表單及附件展開面板共用的欄寬（DESIGN.md §4.4 欄位表 / §4.5 面板 grid）。
         // 供 w-col-* 使用；若面板 grid-template-columns 需要原生 CSS 變數 var(--col-*)，
         // 請改在 theme.css 以 @theme 定義（v4 會產生對應 --spacing-col-* 變數，名稱不同）。
         "col-status": "100px",

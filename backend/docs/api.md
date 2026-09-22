@@ -190,14 +190,14 @@
 - `401`：未登入 / 無部門。
 
 ### `GET /api/documents/{documentId}/versions/{versionId}/download`
-下載主文件 PDF。授權 `DocumentAccess`。
+下載ISO管理程序 PDF。授權 `DocumentAccess`。
 
 - `200`：二進位串流，`Content-Type: application/pdf`，`Content-Disposition: attachment; filename=...`。
 - `403`：無權限；或角色 `USER` 但該版本非 `PUBLISHED`（管理者可下載 `PUBLISHED` / `OBSOLETE`）。
 - `404`：`"The document file has not been uploaded."`
 
 ### `GET /api/attachments/{attachmentId}/versions/{versionId}/download`
-下載附件版本檔。授權 `AttachmentAccess`；由附件身份解析所屬文件權限，並直接依 `attachment_versions.status` 判斷是否可下載。`200` 串流（型別依副檔名）；附件身份已停用、檔案不存在或尚未上傳時回 `404`。
+下載表單及附件版本檔。授權 `AttachmentAccess`；由表單及附件身份解析所屬文件權限，並直接依 `attachment_versions.status` 判斷是否可下載。`200` 串流（型別依副檔名）；表單及附件身份已停用、檔案不存在或尚未上傳時回 `404`。
 
 ---
 
@@ -416,14 +416,14 @@ Query：`companyId?`、`keyword?`（documentNo / name）、`page`、`pageSize`�
 
 - `204`：成功（有主檔則搬 trash，記 audit `DELETE_DOCUMENT_VERSION`）。
 - `404`：版本不存在，或不屬於該文件。
-- `409`：版本非 `DRAFT`（`"只有草稿版本可以刪除。"`）。附件已獨立掛在文件底下，不影響主文版本刪除。
+- `409`：版本非 `DRAFT`（`"只有草稿版本可以刪除。"`）。表單及附件已獨立掛在文件底下，不影響ISO管理程序版本刪除。
 
 ---
 
-## 10. 管理 — 附件
+## 10. 管理 — 表單及附件
 
 ### `GET /api/documents/{documentId}/attachments`（`CompanyAdminScope`）
-列出文件底下啟用中的附件身份。→ `200` **陣列**（非分頁）：
+列出文件底下啟用中的表單及附件身份。→ `200` **陣列**（非分頁）：
 
 ```jsonc
 [ { "attachmentId", "attachmentNo": "ATT-01", "name": "請假申請表", "isActive": true } ]
@@ -432,21 +432,21 @@ Query：`companyId?`、`keyword?`（documentNo / name）、`page`、`pageSize`�
 `403` / `404`（文件不存在）。
 
 ### `POST /api/documents/{documentId}/attachments`（`CompanyAdminScope`）
-需 `X-XSRF-TOKEN`。只建立附件身份，不建立版本或檔案。
+需 `X-XSRF-TOKEN`。只建立表單及附件身份，不建立版本或檔案。
 
 ```jsonc
 { "attachmentNo": "ATT-01", "name": "請假申請表" }
 ```
 
 - `201`：`{ "attachmentId", "attachmentNo", "name", "isActive": true }`。
-- `400`：附件編號格式錯誤或同文件重複。
+- `400`：表單及附件編號格式錯誤或同文件重複。
 - `403` / `404`。
 
 ### `GET /api/documents/{documentId}/attachments/{attachmentId}`（`CompanyAdminScope`）
-→ `200` 附件身份與 `versions[]` 歷程。
+→ `200` 表單及附件身份與 `versions[]` 歷程。
 
 ### `POST /api/attachments/{attachmentId}/versions`（`CompanyAdminScope`）
-`multipart/form-data`，需 `X-XSRF-TOKEN`。帶檔建立附件版本並直接進入 `PUBLISHED`。
+`multipart/form-data`，需 `X-XSRF-TOKEN`。帶檔建立表單及附件版本並直接進入 `PUBLISHED`。
 
 | 欄位 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
@@ -457,19 +457,19 @@ Query：`companyId?`、`keyword?`（documentNo / name）、`page`、`pageSize`�
 - `201`：`{ "versionId", "version", "status": "PUBLISHED" }`。
 - `400`：`errors.version`（格式不符）/ `effectiveDate` / `file` 驗證失敗。
 - `403` / `404`。
-- `409`：附件已停用（`"已停用的附件無法新增版本。"`）；同附件版號重複（`"此附件已存在相同的版本號。"`）；併發發佈（`"另一個版本已同時發佈，請重新載入附件後再試一次。"`）。
+- `409`：表單及附件已停用（`"已停用的表單及附件無法新增版本。"`）；同表單及附件版號重複（`"此表單及附件已存在相同的版本號。"`）；併發發佈（`"另一個版本已同時發佈，請重新載入表單及附件後再試一次。"`）。
 
 ### `GET /api/attachments/{attachmentId}/versions/{versionId}`（`CompanyAdminScope`）
-→ `200` 附件版本詳情。
+→ `200` 表單及附件版本詳情。
 
 ### `DELETE /api/documents/{documentId}/attachments/{attachmentId}`（`CompanyAdminScope`）
-需 `X-XSRF-TOKEN`。→ `204`（附件身份 `is_active=false`，版本歷程保留）/ `403` / `404`。
+需 `X-XSRF-TOKEN`。→ `204`（表單及附件身份 `is_active=false`，版本歷程保留）/ `403` / `404`。
 
 ### 兩階段批次匯入
 
 - `POST /api/documents/bulk-import`：`{ companyId, items: [{ documentNo, name }] }`。
 - `POST /api/attachments/bulk-import`：`{ companyId, items: [{ documentNo, attachmentNo, name }] }`。
-- 每批最多 200 筆，逐筆 continue-on-error；附件階段找不到既有 `documentNo` 時只讓該筆失敗，不自動建立文件。
+- 每批最多 200 筆，逐筆 continue-on-error；表單及附件階段找不到既有 `documentNo` 時只讓該筆失敗，不自動建立文件。
 
 ---
 
@@ -576,7 +576,7 @@ Query：`companyId?`、`companyCode?`（`companies.code`；僅在未帶 `company
 ## 12. 管理 — 公司備份　`/api/companies/{companyId}/backup`（`CompanyAdminScope`）
 
 ### `GET /api/companies/{companyId}/backup`
-下載該公司所有 `PUBLISHED` 版本主文件與附件的 zip。
+下載該公司所有 `PUBLISHED` 版本ISO管理程序與表單及附件的 zip。
 
 - `200`：`Content-Type: application/zip`，`Content-Disposition: attachment; filename*=<公司名>_backup_yyyyMMdd.zip`。
   - zip 結構：`<documentNo>/v<version>/main/<檔名>`、`<documentNo>/v<version>/attachments/<attachmentNo>_<檔名>`。
@@ -629,7 +629,7 @@ Query：`companyId?`、`companyCode?`（`companies.code`；僅在未帶 `company
    - Collection 內有 pre-request script：非 GET 請求會自動從 cookie jar 取 `isodocs.xsrf` 塞進 `X-XSRF-TOKEN`。
    - 認證 cookie `isodocs.auth` 由 Postman cookie jar 自動帶。
    - Login / Create 類請求的 test script 會把 `companyId` / `deptId` / `documentId` / `versionId` / `userId` / `attachmentId` 寫回環境變數，後續請求直接引用。
-5. 版本 / 附件上傳請求為 `form-data`，`file` 欄位需自行在 Postman 選檔。
+5. 版本 / 表單及附件上傳請求為 `form-data`，`file` 欄位需自行在 Postman 選檔。
 
 ### 另一種方式：直接匯入 OpenAPI
 

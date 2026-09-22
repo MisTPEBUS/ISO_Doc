@@ -47,11 +47,11 @@ tests/IsoDocs.Tests/
 
 ## Domain 規則（實作時必須強制於 Service 層，詳見 SPEC.md 第 4 節）
 
-- 帶主文檔建立新版本時直接進入 `PUBLISHED` 狀態（本輪無審核關卡），並在同一 transaction 內將該文件先前的 `PUBLISHED` 版本轉為 `OBSOLETE`；不帶主文檔（預先建立）時版本為 `DRAFT`，之後補檔才轉 `PUBLISHED` 並套用同一轉 `OBSOLETE` 規則。`DRAFT` 版本不出現在首頁 / 下載 / 備份。
+- 帶ISO管理程序檔案建立新版本時直接進入 `PUBLISHED` 狀態（本輪無審核關卡），並在同一 transaction 內將該文件先前的 `PUBLISHED` 版本轉為 `OBSOLETE`；不帶ISO管理程序檔案（預先建立）時版本為 `DRAFT`，之後補檔才轉 `PUBLISHED` 並套用同一轉 `OBSOLETE` 規則。`DRAFT` 版本不出現在首頁 / 下載 / 備份。
 - `objectKey` 寫入後永不重算；寫入採 `FileMode.CreateNew`（不可覆蓋）；刪除一律 move 到 `trash/{yyyyMM}/`，不得 `File.Delete`。
-- 附件身份掛在 `document_id` 底下，附件版本歷程完全獨立於主文版本；主文或附件任一方改版不得改動另一方狀態。
-- 本輪附件版本只支援帶檔建立並直接進入 `PUBLISHED`；同一附件先前的 `PUBLISHED` 在同一 transaction 內轉為 `OBSOLETE`，且只補 `expired_date`，不得覆寫原 `publish_date` / `effective_date`。
-- 文件與附件批次匯入採兩階段、逐筆 continue-on-error；第二階段只依既有 `document_no` 關聯，不得自動建立文件。
+- 表單及附件身份掛在 `document_id` 底下，表單及附件版本歷程完全獨立於ISO管理程序版本；ISO管理程序或表單及附件任一方改版不得改動另一方狀態。
+- 本輪表單及附件版本只支援帶檔建立並直接進入 `PUBLISHED`；同一表單及附件先前的 `PUBLISHED` 在同一 transaction 內轉為 `OBSOLETE`，且只補 `expired_date`，不得覆寫原 `publish_date` / `effective_date`。
+- 文件與表單及附件批次匯入採兩階段、逐筆 continue-on-error；第二階段只依既有 `document_no` 關聯，不得自動建立文件。
 - `COMPANY_ADMIN` 不可建立或修改 `role = SYSTEM_ADMIN` 的使用者，此規則必須在 Service 層擋，不得只靠前端隱藏按鈕。
 - 使用者刪除一律 `is_active = false`，禁止實體 `DELETE`（多處外鍵依賴歷史紀錄）。
 - 部門刪除前必須檢查底下是否仍有 `is_active = true` 的使用者，若有回傳 409，不得級聯刪除。

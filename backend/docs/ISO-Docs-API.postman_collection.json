@@ -262,7 +262,7 @@
                 "download"
               ]
             },
-            "description": "DocumentAccess。200 附件串流。403 / 404。"
+            "description": "DocumentAccess。200 表單及附件串流。403 / 404。"
           }
         }
       ]
@@ -720,7 +720,7 @@
                 "attachments"
               ]
             },
-            "description": "CompanyAdminScope。200 啟用中的附件身份陣列（不含版本歷程）。403 / 404。"
+            "description": "CompanyAdminScope。200 啟用中的表單及附件身份陣列（不含版本歷程）。403 / 404。"
           }
         },
         {
@@ -757,7 +757,7 @@
                 "attachments"
               ]
             },
-            "description": "CompanyAdminScope + CSRF。只建立附件身份，不建立版本或檔案。201 { attachmentId, attachmentNo, name, isActive }。400 / 403 / 404。"
+            "description": "CompanyAdminScope + CSRF。只建立表單及附件身份，不建立版本或檔案。201 { attachmentId, attachmentNo, name, isActive }。400 / 403 / 404。"
           }
         },
         {
@@ -770,7 +770,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "documents", "{{documentId}}", "attachments", "{{attachmentId}}"]
             },
-            "description": "CompanyAdminScope + CSRF。204（附件身份軟刪除，版本歷程保留）。403 / 404。"
+            "description": "CompanyAdminScope + CSRF。204（表單及附件身份軟刪除，版本歷程保留）。403 / 404。"
           }
         }
       ]
@@ -862,7 +862,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "documents", "ai-import", "analyze"]
             },
-            "description": "CompanyAdminScope + CSRF。唯讀，不寫入 DB、不需檔案內容。後端會呼叫 gpt-5.6-terra 修正 parseStatus=WARNING / role=UNRESOLVED / MAIN_CANDIDATE 的項目，並依 DB 現況算出每筆的 predictedAction（NEW_DOCUMENT / UPLOAD_DRAFT_FILE / NEW_VERSION / SKIP_UNCHANGED，附件對應 NEW_ATTACHMENT / NEW_VERSION / SKIP_UNCHANGED）與 suggestedVersion。200 AnalyzeImportResponse { analysisId, documents[], unresolved[] }。403 非本人公司。500 呼叫 LLM 失敗。"
+            "description": "CompanyAdminScope + CSRF。唯讀，不寫入 DB、不需檔案內容。後端會呼叫 gpt-5.6-terra 修正 parseStatus=WARNING / role=UNRESOLVED / MAIN_CANDIDATE 的項目，並依 DB 現況算出每筆的 predictedAction（NEW_DOCUMENT / UPLOAD_DRAFT_FILE / NEW_VERSION / SKIP_UNCHANGED，表單及附件對應 NEW_ATTACHMENT / NEW_VERSION / SKIP_UNCHANGED）與 suggestedVersion。200 AnalyzeImportResponse { analysisId, documents[], unresolved[] }。403 非本人公司。500 呼叫 LLM 失敗。"
           }
         },
         {
@@ -939,7 +939,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "documents", "ai-import", "commit"]
             },
-            "description": "CompanyAdminScope + CSRF。multipart/form-data，真正寫入 DB / 檔案。以「一個主文＋它的附件」為單位各自獨立成功/失敗；主文那筆失敗時，它底下的附件會標記 skipped(reason=PARENT_DOCUMENT_FAILED)。200 CommitImportResponse { documents{ total, successCount, failureCount, succeeded[], failed[] }, attachments{ total, successCount, skippedCount, failureCount, succeeded[], skipped[], failed[] } }。\n\n請自行在 mainFile / attachments[0].file 欄位選檔案（mainFile 需為合法 PDF；附件副檔名限 jpg/jpeg/png/pdf/doc/docx/xls/xlsx/odt/ods）。"
+            "description": "CompanyAdminScope + CSRF。multipart/form-data，真正寫入 DB / 檔案。以「一個ISO管理程序＋它的表單及附件」為單位各自獨立成功/失敗；ISO管理程序那筆失敗時，它底下的表單及附件會標記 skipped(reason=PARENT_DOCUMENT_FAILED)。200 CommitImportResponse { documents{ total, successCount, failureCount, succeeded[], failed[] }, attachments{ total, successCount, skippedCount, failureCount, succeeded[], skipped[], failed[] } }。\n\n請自行在 mainFile / attachments[0].file 欄位選檔案（mainFile 需為合法 PDF；表單及附件副檔名限 jpg/jpeg/png/pdf/doc/docx/xls/xlsx/odt/ods）。"
           }
         }
       ]

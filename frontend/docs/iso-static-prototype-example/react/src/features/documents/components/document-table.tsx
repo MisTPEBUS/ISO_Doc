@@ -52,7 +52,7 @@ export function DocumentTable({
             <th className="min-w-28 px-3 text-right">生效日期</th>
             <th className="min-w-28 px-3">公司別</th>
             <th className="min-w-36 px-3">備註</th>
-            <th className="min-w-20 px-3">附件</th>
+            <th className="min-w-20 px-3">表單及附件</th>
           </tr>
         </thead>
 

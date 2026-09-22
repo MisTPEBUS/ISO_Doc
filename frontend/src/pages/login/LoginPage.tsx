@@ -155,7 +155,7 @@ export function LoginPage() {
             都有正確版本、明確權限與完整紀錄。
           </h1>
           <p className="mt-4 max-w-xl text-cell leading-7 text-ink-faint">
-            集中管理集團 ISO 文件、版本與附件，
+            集中管理集團 ISO 文件、版本與表單及附件，
             <br />
             確保同仁隨時取得目前有效且經授權的文件。
           </p>
@@ -202,10 +202,10 @@ export function LoginPage() {
               />
               <div>
                 <dt className="text-label font-semibold text-on-shell">
-                  附件管理
+                  表單及附件管理
                 </dt>
                 <dd className="mt-1 text-fine leading-5 text-ink-faint">
-                  主文件、附件與版本統一管理
+                  ISO管理程序、表單及附件與版本統一管理
                 </dd>
               </div>
             </div>
@@ -252,14 +252,6 @@ export function LoginPage() {
           <div className="my-auto py-1 sm:py-4 lg:py-5">
             <header>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-label font-medium text-primary">
-                  <ShieldCheck
-                    aria-hidden="true"
-                    size={16}
-                    strokeWidth={1.75}
-                  />
-                  <span>安全登入</span>
-                </div>
                 <EnvironmentBadge environment={env.appEnvironment} />
               </div>
               <h2 className="mt-3 text-page-title font-semibold text-ink sm:mt-4">

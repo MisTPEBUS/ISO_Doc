@@ -122,7 +122,7 @@ export function HomePage() {
       {
         onSuccess: (result) => setNotice(`已下載「${result.fileName}」。`),
         onError: (error) =>
-          handleRequestError(error, "主文件下載失敗，請稍後再試。"),
+          handleRequestError(error, "ISO管理程序下載失敗，請稍後再試。"),
       },
     );
   }
@@ -141,7 +141,7 @@ export function HomePage() {
       {
         onSuccess: (result) => setNotice(`已下載「${result.fileName}」。`),
         onError: (error) =>
-          handleRequestError(error, "附件下載失敗，請稍後再試。"),
+          handleRequestError(error, "表單及附件下載失敗，請稍後再試。"),
       },
     );
   }
@@ -182,14 +182,14 @@ export function HomePage() {
     },
     {
       key: "attachmentNo",
-      header: "附件編號",
+      header: "表單及附件編號",
       headerClassName: "w-44",
       cellClassName: "font-mono text-code tabular",
       render: (attachment) => attachment.attachmentNo,
     },
     {
       key: "name",
-      header: "附件名稱",
+      header: "表單及附件名稱",
       render: (attachment) => (
         <span className="font-medium">{attachment.name}</span>
       ),
@@ -259,7 +259,7 @@ export function HomePage() {
                 type="button"
                 className="mr-1 grid size-8 shrink-0 place-items-center rounded-sm text-primary hover:bg-primary-subtle"
                 aria-expanded={context.expanded}
-                aria-label={`${context.expanded ? "收合" : "展開"} ${document.documentNo} 附件清單`}
+                aria-label={`${context.expanded ? "收合" : "展開"} ${document.documentNo} 表單及附件清單`}
                 onClick={context.toggleExpansion}
               >
                 <span
@@ -468,7 +468,7 @@ export function HomePage() {
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <h2 className="text-section-label text-ink">
-                      {document.documentNo} 附件清單
+                      {document.documentNo} 表單及附件清單
                     </h2>
                     <span className="text-meta text-ink-muted">
                       共 {document.attachments.length} 筆
@@ -479,8 +479,8 @@ export function HomePage() {
                     columns={attachmentColumns}
                     data={document.attachments}
                     getRowKey={(attachment) => attachment.attachmentId}
-                    emptyMessage="此版本沒有附件"
-                    caption={`${document.documentNo} 附件清單`}
+                    emptyMessage="此版本沒有表單及附件"
+                    caption={`${document.documentNo} 表單及附件清單`}
                   />
                 </div>
               ),

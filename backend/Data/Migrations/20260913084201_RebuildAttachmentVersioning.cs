@@ -197,7 +197,7 @@ namespace IsoDocument.Api.Data.Migrations
                         principalColumn: "id");
                 });
 
-            // 同一附件同時間最多只有一個 PUBLISHED
+            // 同一表單及附件同時間最多只有一個 PUBLISHED
             migrationBuilder.CreateIndex(
                 name: "uq_attachment_single_published",
                 table: "attachment_versions",
@@ -205,7 +205,7 @@ namespace IsoDocument.Api.Data.Migrations
                 unique: true,
                 filter: "status = 'PUBLISHED'");
 
-            // 同一附件不能有重複版本，例如兩筆 1.0
+            // 同一表單及附件不能有重複版本，例如兩筆 1.0
             migrationBuilder.CreateIndex(
                 name: "uq_attachment_versions",
                 table: "attachment_versions",
@@ -239,7 +239,7 @@ namespace IsoDocument.Api.Data.Migrations
 
             // rollback 時 document_id 存的是 documents.id，
             // 不能直接變成 document_versions.id。
-            // 因此 rollback 同樣不保留附件資料。
+            // 因此 rollback 同樣不保留表單及附件資料。
             migrationBuilder.Sql("DELETE FROM attachments;");
 
             migrationBuilder.DropColumn(

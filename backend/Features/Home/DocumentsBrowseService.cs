@@ -80,7 +80,7 @@ public sealed class DocumentsBrowseService(
         if (record.FileKey is null
             || !await documentStorage.ExistsAsync(record.FileKey, cancellationToken))
         {
-            return Result<DownloadFileResponse>.NotFound("附件檔案尚未上傳。");
+            return Result<DownloadFileResponse>.NotFound("表單及附件檔案尚未上傳。");
         }
 
         var stream = await documentStorage.OpenReadAsync(record.FileKey, cancellationToken);

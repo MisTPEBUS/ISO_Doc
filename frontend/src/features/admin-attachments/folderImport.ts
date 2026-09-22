@@ -178,9 +178,9 @@ export function resolveMainCandidates(files: ParsedAttachmentFile[]): ParsedAtta
 }
 
 /**
- * 一個主文編號只能有一個主文檔案。同一群組出現多個 role=MAIN 時，
- * 後端要求主文必須是 PDF，所以剛好只有一個 PDF 時優先保留它；
- * 其餘情況保留群組中的第一筆，其他檔案一律降為附件並待使用者補附件編號。
+ * 一個ISO管理程序編號只能有一個ISO管理程序檔案案。同一群組出現多個 role=MAIN 時，
+ * 後端要求ISO管理程序必須是 PDF，所以剛好只有一個 PDF 時優先保留它；
+ * 其餘情況保留群組中的第一筆，其他檔案一律降為表單及附件並待使用者補表單及附件編號。
  */
 function resolveDuplicateMains(files: ParsedAttachmentFile[]): ParsedAttachmentFile[] {
   const mainsByGroup = new Map<string, ParsedAttachmentFile[]>()

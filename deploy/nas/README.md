@@ -8,7 +8,7 @@ Reverse Proxy 終止 TLS 後轉發進來。三個 service 都不對外露 port�
 
 - NAS 已開 SSH，且 DSM 版本的 Container Manager 支援 `docker compose`（v2 CLI）
 - 已在 DSM **控制台 → 共用資料夾** 建立一個叫 `ISO` 的共用資料夾（對應 `/volume1/ISO`）——
-  文件/附件會直接放在這裡，才能用 File Station 瀏覽。單純用 SSH `mkdir /volume1/ISO`
+  文件/表單及附件會直接放在這裡，才能用 File Station 瀏覽。單純用 SSH `mkdir /volume1/ISO`
   不會自動變成共用資料夾，一定要透過 DSM 控制台建立。
 - 其餘資料夾（`docker` 共用資料夾底下放 postgres 資料）下面步驟會建立
 

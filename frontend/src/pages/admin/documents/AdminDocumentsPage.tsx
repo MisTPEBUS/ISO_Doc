@@ -322,7 +322,7 @@ export function AdminDocumentsPage() {
             disabled={companyId === undefined}
             onClick={() => navigate("/admin/documents/attachments/import")}
           >
-            批次新增附件
+            批次新增表單及附件
           </Button>
           <Button
             variant="secondary"
@@ -331,10 +331,10 @@ export function AdminDocumentsPage() {
               navigate("/admin/documents/import", { state: { companyId } })
             }
           >
-            匯入主文 Excel
+            匯入ISO管理程序 Excel
           </Button>
           <Button disabled={companyId === undefined} onClick={openCreateForm}>
-            新增主文
+            新增ISO管理程序
           </Button>
         </div>
       </div>
@@ -481,7 +481,7 @@ export function AdminDocumentsPage() {
       <Modal
         open={formOpen}
         onClose={closeForm}
-        title={editingDocument ? "編輯ISO文件" : "新增ISO主文"}
+        title={editingDocument ? "編輯ISO文件" : "新增ISO管理程序"}
         description={
           editingDocument
             ? "文件編號建立後不可修改。"

@@ -62,7 +62,7 @@ export function BackupPage() {
         <p className="mb-1 text-label font-medium text-primary">文件管理</p>
         <h1 className="text-page-title text-ink">ISO 文件備份</h1>
         <p className="mt-1 text-meta text-ink-muted">
-          下載公司目前已發布的主文件與已上傳附件。
+          下載公司目前已發布的ISO管理程序與已上傳表單及附件。
         </p>
       </div>
 
@@ -133,7 +133,7 @@ export function BackupPage() {
           )}
 
           <Alert variant="info" title="備份內容">
-            僅包含每份文件目前已發布版本的主文件，以及已有檔案的附件；不包含已作廢版本。
+            僅包含每份文件目前已發布版本的ISO管理程序，以及已有檔案的表單及附件；不包含已作廢版本。
           </Alert>
 
           <Button

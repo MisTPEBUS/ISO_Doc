@@ -22,7 +22,7 @@ export function fileIdentity(file: File): string {
   return `${file.name}|${file.size}|${file.lastModified}`
 }
 
-/** 檔名去掉副檔名後，正規化成合法的附件編號（英數與連字號，開頭結尾須為英數）。 */
+/** 檔名去掉副檔名後，正規化成合法的表單及附件編號（英數與連字號，開頭結尾須為英數）。 */
 export function suggestAttachmentNo(baseName: string): string {
   const upper = baseName.toUpperCase().replace(/[^A-Z0-9-]+/g, '-').replace(/-+/g, '-')
   const trimmed = upper.replace(/^-+/, '').replace(/-+$/, '')

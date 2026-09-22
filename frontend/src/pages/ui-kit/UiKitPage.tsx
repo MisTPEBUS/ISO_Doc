@@ -130,14 +130,14 @@ export function UiKitPage() {
       },
       {
         key: "attachmentNo",
-        header: "附件編號",
+        header: "表單及附件編號",
         headerClassName: "w-44",
         cellClassName: "font-mono text-code tabular",
         render: (attachment) => attachment.attachmentNo,
       },
       {
         key: "name",
-        header: "附件名稱",
+        header: "表單及附件名稱",
         render: (attachment) => (
           <span className="font-medium">{attachment.name}</span>
         ),
@@ -191,7 +191,7 @@ export function UiKitPage() {
                 type="button"
                 className="mr-1 grid size-8 shrink-0 place-items-center rounded-sm text-primary hover:bg-primary-subtle"
                 aria-expanded={context.expanded}
-                aria-label={`${context.expanded ? "收合" : "展開"} ${document.documentNo} 附件清單`}
+                aria-label={`${context.expanded ? "收合" : "展開"} ${document.documentNo} 表單及附件清單`}
                 onClick={context.toggleExpansion}
               >
                 <span
@@ -381,7 +381,7 @@ export function UiKitPage() {
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <h2 className="text-section-label text-ink">
-                      {document.documentNo} 附件清單
+                      {document.documentNo} 表單及附件清單
                     </h2>
                     <span className="text-meta text-ink-muted">
                       共 {attachmentsFor(document.documentId).length} 筆
@@ -392,8 +392,8 @@ export function UiKitPage() {
                     columns={attachmentColumns}
                     data={attachmentsFor(document.documentId)}
                     getRowKey={(attachment) => attachment.attachmentId}
-                    emptyMessage="此版本沒有附件"
-                    caption={`${document.documentNo} 附件清單`}
+                    emptyMessage="此版本沒有表單及附件"
+                    caption={`${document.documentNo} 表單及附件清單`}
                   />
                 </div>
               ),
@@ -414,7 +414,7 @@ export function UiKitPage() {
         </section>
 
         <p className="mt-3 text-fine text-ink-muted">
-          目前使用 API 同欄位假資料預覽；附件列為展開元件示意，正式附件清單仍待
+          目前使用 API 同欄位假資料預覽；表單及附件列為展開元件示意，正式表單及附件清單仍待
           API 提供。
         </p>
       </main>

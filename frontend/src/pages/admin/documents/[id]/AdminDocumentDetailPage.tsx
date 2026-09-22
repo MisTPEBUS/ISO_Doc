@@ -166,21 +166,21 @@ function attachmentVersionErrorMessage(error: unknown): string {
   }
 
   if (error.status === 404) {
-    return "找不到這個附件，請重新整理頁面後再試。";
+    return "找不到這個表單及附件，請重新整理頁面後再試。";
   }
 
   if (error.status === 409) {
     const message = `${error.title} ${error.detail ?? ""}`.toLowerCase();
     if (message.includes("停用") || message.includes("inactive")) {
-      return "附件已停用，無法新增版本。";
+      return "表單及附件已停用，無法新增版本。";
     }
     if (message.includes("版本號") || message.includes("version")) {
-      return error.detail ?? "此附件已存在相同的版本號。";
+      return error.detail ?? "此表單及附件已存在相同的版本號。";
     }
     return "其他管理員可能同時發布版本，請重新整理後再試。";
   }
 
-  return error.detail ?? "無法更新附件版本，請稍後再試。";
+  return error.detail ?? "無法更新表單及附件版本，請稍後再試。";
 }
 
 function attachmentErrorMessage(error: unknown, fallback: string): string {
@@ -320,7 +320,7 @@ export function AdminDocumentDetailPage() {
         },
         onError: (error) => {
           setDeleteAttachmentError(
-            attachmentErrorMessage(error, "無法刪除附件，請稍後再試。"),
+            attachmentErrorMessage(error, "無法刪除表單及附件，請稍後再試。"),
           );
         },
       },
@@ -351,7 +351,7 @@ export function AdminDocumentDetailPage() {
       {
         onError: (error) => {
           setAttachmentDownloadError(
-            attachmentErrorMessage(error, "附件下載失敗，請稍後再試。"),
+            attachmentErrorMessage(error, "表單及附件下載失敗，請稍後再試。"),
           );
         },
       },
@@ -394,7 +394,7 @@ export function AdminDocumentDetailPage() {
     }
 
     if (id === undefined || versionAttachment === undefined) {
-      setAttachmentVersionFormError("找不到這個附件，請重新整理頁面後再試。");
+      setAttachmentVersionFormError("找不到這個表單及附件，請重新整理頁面後再試。");
       return;
     }
 
@@ -578,7 +578,7 @@ export function AdminDocumentDetailPage() {
             <a
               className="mt-1 inline-block rounded-xs font-mono text-code font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               href={`/api/documents/${detail.id}/versions/${downloadableVersion.versionId}/download`}
-              title={`下載 ${detail.documentNo} 主文版本 ${downloadableVersion.version}`}
+              title={`下載 ${detail.documentNo} ISO管理程序版本 ${downloadableVersion.version}`}
             >
               {detail.documentNo}
             </a>
@@ -622,10 +622,10 @@ export function AdminDocumentDetailPage() {
                   id="attachments-title"
                   className="text-section-label text-ink"
                 >
-                  附件
+                  表單及附件
                 </h2>
                 <p className="mt-1 text-meta text-ink-muted">
-                  管理此文件的附件身份與版本檔案。
+                  管理此文件的表單及附件身份與版本檔案。
                 </p>
               </div>
               {detail.isActive && (
@@ -633,14 +633,14 @@ export function AdminDocumentDetailPage() {
                   variant="secondary"
                   onClick={() => setAddAttachmentOpen(true)}
                 >
-                  新增附件
+                  新增表單及附件
                 </Button>
               )}
             </div>
 
             {attachmentDownloadError && (
               <div className="p-4">
-                <Alert variant="error" title="無法下載附件">
+                <Alert variant="error" title="無法下載表單及附件">
                   {attachmentDownloadError}
                 </Alert>
               </div>
@@ -649,12 +649,12 @@ export function AdminDocumentDetailPage() {
             {detail.attachments.length === 0 ? (
               <div className="p-12 text-center">
                 <p className="text-cell font-medium text-ink">
-                  尚未建立任何附件
+                  尚未建立任何表單及附件
                 </p>
                 <p className="mt-1 text-meta text-ink-muted">
                   {detail.isActive
-                    ? "點選「新增附件」建立第一筆附件身份。"
-                    : "文件已停用，無法新增附件。"}
+                    ? "點選「新增表單及附件」建立第一筆表單及附件身份。"
+                    : "文件已停用，無法新增表單及附件。"}
                 </p>
               </div>
             ) : (
@@ -804,7 +804,7 @@ export function AdminDocumentDetailPage() {
                         variant="secondary"
                         onClick={() => openDraftFileModal(version)}
                       >
-                        補主文檔
+                        補ISO管理程序檔案
                       </Button>
                     )}
                   </div>
@@ -818,7 +818,7 @@ export function AdminDocumentDetailPage() {
       <Modal
         open={draftVersionTarget !== undefined}
         onClose={closeDraftFileModal}
-        title="補主文檔"
+        title="補ISO管理程序檔案"
         description={
           draftVersionTarget
             ? `${detail.documentNo}｜版本 ${draftVersionTarget.version}`
@@ -854,7 +854,7 @@ export function AdminDocumentDetailPage() {
           onSubmit={handleDraftFileSubmit}
         >
           {draftFileFormError && (
-            <Alert variant="error" title="無法補上主文檔">
+            <Alert variant="error" title="無法補上ISO管理程序檔案">
               {draftFileFormError}
             </Alert>
           )}
@@ -932,7 +932,7 @@ export function AdminDocumentDetailPage() {
         onClose={() => {
           if (!deleteAttachment.isPending) setDeleteAttachmentTarget(undefined);
         }}
-        title="刪除附件"
+        title="刪除表單及附件"
         size="sm"
         closeOnBackdrop={!deleteAttachment.isPending}
         closeOnEscape={!deleteAttachment.isPending}
@@ -961,7 +961,7 @@ export function AdminDocumentDetailPage() {
             {deleteAttachmentError}
           </Alert>
         )}
-        確定要刪除附件「
+        確定要刪除表單及附件「
         <strong className="font-semibold">
           {deleteAttachmentTarget?.attachmentNo} {deleteAttachmentTarget?.name}
         </strong>
@@ -971,7 +971,7 @@ export function AdminDocumentDetailPage() {
       <Modal
         open={versionAttachment !== undefined}
         onClose={closeAttachmentVersionModal}
-        title="附件版本管理"
+        title="表單及附件版本管理"
         description={
           versionAttachment
             ? `${versionAttachment.attachmentNo}｜${versionAttachment.name}`
@@ -1105,7 +1105,7 @@ export function AdminDocumentDetailPage() {
           </div>
 
           <FormField
-            label="附件檔案"
+            label="表單及附件檔案"
             htmlFor="attachment-version-file"
             error={attachmentVersionFieldErrors.file}
             hint="支援 jpg、png、pdf、doc(x)、xls(x)、odt、ods。"

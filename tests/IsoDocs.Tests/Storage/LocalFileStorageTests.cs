@@ -36,7 +36,7 @@ public sealed class LocalFileStorageTests
         using var temp = new TempDirectory();
         var guard = new StoragePathGuard(temp.Path);
         var storage = new LocalFileStorage(guard, new FixedTimeProvider(TestTime));
-        const string objectKey = "store/ACME/HR-I-01/v1.0/att/01_abc_附件.pdf";
+        const string objectKey = "store/ACME/HR-I-01/v1.0/att/01_abc_表單及附件.pdf";
         var content = Encoding.UTF8.GetBytes("attachment");
         await storage.WriteAsync(objectKey, new MemoryStream(content));
 
@@ -52,7 +52,7 @@ public sealed class LocalFileStorageTests
             "HR-I-01",
             "v1.0",
             "att",
-            "01_abc_附件.pdf");
+            "01_abc_表單及附件.pdf");
         Assert.True(File.Exists(trashPath));
         Assert.Equal(content, await File.ReadAllBytesAsync(trashPath));
     }

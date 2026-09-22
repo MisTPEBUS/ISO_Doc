@@ -51,9 +51,9 @@ import type { AnalyzeImportResponse } from "@/features/admin-attachments/types";
 import { useCurrentUser } from "@/features/auth/queries";
 
 const ROLE_LABELS: Record<FileRole, string> = {
-  [FILE_ROLE.Main]: "主文",
-  [FILE_ROLE.Attachment]: "附件",
-  [FILE_ROLE.MainCandidate]: "疑似主文",
+  [FILE_ROLE.Main]: "ISO管理程序",
+  [FILE_ROLE.Attachment]: "表單及附件",
+  [FILE_ROLE.MainCandidate]: "疑似ISO管理程序",
   [FILE_ROLE.Unresolved]: "未判斷",
 };
 
@@ -108,7 +108,7 @@ function statusBadge(group: AttachmentFileGroup) {
   if (group.status === GROUP_STATUS.Ok)
     return <Badge variant="success">完整</Badge>;
   if (group.status === GROUP_STATUS.MissingMain)
-    return <Badge variant="danger">缺主文</Badge>;
+    return <Badge variant="danger">缺ISO管理程序</Badge>;
   return <Badge variant="warning">待確認</Badge>;
 }
 
@@ -138,7 +138,7 @@ function formatFieldErrors(errors: Record<string, string[]>): string {
 function describeSkipReason(reason: string): string {
   if (reason === "UNCHANGED") return "內容與現有版本相同，未建立新版本。";
   if (reason === "PARENT_DOCUMENT_FAILED")
-    return "對應的主文未成功建立，已略過。";
+    return "對應的ISO管理程序未成功建立，已略過。";
   return reason;
 }
 
@@ -451,8 +451,8 @@ export function AdminAttachmentImportPage() {
       );
       setMessage(
         response.unresolved.length === 0
-          ? `AI 分析完成，共比對 ${response.documents.length} 個主文群組。`
-          : `AI 分析完成，共比對 ${response.documents.length} 個主文群組，${response.unresolved.length} 個檔案仍待人工指定。`,
+          ? `AI 分析完成，共比對 ${response.documents.length} 個ISO管理程序群組。`
+          : `AI 分析完成，共比對 ${response.documents.length} 個ISO管理程序群組，${response.unresolved.length} 個檔案仍待人工指定。`,
       );
     } catch (error) {
       alert(error);
@@ -590,7 +590,7 @@ export function AdminAttachmentImportPage() {
           documentTotals.failed += 1;
           const groupErrorMessage = describeError(
             error,
-            "無法完成這個主文群組的儲存。",
+            "無法完成這個ISO管理程序群組的儲存。",
           );
           for (const file of group.files) {
             failedFileIds.add(file.id);
@@ -658,7 +658,7 @@ export function AdminAttachmentImportPage() {
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="mb-1 text-label font-medium text-primary">文件管理</p>
-          <h1 className="text-page-title text-ink">批次新增附件</h1>
+          <h1 className="text-page-title text-ink">批次新增表單及附件</h1>
         </div>
         <Button
           variant="secondary"
@@ -671,7 +671,7 @@ export function AdminAttachmentImportPage() {
 
       <Alert className="mb-4" variant="info" title="AI 輔助批次匯入">
         選取檔案或資料夾後確認辨識結果；「AI
-        分析」會呼叫後端修正待確認項目並取得建議版號，「儲存」會依主文群組逐批寫入資料庫與檔案。
+        分析」會呼叫後端修正待確認項目並取得建議版號，「儲存」會依ISO管理程序群組逐批寫入資料庫與檔案。
       </Alert>
 
       <section className="border border-line-strong bg-surface">
@@ -716,7 +716,7 @@ export function AdminAttachmentImportPage() {
             </span>
             <p className="text-section-label text-ink">拖曳多個檔案到這裡</p>
             <p className="mt-1 text-meta text-ink-muted">
-              資料夾請使用下方「選擇資料夾」，以保留相對路徑及主文群組。
+              資料夾請使用下方「選擇資料夾」，以保留相對路徑及ISO管理程序群組。
             </p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               <Button
@@ -755,12 +755,12 @@ export function AdminAttachmentImportPage() {
         <div className="fixed right-0 bottom-0 left-[var(--admin-sidebar-width)] z-40 border-t border-line-strong bg-surface">
           <div className="flex max-h-[40dvh] flex-wrap items-center justify-between gap-3 overflow-y-auto px-4 py-3 lg:px-6">
             <div className="flex flex-wrap gap-2">
-              <Badge variant="neutral">主文群組 {groups.length}</Badge>
+              <Badge variant="neutral">ISO管理程序群組 {groups.length}</Badge>
               <Badge variant="neutral">檔案 {files.length}</Badge>
-              <Badge variant="success">主文 {mainCount}</Badge>
-              <Badge variant="info">附件 {attachmentCount}</Badge>
+              <Badge variant="success">ISO管理程序 {mainCount}</Badge>
+              <Badge variant="info">表單及附件 {attachmentCount}</Badge>
               <Badge variant="warning">待確認 {warningCount}</Badge>
-              <Badge variant="danger">缺主文 {missingMainCount}</Badge>
+              <Badge variant="danger">缺ISO管理程序 {missingMainCount}</Badge>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <div
@@ -852,7 +852,7 @@ export function AdminAttachmentImportPage() {
             className="border-t border-line px-4 py-2 text-meta text-state-danger"
             role="status"
           >
-            尚有待確認或缺少主文的資料，請完成修正後再儲存。
+            尚有待確認或缺少ISO管理程序的資料，請完成修正後再儲存。
           </p>
         )}
 
@@ -871,8 +871,8 @@ export function AdminAttachmentImportPage() {
                 </h2>
                 <p className="mt-1 text-meta text-ink-muted" aria-live="polite">
                   {importProgress.status === IMPORT_STATUS.Completed
-                    ? `已處理 ${importProgress.totalCount} 個主文群組。`
-                    : `正在處理主文群組 ${importProgress.processedCount + 1}/${importProgress.totalCount}：${importProgress.currentGroupLabel ?? "準備下一個群組"}`}
+                    ? `已處理 ${importProgress.totalCount} 個ISO管理程序群組。`
+                    : `正在處理ISO管理程序群組 ${importProgress.processedCount + 1}/${importProgress.totalCount}：${importProgress.currentGroupLabel ?? "準備下一個群組"}`}
                 </p>
               </div>
               <span className="text-meta text-ink-muted tabular">
@@ -907,9 +907,9 @@ export function AdminAttachmentImportPage() {
             }
             title="儲存完成"
           >
-            主文：共 {summary.documents.total} 筆，成功{" "}
+            ISO管理程序：共 {summary.documents.total} 筆，成功{" "}
             {summary.documents.success} 筆，失敗 {summary.documents.failed}{" "}
-            筆。附件：共 {summary.attachments.total} 筆，成功{" "}
+            筆。表單及附件：共 {summary.attachments.total} 筆，成功{" "}
             {summary.attachments.success} 筆，跳過 {summary.attachments.skipped}{" "}
             筆，失敗 {summary.attachments.failed} 筆。
           </Alert>
@@ -931,7 +931,7 @@ export function AdminAttachmentImportPage() {
               type="search"
               className="pl-9"
               value={keyword}
-              placeholder="搜尋主文編號、檔名、附件名稱"
+              placeholder="搜尋ISO管理程序編號、檔名、表單及附件名稱"
               aria-label="搜尋解析結果"
               onChange={(event) => setKeyword(event.target.value)}
             />
@@ -947,7 +947,7 @@ export function AdminAttachmentImportPage() {
           >
             <option value={GROUP_STATUS.All}>全部群組</option>
             <option value={GROUP_STATUS.Ok}>完整</option>
-            <option value={GROUP_STATUS.MissingMain}>缺主文</option>
+            <option value={GROUP_STATUS.MissingMain}>缺ISO管理程序</option>
             <option value={GROUP_STATUS.Warning}>有待確認</option>
           </Select>
         </div>
@@ -1003,7 +1003,7 @@ export function AdminAttachmentImportPage() {
                           aria-hidden="true"
                         />
                         <code className="rounded-xs bg-primary-subtle px-2 py-1 font-mono text-code text-primary">
-                          {group.documentCode || "未辨識主文"}
+                          {group.documentCode || "未辨識ISO管理程序"}
                         </code>
                         {statusBadge(group)}
                       </div>
@@ -1014,9 +1014,9 @@ export function AdminAttachmentImportPage() {
                       </p>
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
-                      <Badge variant="success">主文 {groupMainCount}</Badge>
+                      <Badge variant="success">ISO管理程序 {groupMainCount}</Badge>
                       <Badge variant="neutral">
-                        附件 {groupAttachmentCount}
+                        表單及附件 {groupAttachmentCount}
                       </Badge>
                       {groupWarningCount > 0 && (
                         <Badge variant="warning">
@@ -1033,7 +1033,7 @@ export function AdminAttachmentImportPage() {
                           className="text-label font-medium text-ink"
                           htmlFor={`group-code-${group.key}`}
                         >
-                          主文編號
+                          ISO管理程序編號
                         </label>
                         <Input
                           id={`group-code-${group.key}`}
@@ -1056,8 +1056,8 @@ export function AdminAttachmentImportPage() {
                             <tr className="h-table-header border-b border-line bg-surface-header text-left text-table-header text-ink-muted">
                               <th className="w-12 px-3">#</th>
                               <th className="w-36 px-3">類型</th>
-                              <th className="w-40 px-3">主文編號</th>
-                              <th className="w-44 px-3">附件編號</th>
+                              <th className="w-40 px-3">ISO管理程序編號</th>
+                              <th className="w-44 px-3">表單及附件編號</th>
                               <th className="min-w-56 px-3">顯示名稱</th>
                               <th className="w-20 px-3">副檔名</th>
                               <th className="w-24 px-3">大小</th>
@@ -1112,7 +1112,7 @@ export function AdminAttachmentImportPage() {
                                         className="font-mono"
                                         value={file.documentCode}
                                         disabled={isBusy}
-                                        aria-label={`${file.file.name} 主文編號`}
+                                        aria-label={`${file.file.name} ISO管理程序編號`}
                                         onChange={(event) =>
                                           updateFile(file.id, {
                                             documentCode:
@@ -1128,7 +1128,7 @@ export function AdminAttachmentImportPage() {
                                         disabled={
                                           isBusy || file.role === FILE_ROLE.Main
                                         }
-                                        aria-label={`${file.file.name} 附件編號`}
+                                        aria-label={`${file.file.name} 表單及附件編號`}
                                         onChange={(event) =>
                                           updateAttachmentCode(
                                             file,
@@ -1158,14 +1158,14 @@ export function AdminAttachmentImportPage() {
                                     <td className="px-3 py-2">
                                       {duplicateMainIds.has(file.id) ? (
                                         <Badge variant="warning">
-                                          主文重複
+                                          ISO管理程序重複
                                         </Badge>
                                       ) : file.parseStatus ===
                                         PARSE_STATUS.Ok ? (
                                         <Badge variant="success">已辨識</Badge>
                                       ) : file.role ===
                                         FILE_ROLE.MainCandidate ? (
-                                        <Badge variant="info">疑似主文</Badge>
+                                        <Badge variant="info">疑似ISO管理程序</Badge>
                                       ) : (
                                         <Badge variant="warning">待確認</Badge>
                                       )}
@@ -1314,7 +1314,7 @@ export function AdminAttachmentImportPage() {
           <FileArchive className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <p>
             判斷規則依 IFOLDER
-            範例：含附件尾碼者辨識為附件；主文編號檔名辨識為疑似主文；資料夾內無法辨識編號的檔案歸入該主文並標記待確認。ZIP
+            範例：含表單及附件尾碼者辨識為表單及附件；ISO管理程序編號檔名辨識為疑似ISO管理程序；資料夾內無法辨識編號的檔案歸入該ISO管理程序並標記待確認。ZIP
             不會自動解壓。
           </p>
         </div>

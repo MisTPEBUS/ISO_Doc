@@ -7,7 +7,7 @@
 1. 首頁（文件瀏覽與下載）
 2. 部門維護
 3. 使用者維護
-4. ISO 文件維護（主文 / 附件）
+4. ISO 文件維護（ISO管理程序 / 表單及附件）
 5. 權限維護（文件 × 部門）
 6. ISO 文件備份（依公司打包下載）
 
@@ -20,7 +20,7 @@
 - SignalR / SSE 即時推播。
 - LDAP / AD / SSO 登入整合，本版本僅本地帳密。
 
-**本版本納入之建立模型**：主文版本可先建立中繼資料、稍後補檔；附件身份掛在文件底下，附件版本與主文版本各自獨立編版。本輪附件版本只支援帶檔建立並直接發佈。詳見 §4.4 與 SPEC.md 第 3、5、6 節。
+**本版本納入之建立模型**：ISO管理程序版本可先建立中繼資料、稍後補檔；表單及附件身份掛在文件底下，表單及附件版本與ISO管理程序版本各自獨立編版。本輪表單及附件版本只支援帶檔建立並直接發佈。詳見 §4.4 與 SPEC.md 第 3、5、6 節。
 
 以上為明確假設，非最終定案；若與實際需求不符，需在動工前修正本文件與 SPEC.md。
 
@@ -193,7 +193,7 @@ public async Task<IActionResult> Create(CreateDeptRequest request)
 ### 4.1 首頁（文件瀏覽 / 下載）
 
 - 資料來源：`document_dept_permissions` join 使用者部門，僅回傳每份文件**目前 Published 版本**。
-- 下載主文與下載附件是兩個獨立 endpoint，都需經過 `DocumentAccessRequirement` 授權檢查，不得用可猜測 URL 直接存取檔案。
+- 下載ISO管理程序與下載表單及附件是兩個獨立 endpoint，都需經過 `DocumentAccessRequirement` 授權檢查，不得用可猜測 URL 直接存取檔案。
 - 下載一律記 `audit_logs`（action = `DOWNLOAD_DOCUMENT` / `DOWNLOAD_ATTACHMENT`）。
 
 ### 4.2 部門維護
@@ -204,17 +204,17 @@ public async Task<IActionResult> Create(CreateDeptRequest request)
 
 CRUD + 密碼重設。刪除一律是 `is_active = false`（軟刪除），理由：`audit_logs.user_id`、`document_versions.created_by` 等多處外鍵依賴使用者存在，實體刪除會破壞歷史紀錄的可追溯性。`COMPANY_ADMIN` 不可建立 `SYSTEM_ADMIN` 帳號，此規則在 Service 層以 domain rule 驗證，不是前端擋。
 
-### 4.4 ISO 文件維護（主文 / 附件）
+### 4.4 ISO 文件維護（ISO管理程序 / 表單及附件）
 
 - `Document` 為靜態識別（編號、名稱、所屬公司），實際內容在 `DocumentVersion`。
-- `DocumentVersion` 可先以 `Draft` 建立（無主文檔），補檔後轉 `Published`。
+- `DocumentVersion` 可先以 `Draft` 建立（無ISO管理程序檔案），補檔後轉 `Published`。
 - `Attachment` 是掛在 `document_id` 下的身份表；檔案與版本資料存於 `AttachmentVersion`。
 - 上傳新版本 = 新增一筆 `DocumentVersion`；帶檔時一步標記 `Published`，不帶檔時為 `Draft`。版本轉入 `Published` 的同一 transaction 內，將該文件先前的 `Published` 版本轉為 `Obsolete`。
-- 附件為選配：一份文件可有 0..N 個附件身份；每個附件各自維護 `1.0 → 1.1` 的版本時間軸。
-- 本輪附件版本只支援帶檔建立並直接標記 `Published`；附件新版本只會淘汰同一附件先前的 `Published`，主文改版與附件改版互不影響。
-- `Draft` 主文版本與非 `Published` 附件版本不出現在首頁 / 一般使用者下載 / 備份。
+- 表單及附件為選配：一份文件可有 0..N 個表單及附件身份；每個表單及附件各自維護 `1.0 → 1.1` 的版本時間軸。
+- 本輪表單及附件版本只支援帶檔建立並直接標記 `Published`；表單及附件新版本只會淘汰同一表單及附件先前的 `Published`，ISO管理程序改版與表單及附件改版互不影響。
+- `Draft` ISO管理程序版本與非 `Published` 表單及附件版本不出現在首頁 / 一般使用者下載 / 備份。
 - 檔案寫入採 immutable：`objectKey` 一旦寫入不重算、不覆蓋，`File.Move(overwrite: false)` 強制。
-- 主文限 `.pdf`；附件依原 model 限制的副檔名清單。
+- ISO管理程序限 `.pdf`；表單及附件依原 model 限制的副檔名清單。
 
 ### 4.5 權限維護
 
@@ -250,8 +250,8 @@ CRUD + 密碼重設。刪除一律是 `is_active = false`（軟刪除），理�
 | Auth        | POST   | `/api/auth/change-password`                                                            | 變更密碼                                               |
 | Auth        | GET    | `/api/antiforgery/token`                                                               | 發放 SPA antiforgery token                             |
 | Home        | GET    | `/api/documents/available`                                                             | 有權限瀏覽的文件清單（分頁）                           |
-| Home        | GET    | `/api/documents/{documentId}/versions/{versionId}/download`                            | 下載主文                                               |
-| Home        | GET    | `/api/attachments/{attachmentId}/versions/{versionId}/download`                        | 下載附件                                               |
+| Home        | GET    | `/api/documents/{documentId}/versions/{versionId}/download`                            | 下載ISO管理程序                                               |
+| Home        | GET    | `/api/attachments/{attachmentId}/versions/{versionId}/download`                        | 下載表單及附件                                               |
 | Companies   | GET    | `/api/companies`                                                                       | 搜尋公司（限 SYSTEM_ADMIN）                            |
 | Depts       | GET    | `/api/depts`                                                                           | 列表（依角色自動限縮公司範圍）                         |
 | Depts       | POST   | `/api/depts`                                                                           | 新增                                                   |
@@ -270,16 +270,16 @@ CRUD + 密碼重設。刪除一律是 `is_active = false`（軟刪除），理�
 | Documents   | PUT    | `/api/documents/{id}`                                                                  | 更新文件基本資料                                       |
 | Documents   | DELETE | `/api/documents/{id}`                                                                  | 停用文件                                               |
 | Versions    | POST   | `/api/documents/{documentId}/versions`                                                 | 建立新版本（multipart；`file` 選填，省略則為 `Draft`） |
-| Versions    | PUT    | `/api/documents/{documentId}/versions/{versionId}/file`                                | 為 `Draft` 版本補主文檔，轉 `Published`                |
+| Versions    | PUT    | `/api/documents/{documentId}/versions/{versionId}/file`                                | 為 `Draft` 版本補ISO管理程序檔案，轉 `Published`                |
 | Versions    | GET    | `/api/documents/{documentId}/versions/{versionId}`                                     | 單一版本詳情                                           |
-| Attachments | GET    | `/api/documents/{documentId}/attachments`                                              | 附件身份列表                                           |
-| Attachments | POST   | `/api/documents/{documentId}/attachments`                                              | 建立附件身份                                           |
-| Attachments | GET    | `/api/documents/{documentId}/attachments/{attachmentId}`                               | 附件身份與版本歷程                                     |
-| Attachments | DELETE | `/api/documents/{documentId}/attachments/{attachmentId}`                               | 軟刪除附件身份                                         |
-| Attachments | POST   | `/api/attachments/{attachmentId}/versions`                                             | 帶檔建立附件版本並直接發佈                             |
-| Attachments | GET    | `/api/attachments/{attachmentId}/versions/{versionId}`                                 | 附件版本詳情                                           |
+| Attachments | GET    | `/api/documents/{documentId}/attachments`                                              | 表單及附件身份列表                                           |
+| Attachments | POST   | `/api/documents/{documentId}/attachments`                                              | 建立表單及附件身份                                           |
+| Attachments | GET    | `/api/documents/{documentId}/attachments/{attachmentId}`                               | 表單及附件身份與版本歷程                                     |
+| Attachments | DELETE | `/api/documents/{documentId}/attachments/{attachmentId}`                               | 軟刪除表單及附件身份                                         |
+| Attachments | POST   | `/api/attachments/{attachmentId}/versions`                                             | 帶檔建立表單及附件版本並直接發佈                             |
+| Attachments | GET    | `/api/attachments/{attachmentId}/versions/{versionId}`                                 | 表單及附件版本詳情                                           |
 | Import      | POST   | `/api/documents/bulk-import`                                                           | 第一階段批次匯入文件身份                               |
-| Import      | POST   | `/api/attachments/bulk-import`                                                         | 第二階段批次匯入附件身份                               |
+| Import      | POST   | `/api/attachments/bulk-import`                                                         | 第二階段批次匯入表單及附件身份                               |
 | Versions    | DELETE | `/api/documents/{documentId}/versions/{versionId}`                                     | 硬刪除草稿版本（僅 DRAFT）                             |
 | Permissions | GET    | `/api/documents/{documentId}/dept-permissions`                                         | 目前可觀看部門清單                                     |
 | Permissions | PUT    | `/api/documents/{documentId}/dept-permissions`                                         | 覆寫可觀看部門清單                                     |
@@ -305,7 +305,7 @@ CRUD + 密碼重設。刪除一律是 `is_active = false`（軟刪除），理�
 
 ## 7. 非目標與後續擴充點（明確標註，避免誤植入本輪程式碼）
 
-- 審核流程：`document_versions.status` 目前僅 `Draft` / `Published` / `Obsolete`（本輪 `Draft` 語意為「已建立、主文檔待補」，非審核關卡），若加審核需擴充狀態值與 `ApprovalHistory` 表，屬另一輪工作。
+- 審核流程：`document_versions.status` 目前僅 `Draft` / `Published` / `Obsolete`（本輪 `Draft` 語意為「已建立、ISO管理程序檔案待補」，非審核關卡），若加審核需擴充狀態值與 `ApprovalHistory` 表，屬另一輪工作。
 - 通知：`notifications` 相關表本輪不建立。
 - 即時推播：本輪無 SignalR / SSE。
 - 若需要 email 通知或即時審核提醒，於功能確認後另行設計，不應在本輪 Codex 產出中預先建立空殼程式碼。

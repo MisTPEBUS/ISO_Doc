@@ -212,7 +212,7 @@ export function PermissionsPage() {
           <p className="mb-1 text-label font-medium text-primary">文件管理</p>
           <h1 className="text-page-title text-ink">ISO 文件權限矩陣</h1>
           <p className="mt-1 text-meta text-ink-muted">
-            勾選可查看各主文的部門；表頭勾選可一次套用該部門的所有文件，按「儲存」後才會生效。
+            勾選可查看各ISO管理程序的部門；表頭勾選可一次套用該部門的所有文件，按「儲存」後才會生效。
           </p>
         </div>
         {isSystemAdmin ? (

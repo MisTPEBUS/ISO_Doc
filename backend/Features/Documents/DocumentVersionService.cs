@@ -226,13 +226,13 @@ public sealed class DocumentVersionService(
 
         if (!document.IsActive)
         {
-            return Result<DocumentVersionResponse>.Conflict("已停用的文件無法補上主文檔。");
+            return Result<DocumentVersionResponse>.Conflict("已停用的文件無法補上ISO管理程序檔案。");
         }
 
         if (!currentUser.CanAccessCompany(document.CompanyId))
         {
             return Result<DocumentVersionResponse>.Forbidden(
-                "您沒有為此文件補上主文檔的權限。");
+                "您沒有為此文件補上ISO管理程序檔案的權限。");
         }
 
         if (currentUser.UserId is null)
@@ -242,12 +242,12 @@ public sealed class DocumentVersionService(
 
         if (version.Status != "DRAFT")
         {
-            return Result<DocumentVersionResponse>.Conflict("只有草稿版本可以補上主文檔。");
+            return Result<DocumentVersionResponse>.Conflict("只有草稿版本可以補上ISO管理程序檔案。");
         }
 
         if (version.FileKey is not null)
         {
-            return Result<DocumentVersionResponse>.Conflict("此草稿版本已有主文檔。");
+            return Result<DocumentVersionResponse>.Conflict("此草稿版本已有ISO管理程序檔案。");
         }
 
         var effectiveDate = version.EffectiveDate ?? request.EffectiveDate;

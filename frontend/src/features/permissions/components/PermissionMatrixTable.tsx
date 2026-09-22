@@ -150,7 +150,7 @@ export function PermissionMatrixTable({
                   scope="col"
                   className="sticky top-0 left-0 z-30 h-16 w-52 min-w-52 max-w-52 border-r border-b border-line-strong bg-surface-header px-4 text-table-header shadow-sticky-y"
                 >
-                  ISO 主文
+                  ISO管理程序
                 </th>
                 <th
                   scope="col"

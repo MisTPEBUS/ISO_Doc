@@ -197,7 +197,7 @@ export function AttachmentBatchImportPanel({
     },
     {
       key: "attachmentNo",
-      header: "附件編號",
+      header: "表單及附件編號",
       headerClassName: "w-48",
       render: (row) =>
         submitted ? (
@@ -215,7 +215,7 @@ export function AttachmentBatchImportPanel({
     },
     {
       key: "name",
-      header: "附件名稱",
+      header: "表單及附件名稱",
       headerClassName: "min-w-48",
       render: (row) =>
         submitted ? (
@@ -275,10 +275,10 @@ export function AttachmentBatchImportPanel({
 
       <div className="flex flex-wrap items-center justify-between gap-3 border border-line-strong bg-surface p-4">
         <div>
-          <p className="text-label font-medium text-ink">批次新增附件</p>
+          <p className="text-label font-medium text-ink">批次新增表單及附件</p>
           <p className="mt-1 text-meta text-ink-muted">
             {documentNo}｜{documentName}
-            。解析後請確認檔案內容後附件編號與名稱送出。
+            。解析後請確認檔案內容後表單及附件編號與名稱送出。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -320,7 +320,7 @@ export function AttachmentBatchImportPanel({
       <div
         role="button"
         tabIndex={0}
-        aria-label="拖曳或點擊選擇附件檔案"
+        aria-label="拖曳或點擊選擇表單及附件檔案"
         className={`grid min-h-32 cursor-pointer place-items-center rounded-sm border-2 border-dashed px-6 py-6 text-center transition-colors ${
           isDragging
             ? "border-primary bg-primary-subtle"
@@ -361,7 +361,7 @@ export function AttachmentBatchImportPanel({
       </div>
 
       {fileError && (
-        <Alert variant="error" title="無法建立附件">
+        <Alert variant="error" title="無法建立表單及附件">
           {fileError}
         </Alert>
       )}
@@ -385,7 +385,7 @@ export function AttachmentBatchImportPanel({
         columns={columns}
         data={rows}
         getRowKey={(row) => row.id}
-        caption="批次新增附件預覽"
+        caption="批次新增表單及附件預覽"
         emptyMessage="尚未加入檔案，請拖曳或點擊選擇檔案。"
       />
     </div>

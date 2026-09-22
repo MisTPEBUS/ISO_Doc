@@ -34,7 +34,7 @@ public sealed class AttachmentApiTests
         var token = await GetAntiforgeryTokenAsync(client);
         using var create = WithXsrf(HttpMethod.Post,
             $"/api/documents/{factory.Document.Id}/attachments", token,
-            JsonContent.Create(new CreateAttachmentRequest("ATT-A", "附件 A")));
+            JsonContent.Create(new CreateAttachmentRequest("ATT-A", "表單及附件 A")));
 
         var createResponse = await client.SendAsync(create);
         var created = await createResponse.Content.ReadFromJsonAsync<AttachmentResponse>();
@@ -81,7 +81,7 @@ public sealed class AttachmentApiTests
     public async Task CreateVersion_CalculatesMinorVersion_PreservesHistoryAndDoesNotChangeMainVersion()
     {
         await using var factory = new AttachmentWebApplicationFactory();
-        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "附件 A");
+        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "表單及附件 A");
         var oldEffectiveDate = new DateOnly(2026, 1, 5);
         var oldVersion = factory.VersionStore.AddVersion(
             attachment.Id, 1, 0, "PUBLISHED", oldEffectiveDate);
@@ -114,7 +114,7 @@ public sealed class AttachmentApiTests
     public async Task CreateVersion_WhenContentDoesNotMatchExtension_RejectsWithoutWriteOrRow()
     {
         await using var factory = new AttachmentWebApplicationFactory();
-        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "附件 A");
+        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "表單及附件 A");
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
         var token = await GetAntiferyTokenAsync(client);
@@ -136,7 +136,7 @@ public sealed class AttachmentApiTests
         string changeType)
     {
         await using var factory = new AttachmentWebApplicationFactory();
-        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "附件 A");
+        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "表單及附件 A");
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
         var token = await GetAntiforgeryTokenAsync(client);
@@ -155,7 +155,7 @@ public sealed class AttachmentApiTests
     public async Task CreateFirstVersion_UsesOnePointZeroAndDefaultsDatesToUtcToday()
     {
         await using var factory = new AttachmentWebApplicationFactory();
-        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "附件 A");
+        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "表單及附件 A");
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
         var token = await GetAntiforgeryTokenAsync(client);

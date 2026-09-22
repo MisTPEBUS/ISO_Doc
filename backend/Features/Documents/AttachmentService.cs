@@ -32,7 +32,7 @@ public sealed class AttachmentService(
         if (!currentUser.CanAccessCompany(document.CompanyId))
         {
             return Result<IReadOnlyList<AttachmentResponse>>.Forbidden(
-                "您沒有檢視此文件附件的權限。");
+                "您沒有檢視此文件表單及附件的權限。");
         }
 
         var attachments = await attachmentStore.ListAsync(documentId, cancellationToken);
@@ -60,7 +60,7 @@ public sealed class AttachmentService(
         if (!currentUser.CanAccessCompany(document.CompanyId))
         {
             return Result<AttachmentResponse>.Forbidden(
-                "您沒有為此文件新增附件的權限。");
+                "您沒有為此文件新增表單及附件的權限。");
         }
 
         if (currentUser.UserId is not { } userId)
@@ -116,19 +116,19 @@ public sealed class AttachmentService(
         if (items is null || items.Count == 0)
         {
             return Result<BulkImportAttachmentsResponse>.ValidationFailed(
-                FieldError("items", "請至少提供一筆附件資料。"));
+                FieldError("items", "請至少提供一筆表單及附件資料。"));
         }
 
         if (items.Count > MaximumBulkImportSize)
         {
             return Result<BulkImportAttachmentsResponse>.ValidationFailed(
-                FieldError("items", $"一次最多可匯入 {MaximumBulkImportSize} 筆附件。"));
+                FieldError("items", $"一次最多可匯入 {MaximumBulkImportSize} 筆表單及附件。"));
         }
 
         if (!currentUser.CanAccessCompany(request.CompanyId))
         {
             return Result<BulkImportAttachmentsResponse>.Forbidden(
-                "您沒有為這間公司匯入附件的權限。");
+                "您沒有為這間公司匯入表單及附件的權限。");
         }
 
         if (currentUser.UserId is not { } userId)
@@ -174,7 +174,7 @@ public sealed class AttachmentService(
             if (!reservedAttachmentNos.Add((document.Id, attachmentNo)))
             {
                 failed.Add(new(index, item,
-                    FieldError("attachmentNo", "此附件編號與同文件的批次資料重複。")));
+                    FieldError("attachmentNo", "此表單及附件編號與同文件的批次資料重複。")));
                 continue;
             }
 
@@ -236,7 +236,7 @@ public sealed class AttachmentService(
         var attachment = await attachmentStore.FindByIdAsync(attachmentId, cancellationToken);
         if (attachment is null || attachment.DocumentId != documentId)
         {
-            return Result<AttachmentDetailResponse>.NotFound("找不到指定的附件。");
+            return Result<AttachmentDetailResponse>.NotFound("找不到指定的表單及附件。");
         }
 
         var document = await attachmentStore.FindDocumentAsync(documentId, cancellationToken);
@@ -247,7 +247,7 @@ public sealed class AttachmentService(
 
         if (!currentUser.CanAccessCompany(document.CompanyId))
         {
-            return Result<AttachmentDetailResponse>.Forbidden("您沒有檢視此附件的權限。");
+            return Result<AttachmentDetailResponse>.Forbidden("您沒有檢視此表單及附件的權限。");
         }
 
         var versions = await attachmentStore.ListVersionsAsync(attachmentId, cancellationToken);
@@ -274,7 +274,7 @@ public sealed class AttachmentService(
         var attachment = await attachmentStore.FindByIdAsync(attachmentId, cancellationToken);
         if (attachment is null || attachment.DocumentId != documentId)
         {
-            return Result.NotFound("找不到指定的附件。");
+            return Result.NotFound("找不到指定的表單及附件。");
         }
 
         var document = await attachmentStore.FindDocumentAsync(documentId, cancellationToken);
@@ -285,7 +285,7 @@ public sealed class AttachmentService(
 
         if (!currentUser.CanAccessCompany(document.CompanyId))
         {
-            return Result.Forbidden("您沒有刪除此附件的權限。");
+            return Result.Forbidden("您沒有刪除此表單及附件的權限。");
         }
 
         var wasActive = attachment.IsActive;
@@ -311,7 +311,7 @@ public sealed class AttachmentService(
         DuplicateAttachmentNoError());
 
     private static Dictionary<string, string[]> DuplicateAttachmentNoError() =>
-        FieldError("attachmentNo", "這份文件已使用相同的附件編號。");
+        FieldError("attachmentNo", "這份文件已使用相同的表單及附件編號。");
 
     private static Dictionary<string, string[]> FieldError(string field, string message) =>
         new(StringComparer.Ordinal) { [field] = [message] };

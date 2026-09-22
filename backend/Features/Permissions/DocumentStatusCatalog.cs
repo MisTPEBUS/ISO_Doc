@@ -37,18 +37,18 @@ public static class DocumentStatusCatalog
     private static readonly IReadOnlyDictionary<string, string> MainDocumentLabels =
         new Dictionary<string, string>
         {
-            [MainDocumentCode.Normal] = "主文正常",
-            [MainDocumentCode.Error] = "主文檔有誤",
-            [MainDocumentCode.Missing] = "主文未上傳",
+            [MainDocumentCode.Normal] = "ISO管理程序正常",
+            [MainDocumentCode.Error] = "ISO管理程序檔案有誤",
+            [MainDocumentCode.Missing] = "ISO管理程序未上傳",
         };
 
     private static readonly IReadOnlyDictionary<string, string> AttachmentLabels =
         new Dictionary<string, string>
         {
-            [AttachmentCode.Normal] = "附件正常",
-            [AttachmentCode.Error] = "附件檔有誤",
-            [AttachmentCode.Missing] = "附件未補齊",
-            [AttachmentCode.None] = "無附件",
+            [AttachmentCode.Normal] = "表單及附件正常",
+            [AttachmentCode.Error] = "表單及附件檔有誤",
+            [AttachmentCode.Missing] = "表單及附件未補齊",
+            [AttachmentCode.None] = "無表單及附件",
         };
 
     private static readonly IReadOnlyDictionary<string, string> EffectiveLabels =

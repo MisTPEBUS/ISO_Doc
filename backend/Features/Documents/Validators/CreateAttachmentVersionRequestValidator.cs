@@ -18,9 +18,9 @@ public sealed class CreateAttachmentVersionRequestValidator
             .OverridePropertyName("effectiveDate");
         RuleFor(request => request.File)
             .NotNull()
-            .WithMessage("請上傳附件檔案。")
+            .WithMessage("請上傳表單及附件檔案。")
             .Must(file => file is null || AttachmentFileRules.HasAllowedExtension(file.FileName))
-            .WithMessage("不允許的附件檔案類型。")
+            .WithMessage("不允許的表單及附件檔案類型。")
             .Must(file => file is null || file.FileName.Length <= 255)
             .WithMessage("原始檔名不可超過 255 個字元。")
             .OverridePropertyName("file");

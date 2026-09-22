@@ -7,14 +7,14 @@
 - UUID 預設值統一使用 `gen_random_uuid()`
 - 時間欄位統一使用 `timestamptz`
 - 資料表與欄位名稱統一使用 `snake_case`
-- ISO 主文件與附件皆採版本化管理
+- ISO管理程序與表單及附件皆採版本化管理
 - 檔案實體透過 `IDocumentStorage` 儲存於 local filesystem / NAS bind mount，資料庫僅保存 Object Key 與檔案 Metadata
 - 已發布版本原則上不進行 Hard Delete
 - 使用者透過部門取得公司歸屬，不在 `users` 重複保存 `company_id`
-- ISO 主文件版本與附件皆支援「先建立中繼資料、稍後補檔」：未補檔前檔案欄位可為 NULL / 版本維持 `DRAFT`
-- 附件為選配：一份文件（或一個主文件版本）可對應 0..N 個附件；附件檔案可一次上傳多個
+- ISO管理程序版本與表單及附件皆支援「先建立中繼資料、稍後補檔」：未補檔前檔案欄位可為 NULL / 版本維持 `DRAFT`
+- 表單及附件為選配：一份文件（或一個ISO管理程序版本）可對應 0..N 個表單及附件；表單及附件檔案可一次上傳多個
 
-> 註：本專案以 `SPEC.md` 第 3 節 DDL 為權威資料結構定義。本文件與 `SPEC.md` 在附件模型、版本狀態列舉、儲存後端（MinIO / 本機）等處尚有差異，實作時以 `SPEC.md` 為準。
+> 註：本專案以 `SPEC.md` 第 3 節 DDL 為權威資料結構定義。本文件與 `SPEC.md` 在表單及附件模型、版本狀態列舉、儲存後端（MinIO / 本機）等處尚有差異，實作時以 `SPEC.md` 為準。
 
 ---
 
@@ -73,7 +73,7 @@
 | enum | Scope | 說明 |
 |---|---|---|
 | `USER` | DEPT | 只能讀取授權給所屬部門的文件 |
-| `COMPANY_ADMIN` | COMPANY | 管理所屬公司的文件、附件及文件權限 |
+| `COMPANY_ADMIN` | COMPANY | 管理所屬公司的文件、表單及附件及文件權限 |
 | `SYSTEM_ADMIN` | GLOBAL | 管理全部公司與系統設定 |
 
 約束：
@@ -88,7 +88,7 @@
 
 ---
 
-### 2.4 `documents` — ISO 主文件
+### 2.4 `documents` — ISO管理程序
 
 | 欄位 | 型別 | NULL | 預設值 | 索引 | 說明 |
 |---|---|---:|---|---|---|
@@ -130,7 +130,7 @@
 | `created_by` | uuid | 否 | — | FK、INDEX | 建立人 |
 | `created_at` | timestamptz | 否 | `now()` | — | 建立時間 |
 
-> 允許先建立「僅中繼資料」的主文件版本（`status = DRAFT`、檔案與 `effective_date` 欄位為 NULL），檔案稍後補上後轉為生效流程。
+> 允許先建立「僅中繼資料」的ISO管理程序版本（`status = DRAFT`、檔案與 `effective_date` 欄位為 NULL），檔案稍後補上後轉為生效流程。
 
 版本狀態：
 
@@ -147,22 +147,22 @@
 - `document_versions.document_id -> documents.id`
 - `document_versions.created_by -> users.id`
 - `UNIQUE(document_id, version)`
-- 主文件僅允許 PDF
+- ISO管理程序僅允許 PDF
 - 檔案驗證至少包含副檔名、MIME Type、檔案大小
 - `checksum` 固定使用 SHA-256
 
 ---
 
-### 2.6 `attachments` — 文件附件主檔
+### 2.6 `attachments` — 文件表單及附件主檔
 
-代表附件本身，不保存實體版本檔案。
+代表表單及附件本身，不保存實體版本檔案。
 
 | 欄位 | 型別 | NULL | 預設值 | 索引 | 說明 |
 |---|---|---:|---|---|---|
-| `id` | uuid | 否 | `gen_random_uuid()` | PK | 附件識別碼 |
+| `id` | uuid | 否 | `gen_random_uuid()` | PK | 表單及附件識別碼 |
 | `document_id` | uuid | 否 | — | FK、INDEX | 所屬 ISO 文件 |
-| `attachment_no` | varchar(50) | 否 | — | — | 附件編號 |
-| `name` | varchar(255) | 否 | — | — | 附件名稱 |
+| `attachment_no` | varchar(50) | 否 | — | — | 表單及附件編號 |
+| `name` | varchar(255) | 否 | — | — | 表單及附件名稱 |
 | `is_active` | boolean | 否 | `true` | INDEX | 是否啟用 |
 | `created_by` | uuid | 否 | — | FK | 建立人 |
 | `created_at` | timestamptz | 否 | `now()` | — | 建立時間 |
@@ -172,18 +172,18 @@
 
 - `attachments.document_id -> documents.id`
 - `UNIQUE(document_id, attachment_no)`
-- 附件為選配：一份文件可有 0..N 個附件
-- 可只建立附件主檔（`attachment_no` + `name`），稍後再建立附件版本 / 上傳檔案
+- 表單及附件為選配：一份文件可有 0..N 個表單及附件
+- 可只建立表單及附件主檔（`attachment_no` + `name`），稍後再建立表單及附件版本 / 上傳檔案
 
 ---
 
-### 2.7 `attachment_versions` — 附件版本
+### 2.7 `attachment_versions` — 表單及附件版本
 
 | 欄位 | 型別 | NULL | 預設值 | 索引 | 說明 |
 |---|---|---:|---|---|---|
-| `id` | uuid | 否 | `gen_random_uuid()` | PK | 附件版本識別碼 |
-| `attachment_id` | uuid | 否 | — | FK、INDEX | 所屬附件 |
-| `version` | varchar(20) | 否 | — | — | 附件版本 |
+| `id` | uuid | 否 | `gen_random_uuid()` | PK | 表單及附件版本識別碼 |
+| `attachment_id` | uuid | 否 | — | FK、INDEX | 所屬表單及附件 |
+| `version` | varchar(20) | 否 | — | — | 表單及附件版本 |
 | `version_major` | integer | 否 | — | — | 主版號 |
 | `version_minor` | integer | 否 | — | — | 次版號 |
 | `status` | varchar(20) | 否 | `DRAFT` | INDEX | 版本狀態 |
@@ -198,16 +198,16 @@
 | `created_by` | uuid | 否 | — | FK、INDEX | 建立人 |
 | `created_at` | timestamptz | 否 | `now()` | — | 建立時間 |
 
-> Schema 保留 `DRAFT` 狀態與檔案可為 NULL 的能力，但本輪 API 只支援帶檔建立附件版本並直接進入 `PUBLISHED`。
+> Schema 保留 `DRAFT` 狀態與檔案可為 NULL 的能力，但本輪 API 只支援帶檔建立表單及附件版本並直接進入 `PUBLISHED`。
 
 約束：
 
 - `attachment_versions.attachment_id -> attachments.id`
 - `attachment_versions.created_by -> users.id`
 - `UNIQUE(attachment_id, version)`
-- 同一附件最多一筆 `PUBLISHED`（partial unique index `uq_attachment_single_published`）
-- 同一附件最多一筆 `DRAFT`（partial unique index `uq_attachment_single_draft`）
-- 附件允許：
+- 同一表單及附件最多一筆 `PUBLISHED`（partial unique index `uq_attachment_single_published`）
+- 同一表單及附件最多一筆 `DRAFT`（partial unique index `uq_attachment_single_draft`）
+- 表單及附件允許：
   - `.jpg`
   - `.jpeg`
   - `.png`
@@ -278,7 +278,7 @@
 
 - Audit Log 原則上只新增，不修改
 - 不提供一般 Hard Delete
-- `metadata` 可保存文件編號、版本、附件版本等快照資訊
+- `metadata` 可保存文件編號、版本、表單及附件版本等快照資訊
 
 ---
 

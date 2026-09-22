@@ -35,10 +35,10 @@ public sealed class StorageKeyBuilderTests
             "ATT-A",
             "2.3",
             FileId,
-            "附件.XLSX");
+            "表單及附件.XLSX");
 
         Assert.Equal(
-            "store/ACME/HR-I-01/att/ATT-A/v2.3/00112233445566778899aabbccddeeff_附件.xlsx",
+            "store/ACME/HR-I-01/att/ATT-A/v2.3/00112233445566778899aabbccddeeff_表單及附件.xlsx",
             result);
     }
 

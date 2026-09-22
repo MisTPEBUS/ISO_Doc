@@ -130,12 +130,12 @@ const attachmentColumns: ReadonlyArray<TableColumn<AttachmentRow>> = [
   },
   {
     key: 'attachmentNo',
-    header: '附件編號',
+    header: '表單及附件編號',
     render: (row) => <span className="font-mono text-slate-900">{row.attachmentNo}</span>,
   },
   {
     key: 'name',
-    header: '附件名稱',
+    header: '表單及附件名稱',
     render: (row) => row.name,
   },
 ]
@@ -158,7 +158,7 @@ const columns: ReadonlyArray<TableColumn<DocumentRow>> = [
         type="button"
         className="inline-flex items-center gap-2 rounded-xs font-mono font-medium text-blue-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
         aria-expanded={context.expanded}
-        aria-label={`${context.expanded ? '收合' : '展開'} ${row.documentNo} 附件清單`}
+        aria-label={`${context.expanded ? '收合' : '展開'} ${row.documentNo} 表單及附件清單`}
         onClick={context.toggleExpansion}
       >
         <svg
@@ -418,7 +418,7 @@ export default function ComponentPreview() {
 
         <PreviewSection
           title="Table — expandable rows"
-          description="點擊主文件 row 可展開或收合附件清單；附件仍使用相同的 Table 元件呈現。"
+          description="點擊ISO管理程序 row 可展開或收合表單及附件清單；表單及附件仍使用相同的 Table 元件呈現。"
         >
           <Table
             columns={columns}
@@ -433,7 +433,7 @@ export default function ComponentPreview() {
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <h3 className="text-sm font-semibold text-slate-800">
-                      {row.documentNo} 附件清單
+                      {row.documentNo} 表單及附件清單
                     </h3>
                     <span className="text-xs text-slate-500">
                       共 {(attachmentsByDocumentId[row.id] ?? []).length} 筆
@@ -443,8 +443,8 @@ export default function ComponentPreview() {
                     columns={attachmentColumns}
                     data={attachmentsByDocumentId[row.id] ?? []}
                     getRowKey={(attachment) => attachment.id}
-                    emptyMessage="此版本沒有附件"
-                    caption={`${row.documentNo} 附件清單`}
+                    emptyMessage="此版本沒有表單及附件"
+                    caption={`${row.documentNo} 表單及附件清單`}
                   />
                 </div>
               ),
@@ -468,7 +468,7 @@ export default function ComponentPreview() {
 
         <PreviewSection
           title="ISO 文件權限矩陣"
-          description="公司切換、動態部門欄位、sticky 主文欄與 local state 勾選範例。"
+          description="公司切換、動態部門欄位、sticky ISO管理程序欄與 local state 勾選範例。"
         >
           <IsoDocumentPermissionMatrix />
         </PreviewSection>

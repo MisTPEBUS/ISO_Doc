@@ -9,18 +9,18 @@
 
 ## Table
 
-主文件與附件 Table 使用一致的 spacing 與 typography。
+ISO管理程序與表單及附件 Table 使用一致的 spacing 與 typography。
 
-主文件 Row：
+ISO管理程序 Row：
 
 - hover 可辨識。
 - 文件編號可點擊展開。
 - 文件名稱可點擊檢視。
 
-附件區：
+表單及附件區：
 
 - 使用主 Row 下方展開內容。
-- 附件 Table 可使用稍淡背景區分階層。
+- 表單及附件 Table 可使用稍淡背景區分階層。
 - 不使用獨立 Accordion Component 包覆 `<tr>`。
 
 ## Status
@@ -31,11 +31,11 @@
 
 ## Link
 
-### 主文件名稱
+### ISO管理程序名稱
 
 以可識別的 Link / Button 樣式呈現。
 
-### 附件名稱
+### 表單及附件名稱
 
 點擊後下載檔案。
 

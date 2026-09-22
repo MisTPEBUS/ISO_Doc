@@ -77,7 +77,7 @@ public sealed class AiImportService(
 
             if (role == ImportFileRoles.Unresolved || string.IsNullOrWhiteSpace(documentNo))
             {
-                unresolved.Add(new UnresolvedImportFile(relativePath, "無法判斷所屬主文編號，請人工指定。"));
+                unresolved.Add(new UnresolvedImportFile(relativePath, "無法判斷所屬ISO管理程序編號，請人工指定。"));
                 continue;
             }
 
@@ -106,7 +106,7 @@ public sealed class AiImportService(
             var attachments = new List<AnalyzedAttachment>();
             foreach (var attachmentFile in attachmentFiles)
             {
-                // 沒有編號代表無法判斷身分，一律視為新增，不跟既有附件比對。
+                // 沒有編號代表無法判斷身分，一律視為新增，不跟既有表單及附件比對。
                 var attachmentNo = string.IsNullOrWhiteSpace(attachmentFile.AttachmentNo)
                     ? null
                     : attachmentFile.AttachmentNo;
@@ -163,7 +163,7 @@ public sealed class AiImportService(
         if (documents is null || documents.Count == 0)
         {
             return Result<CommitImportResponse>.ValidationFailed(
-                FieldError("documents", "請至少提供一筆主文資料。"));
+                FieldError("documents", "請至少提供一筆ISO管理程序資料。"));
         }
 
         var now = timeProvider.GetUtcNow();
@@ -607,7 +607,7 @@ public sealed class AiImportService(
         CancellationToken cancellationToken)
     {
         var attachmentNo = string.IsNullOrWhiteSpace(item.AttachmentNo) ? null : item.AttachmentNo.Trim();
-        // 沒有編號代表無法判斷身分，一律視為新增，不跟既有附件比對。
+        // 沒有編號代表無法判斷身分，一律視為新增，不跟既有表單及附件比對。
         var state = attachmentNo is null
             ? null
             : await aiImportStore.FindAttachmentStateAsync(documentId, attachmentNo, cancellationToken);
@@ -635,7 +635,7 @@ public sealed class AiImportService(
             {
                 attachmentStore.Detach(attachment);
                 failed.Add(new(attachmentIndex, documentIndex, attachmentNo,
-                    FieldError("attachmentNo", "這份文件已使用相同的附件編號。")));
+                    FieldError("attachmentNo", "這份文件已使用相同的表單及附件編號。")));
                 return;
             }
 
@@ -675,7 +675,7 @@ public sealed class AiImportService(
                     item.File.FileName, validationStream, cancellationToken))
             {
                 failed.Add(new(attachmentIndex, documentIndex, attachmentNo,
-                    FieldError("file", "附件檔案內容與副檔名不符。")));
+                    FieldError("file", "表單及附件檔案內容與副檔名不符。")));
                 return;
             }
         }
@@ -691,7 +691,7 @@ public sealed class AiImportService(
         if (context is null)
         {
             failed.Add(new(attachmentIndex, documentIndex, attachmentNo,
-                FieldError("attachmentNo", "找不到指定的附件。")));
+                FieldError("attachmentNo", "找不到指定的表單及附件。")));
             return;
         }
 
@@ -778,7 +778,7 @@ public sealed class AiImportService(
             }
 
             failed.Add(new(attachmentIndex, documentIndex, attachmentNo,
-                FieldError("version", "此附件已存在相同的版本號。")));
+                FieldError("version", "此表單及附件已存在相同的版本號。")));
         }
         catch (Exception exception) when (IsPublishedAttachmentVersionConflict(exception))
         {
@@ -805,9 +805,9 @@ public sealed class AiImportService(
     }
 
     /// <summary>
-    /// 一個主文編號只能有一個主文檔案。同一群組出現多個 role=MAIN 時，優先用副檔名判斷：
-    /// 剛好只有一個是 PDF 就留它當主文，其餘記入 unresolved 讓使用者調整；
-    /// 無法唯一判斷（0 或多個 PDF）則整組都記入 unresolved，不選任何一個當主文。
+    /// 一個ISO管理程序編號只能有一個ISO管理程序檔案案。同一群組出現多個 role=MAIN 時，優先用副檔名判斷：
+    /// 剛好只有一個是 PDF 就留它當ISO管理程序，其餘記入 unresolved 讓使用者調整；
+    /// 無法唯一判斷（0 或多個 PDF）則整組都記入 unresolved，不選任何一個當ISO管理程序。
     /// </summary>
     private static ResolvedFile? ResolveMainFile(
         IEnumerable<ResolvedFile> group, List<UnresolvedImportFile> unresolved)
@@ -827,7 +827,7 @@ public sealed class AiImportService(
             foreach (var extra in mainCandidates.Where(file => file.RelativePath != kept.RelativePath))
             {
                 unresolved.Add(new UnresolvedImportFile(
-                    extra.RelativePath, "此主文編號已有主文檔案（PDF），這筆重複，請調整類型或編號。"));
+                    extra.RelativePath, "此ISO管理程序編號已有ISO管理程序檔案案（PDF），這筆重複，請調整類型或編號。"));
             }
 
             return kept;
@@ -836,7 +836,7 @@ public sealed class AiImportService(
         foreach (var extra in mainCandidates)
         {
             unresolved.Add(new UnresolvedImportFile(
-                extra.RelativePath, "同一主文編號有多個主文檔案，且無法從副檔名唯一判斷，請人工指定。"));
+                extra.RelativePath, "同一ISO管理程序編號有多個ISO管理程序檔案案，且無法從副檔名唯一判斷，請人工指定。"));
         }
 
         return null;

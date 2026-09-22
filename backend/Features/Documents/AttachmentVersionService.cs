@@ -39,7 +39,7 @@ public sealed class AttachmentVersionService(
                 return Result<AttachmentVersionResponse>.ValidationFailed(
                     new Dictionary<string, string[]>(StringComparer.Ordinal)
                     {
-                        ["file"] = ["附件檔案內容與副檔名不符。"]
+                        ["file"] = ["表單及附件檔案內容與副檔名不符。"]
                     });
             }
         }
@@ -47,19 +47,19 @@ public sealed class AttachmentVersionService(
         var context = await versionStore.FindCreateContextAsync(attachmentId, cancellationToken);
         if (context is null)
         {
-            return Result<AttachmentVersionResponse>.NotFound("找不到指定的附件。");
+            return Result<AttachmentVersionResponse>.NotFound("找不到指定的表單及附件。");
         }
 
         if (!context.AttachmentIsActive)
         {
             return Result<AttachmentVersionResponse>.Conflict(
-                "已停用的附件無法新增版本。");
+                "已停用的表單及附件無法新增版本。");
         }
 
         if (!currentUser.CanAccessCompany(context.CompanyId))
         {
             return Result<AttachmentVersionResponse>.Forbidden(
-                "您沒有為此附件新增版本的權限。");
+                "您沒有為此表單及附件新增版本的權限。");
         }
 
         if (currentUser.UserId is not { } userId)
@@ -154,7 +154,7 @@ public sealed class AttachmentVersionService(
             }
 
             return Result<AttachmentVersionResponse>.Conflict(
-                "此附件已存在相同的版本號。");
+                "此表單及附件已存在相同的版本號。");
         }
         catch (Exception exception) when (IsPublishedVersionConflict(exception))
         {
@@ -164,7 +164,7 @@ public sealed class AttachmentVersionService(
             }
 
             return Result<AttachmentVersionResponse>.Conflict(
-                "另一個版本已同時發佈，請重新載入附件後再試一次。");
+                "另一個版本已同時發佈，請重新載入表單及附件後再試一次。");
         }
         catch
         {
@@ -185,19 +185,19 @@ public sealed class AttachmentVersionService(
         var context = await versionStore.FindCreateContextAsync(attachmentId, cancellationToken);
         if (context is null)
         {
-            return Result<AttachmentVersionDetailResponse>.NotFound("找不到指定的附件。");
+            return Result<AttachmentVersionDetailResponse>.NotFound("找不到指定的表單及附件。");
         }
 
         if (!currentUser.CanAccessCompany(context.CompanyId))
         {
             return Result<AttachmentVersionDetailResponse>.Forbidden(
-                "您沒有檢視此附件版本的權限。");
+                "您沒有檢視此表單及附件版本的權限。");
         }
 
         var version = await versionStore.FindVersionAsync(versionId, cancellationToken);
         if (version is null || version.AttachmentId != attachmentId)
         {
-            return Result<AttachmentVersionDetailResponse>.NotFound("找不到指定的附件版本。");
+            return Result<AttachmentVersionDetailResponse>.NotFound("找不到指定的表單及附件版本。");
         }
 
         return Result<AttachmentVersionDetailResponse>.Success(new(

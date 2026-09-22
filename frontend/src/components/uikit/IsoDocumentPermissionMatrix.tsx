@@ -47,8 +47,8 @@ const initialDataByCompany: Record<string, CompanyPermissionData> = {
         id: 'tp-cp-t-qm',
         code: 'CP-T-QM',
         name: '品質手冊',
-        mainStatus: '主文有誤',
-        attachmentStatus: '附件有誤',
+        mainStatus: 'ISO管理程序有誤',
+        attachmentStatus: '表單及附件有誤',
         effectiveStatus: '已生效',
         departmentIds: [
           'tp-general-manager',
@@ -61,8 +61,8 @@ const initialDataByCompany: Record<string, CompanyPermissionData> = {
         id: 'tp-hr-i-01',
         code: 'HR-I-01',
         name: '人力資源管理規章',
-        mainStatus: '主文正常',
-        attachmentStatus: '附件正常',
+        mainStatus: 'ISO管理程序正常',
+        attachmentStatus: '表單及附件正常',
         effectiveStatus: '已生效',
         departmentIds: [
           'tp-general-manager',
@@ -75,8 +75,8 @@ const initialDataByCompany: Record<string, CompanyPermissionData> = {
         id: 'tp-it-s-02',
         code: 'IT-S-02',
         name: '資訊安全管理規範',
-        mainStatus: '主文正常',
-        attachmentStatus: '無附件',
+        mainStatus: 'ISO管理程序正常',
+        attachmentStatus: '無表單及附件',
         effectiveStatus: '待生效',
         departmentIds: ['tp-general-manager', 'tp-information'],
       },
@@ -94,8 +94,8 @@ const initialDataByCompany: Record<string, CompanyPermissionData> = {
         id: 'capital-op-p-03',
         code: 'OP-P-03',
         name: '營運作業管理程序',
-        mainStatus: '主文正常',
-        attachmentStatus: '附件正常',
+        mainStatus: 'ISO管理程序正常',
+        attachmentStatus: '表單及附件正常',
         effectiveStatus: '已生效',
         departmentIds: ['capital-president', 'capital-operations', 'capital-safety'],
       },
@@ -103,8 +103,8 @@ const initialDataByCompany: Record<string, CompanyPermissionData> = {
         id: 'capital-mt-i-07',
         code: 'MT-I-07',
         name: '車輛保養檢查規範',
-        mainStatus: '主文有誤',
-        attachmentStatus: '附件正常',
+        mainStatus: 'ISO管理程序有誤',
+        attachmentStatus: '表單及附件正常',
         effectiveStatus: '已生效',
         departmentIds: ['capital-operations', 'capital-maintenance'],
       },
@@ -124,8 +124,8 @@ const initialDataByCompany: Record<string, CompanyPermissionData> = {
         id: 'metro-cs-p-01',
         code: 'CS-P-01',
         name: '客訴處理程序',
-        mainStatus: '主文正常',
-        attachmentStatus: '附件有誤',
+        mainStatus: 'ISO管理程序正常',
+        attachmentStatus: '表單及附件有誤',
         effectiveStatus: '已生效',
         departmentIds: ['metro-president', 'metro-audit', 'metro-customer-service'],
       },
@@ -133,8 +133,8 @@ const initialDataByCompany: Record<string, CompanyPermissionData> = {
         id: 'metro-qa-m-01',
         code: 'QA-M-01',
         name: '品質管理手冊',
-        mainStatus: '主文正常',
-        attachmentStatus: '附件正常',
+        mainStatus: 'ISO管理程序正常',
+        attachmentStatus: '表單及附件正常',
         effectiveStatus: '已生效',
         departmentIds: [
           'metro-president',
@@ -148,8 +148,8 @@ const initialDataByCompany: Record<string, CompanyPermissionData> = {
         id: 'metro-fi-i-04',
         code: 'FI-I-04',
         name: '費用核銷作業規範',
-        mainStatus: '主文正常',
-        attachmentStatus: '無附件',
+        mainStatus: 'ISO管理程序正常',
+        attachmentStatus: '無表單及附件',
         effectiveStatus: '已生效',
         departmentIds: ['metro-president', 'metro-accounting'],
       },
@@ -201,7 +201,7 @@ export function IsoDocumentPermissionMatrix() {
       <div className="flex flex-col gap-4 border-b border-line bg-surface-header/50 p-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-section-label text-ink">ISO 文件權限矩陣</h2>
-          <p className="mt-1 text-meta text-ink-muted">勾選可查看各主文的部門。</p>
+          <p className="mt-1 text-meta text-ink-muted">勾選可查看各ISO管理程序的部門。</p>
         </div>
         <FormField label="公司別" htmlFor="uikit-permission-company" className="w-full sm:w-64">
           <Select
@@ -227,7 +227,7 @@ export function IsoDocumentPermissionMatrix() {
                 scope="col"
                 className="sticky left-0 z-20 min-w-48 border-r border-b border-line-strong bg-surface-header px-4 py-3 text-table-header shadow-sticky-x"
               >
-                ISO 主文
+                ISO管理程序
               </th>
               <th scope="col" className="min-w-52 border-b border-line-strong px-4 py-3 text-table-header">
                 狀態

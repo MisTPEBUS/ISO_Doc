@@ -64,7 +64,7 @@ const SAMPLE_DOCUMENTS = [
     company: "首都客運",
     category: "管理規範",
     department: "資訊部",
-    note: "附件 2 份",
+    note: "表單及附件 2 份",
     canDownload: true,
   },
   {
@@ -154,7 +154,7 @@ const SAMPLE_DOCUMENTS = [
     company: "首都客運",
     category: "標準作業",
     department: "客服部",
-    note: "含附件",
+    note: "含表單及附件",
     canDownload: true,
   },
 ];
@@ -312,7 +312,7 @@ class DocumentTable extends HTMLElement {
               <th style="min-width: 108px; text-align:right;">生效日期</th>
               <th style="min-width: 104px;">公司別</th>
               <th style="min-width: 144px;">備註</th>
-              <th style="min-width: 88px;">${admin ? "操作" : "附件"}</th>
+              <th style="min-width: 88px;">${admin ? "操作" : "表單及附件"}</th>
             </tr>
           </thead>
           <tbody>

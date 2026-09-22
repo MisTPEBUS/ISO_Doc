@@ -74,8 +74,8 @@ type AttachmentListItem = {
 暫定語意：
 
 ```text
-檢視主文件
-下載附件
+檢視ISO管理程序
+下載表單及附件
 ```
 
 實際 endpoint、下載方式、Authorization Header、Content-Disposition 規則仍待確認。
@@ -115,14 +115,14 @@ type ChangePasswordRequest = {
 - 失敗一律 `400` + `ValidationProblemDetails`（`errors.currentPassword` / `errors.newPassword` 等），**不是 401**。
 - 密碼政策：至少 8 碼，不限定字元類別（不要求中英數混合）；新密碼不可等於舊密碼；兩次新密碼需一致。前端驗證需與此一致。
 
-## 文件維護 API（主文 / 版本 / 附件）
+## 文件維護 API（ISO管理程序 / 版本 / 表單及附件）
 
 以 `SPEC.md` 第 5.5 節為準，重點：
 
 - `POST /api/documents/{documentId}/versions`：`file` 選填。不帶 `file` → 版本建立為 `DRAFT`（預先建立）。
-- `PUT /api/documents/{documentId}/versions/{versionId}/file`：為 `DRAFT` 版本補主文檔，轉 `PUBLISHED`。
-- `POST /api/documents/{documentId}/versions/{versionId}/attachments`：multipart 陣列，單次 1..N 個附件，`items[].file` 選填（不帶即僅建立中繼資料）；批次全有全無。
-- `PUT /api/attachments/{id}/file`：為未補檔的附件上傳檔案。
+- `PUT /api/documents/{documentId}/versions/{versionId}/file`：為 `DRAFT` 版本補ISO管理程序檔案，轉 `PUBLISHED`。
+- `POST /api/documents/{documentId}/versions/{versionId}/attachments`：multipart 陣列，單次 1..N 個表單及附件，`items[].file` 選填（不帶即僅建立中繼資料）；批次全有全無。
+- `PUT /api/attachments/{id}/file`：為未補檔的表單及附件上傳檔案。
 - 上傳一律使用原生 `FormData`，多檔以陣列欄位送出。
 
 ## 管理 API

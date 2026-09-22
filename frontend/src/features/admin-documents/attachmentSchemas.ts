@@ -10,16 +10,16 @@ export interface AttachmentFormValues {
 export const createAttachmentFormSchema = z.object({
   attachmentNo: z.string()
     .trim()
-    .min(1, '請輸入附件編號')
-    .max(50, '附件編號不可超過 50 個字元')
+    .min(1, '請輸入表單及附件編號')
+    .max(50, '表單及附件編號不可超過 50 個字元')
     .regex(
       /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$/,
-      '附件編號只能包含英文字母、數字與連字號，且開頭與結尾必須是字母或數字',
+      '表單及附件編號只能包含英文字母、數字與連字號，且開頭與結尾必須是字母或數字',
     ),
   name: z.string()
     .trim()
-    .min(1, '請輸入附件名稱')
-    .max(255, '附件名稱不可超過 255 個字元'),
+    .min(1, '請輸入表單及附件名稱')
+    .max(255, '表單及附件名稱不可超過 255 個字元'),
 })
 
 export interface AttachmentVersionFormValues {
@@ -34,11 +34,11 @@ export const ALLOWED_ATTACHMENT_EXTENSIONS = [
 
 const attachmentFileSchema = z.custom<File>(
   (value) => typeof File !== 'undefined' && value instanceof File,
-  { message: '請選擇附件檔案' },
+  { message: '請選擇表單及附件檔案' },
 ).refine(
   (file) => ALLOWED_ATTACHMENT_EXTENSIONS.some((extension) =>
     file.name.toLowerCase().endsWith(extension)),
-  `不允許的附件檔案類型，僅支援 ${ALLOWED_ATTACHMENT_EXTENSIONS.join('、')}`,
+  `不允許的表單及附件檔案類型，僅支援 ${ALLOWED_ATTACHMENT_EXTENSIONS.join('、')}`,
 ).refine(
   (file) => file.name.length <= 255,
   '檔名不可超過 255 個字元',

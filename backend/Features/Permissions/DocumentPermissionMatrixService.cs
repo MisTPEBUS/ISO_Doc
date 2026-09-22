@@ -127,7 +127,7 @@ public sealed class DocumentPermissionMatrixService(
                 group => group.FirstOrDefault(version => version.Status == "PUBLISHED")
                     ?? group.FirstOrDefault(version => version.Status == "DRAFT"));
 
-        // 附件已獨立編版，不再從屬於主文的代表版本：每個附件身份各自依「代表版本」規則
+        // 表單及附件已獨立編版，不再從屬於ISO管理程序的代表版本：每個表單及附件身份各自依「代表版本」規則
         // （PUBLISHED 優先，否則 DRAFT）取得自己的檔案狀態，再依 document_id 彙總。
         var attachmentIdentityRows = await dbContext.Attachments.AsNoTracking()
             .Where(attachment => pageDocumentIds.Contains(attachment.DocumentId) && attachment.IsActive)
