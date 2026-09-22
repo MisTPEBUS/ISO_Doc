@@ -70,4 +70,4 @@ tests/IsoDocs.Tests/
 
 ## 明確排除
 
-不得為以下項目新增程式碼或空殼結構（即使看似「順手」）：審核流程狀態機、`notifications` 相關表與服務、SignalR/SSE、LDAP/SSO、PDF 浮水印、非同步備份 Job Queue。這些若被要求，先回報而非直接實作，詳見 root `AGENTS.md`。
+不得為以下項目新增程式碼或空殼結構（即使看似「順手」）：審核流程狀態機、`notifications` 相關表與服務、SignalR/SSE、LDAP/SSO、非同步備份 Job Queue。這些若被要求，先回報而非直接實作，詳見 root `AGENTS.md`。

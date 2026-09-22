@@ -49,23 +49,24 @@ type VersionStatusPresentation = {
   textClassName: string;
 };
 
-const VERSION_STATUS: Record<DocumentVersionStatus, VersionStatusPresentation> = {
-  [DOCUMENT_VERSION_STATUS.Draft]: {
-    label: "草稿",
-    dotClassName: "bg-ink-muted",
-    textClassName: "text-ink-muted",
-  },
-  [DOCUMENT_VERSION_STATUS.Published]: {
-    label: "已發布",
-    dotClassName: "bg-state-active",
-    textClassName: "text-state-active",
-  },
-  [DOCUMENT_VERSION_STATUS.Obsolete]: {
-    label: "已作廢",
-    dotClassName: "bg-state-obsolete",
-    textClassName: "text-state-obsolete",
-  },
-};
+const VERSION_STATUS: Record<DocumentVersionStatus, VersionStatusPresentation> =
+  {
+    [DOCUMENT_VERSION_STATUS.Draft]: {
+      label: "草稿",
+      dotClassName: "bg-ink-muted",
+      textClassName: "text-ink-muted",
+    },
+    [DOCUMENT_VERSION_STATUS.Published]: {
+      label: "已發布",
+      dotClassName: "bg-state-active",
+      textClassName: "text-state-active",
+    },
+    [DOCUMENT_VERSION_STATUS.Obsolete]: {
+      label: "已作廢",
+      dotClassName: "bg-state-obsolete",
+      textClassName: "text-state-obsolete",
+    },
+  };
 
 const UNKNOWN_VERSION_STATUS: VersionStatusPresentation = {
   label: "未知狀態",
@@ -73,7 +74,9 @@ const UNKNOWN_VERSION_STATUS: VersionStatusPresentation = {
   textClassName: "text-ink-muted",
 };
 
-function getVersionStatusPresentation(status: unknown): VersionStatusPresentation {
+function getVersionStatusPresentation(
+  status: unknown,
+): VersionStatusPresentation {
   if (typeof status !== "string") return UNKNOWN_VERSION_STATUS;
 
   const normalizedStatus = status.toUpperCase();
@@ -364,10 +367,7 @@ export function AdminDocumentDetailPage() {
 
   function updateAttachmentVersionField<
     TField extends Exclude<keyof AttachmentVersionFormValues, "file">,
-  >(
-    field: TField,
-    value: AttachmentVersionFormValues[TField],
-  ) {
+  >(field: TField, value: AttachmentVersionFormValues[TField]) {
     setAttachmentVersionValues((current) => ({ ...current, [field]: value }));
     setAttachmentVersionFieldErrors((current) => ({
       ...current,
@@ -394,7 +394,9 @@ export function AdminDocumentDetailPage() {
     }
 
     if (id === undefined || versionAttachment === undefined) {
-      setAttachmentVersionFormError("找不到這個表單及附件，請重新整理頁面後再試。");
+      setAttachmentVersionFormError(
+        "找不到這個表單及附件，請重新整理頁面後再試。",
+      );
       return;
     }
 
@@ -560,7 +562,7 @@ export function AdminDocumentDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           {detail.isActive && (
-            <Button onClick={openVersionModal}>更新版本</Button>
+            <Button onClick={openVersionModal}>更新ISO表單版本</Button>
           )}
         </div>
       </div>
@@ -660,7 +662,8 @@ export function AdminDocumentDetailPage() {
             ) : (
               <ol className="divide-y divide-line">
                 {detail.attachments.map((attachment) => {
-                  const canDownload = attachment.currentVersion?.hasFile === true;
+                  const canDownload =
+                    attachment.currentVersion?.hasFile === true;
                   const isDownloading =
                     downloadAttachment.isPending &&
                     downloadAttachment.variables?.attachmentId ===
@@ -685,9 +688,7 @@ export function AdminDocumentDetailPage() {
                             className="rounded-xs text-left text-cell font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-60"
                             disabled={isDownloading}
                             title={`下載 ${attachment.name}`}
-                            onClick={() =>
-                              handleAttachmentDownload(attachment)
-                            }
+                            onClick={() => handleAttachmentDownload(attachment)}
                           >
                             {isDownloading ? "下載中…" : attachment.name}
                           </button>
@@ -703,7 +704,7 @@ export function AdminDocumentDetailPage() {
                           variant="secondary"
                           onClick={() => openAttachmentVersionModal(attachment)}
                         >
-                          版本管理
+                          更新版本
                         </Button>
                         {detail.isActive && (
                           <Button
@@ -758,7 +759,8 @@ export function AdminDocumentDetailPage() {
               const status = getVersionStatusPresentation(version.status);
               const canSupplementFile =
                 typeof version.status === "string" &&
-                version.status.toUpperCase() === DOCUMENT_VERSION_STATUS.Draft &&
+                version.status.toUpperCase() ===
+                  DOCUMENT_VERSION_STATUS.Draft &&
                 !version.hasFile &&
                 detail.isActive;
               return (

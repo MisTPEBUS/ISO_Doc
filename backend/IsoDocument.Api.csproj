@@ -19,8 +19,21 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <PackageReference Include="OpenAI" Version="2.14.0" />
+    <PackageReference Include="PDFsharp" Version="6.2.4" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 主文下載浮水印用字型，SIL OFL 1.1 授權，授權原文見同目錄 LICENSE 檔。
+         用 TrueType（glyf）版本而非 CFF/OTF 版本，是因為 PDFsharp 的 font subsetting
+         （PdfFontEmbedding.TryComputeSubset）只支援 TrueType outline，CFF 字型會直接整包
+         內嵌（~5.6MB／次下載）；換成 TrueType variable font 後，實測同樣的浮水印內容
+         每次下載只讓檔案多幾十 KB。
+         - NotoSansTC-Variable.ttf：中文（文件名稱／編號可能含中文）。
+         - Lora-Variable.ttf：正中央公司代碼的英文字型（公司代碼固定為 ASCII）。 -->
+    <EmbeddedResource Include="Features\Home\Assets\Fonts\NotoSansTC-Variable.ttf" />
+    <EmbeddedResource Include="Features\Home\Assets\Fonts\Lora-Variable.ttf" />
   </ItemGroup>
 
 </Project>

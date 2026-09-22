@@ -8,7 +8,8 @@ public sealed record DocumentDownloadRecord(
     string VersionStatus,
     string? FileKey,
     string? OriginalFileName,
-    string? ContentType);
+    string? ContentType,
+    string CompanyCode);
 
 public sealed record AttachmentDownloadRecord(
     Guid CompanyId,

@@ -647,8 +647,20 @@ internal sealed class FakeDocumentVersionStore(
 
 internal sealed class FakeDocumentStorage : IDocumentStorage
 {
+    private readonly Dictionary<string, byte[]> _content = [];
+
     public List<string> WrittenKeys { get; } = [];
     public List<string> TrashedKeys { get; } = [];
+
+    /// <summary>
+    /// 提供一個 key 實際的檔案內容，供之後 OpenReadAsync 讀回；不經過 WriteAsync
+    /// 的既有測試（只呼叫 WrittenKeys.Add）仍會拿回空的串流，行為不變。
+    /// </summary>
+    public void SeedContent(string objectKey, byte[] content)
+    {
+        WrittenKeys.Add(objectKey);
+        _content[objectKey] = content;
+    }
 
     public async Task<StorageWriteResult> WriteAsync(
         string objectKey,
@@ -656,21 +668,17 @@ internal sealed class FakeDocumentStorage : IDocumentStorage
         CancellationToken cancellationToken = default)
     {
         WrittenKeys.Add(objectKey);
-        long length = 0;
-        var buffer = new byte[64];
-        int read;
-        while ((read = await content.ReadAsync(buffer, cancellationToken)) > 0)
-        {
-            length += read;
-        }
-
-        return new StorageWriteResult(length, "test-checksum");
+        using var buffered = new MemoryStream();
+        await content.CopyToAsync(buffered, cancellationToken);
+        _content[objectKey] = buffered.ToArray();
+        return new StorageWriteResult(buffered.Length, "test-checksum");
     }
 
     public Task<Stream> OpenReadAsync(
         string objectKey,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<Stream>(new MemoryStream());
+        Task.FromResult<Stream>(new MemoryStream(
+            _content.TryGetValue(objectKey, out var bytes) ? bytes : []));
 
     public Task<bool> ExistsAsync(
         string objectKey,

@@ -98,6 +98,8 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
         Guid versionId,
         CancellationToken cancellationToken) =>
         (from document in dbContext.Documents.AsNoTracking()
+         join company in dbContext.Companies.AsNoTracking()
+             on document.CompanyId equals company.Id
          join version in dbContext.DocumentVersions.AsNoTracking()
              on document.Id equals version.DocumentId
          where document.Id == documentId
@@ -108,7 +110,8 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
              version.Status,
              version.FileKey,
              version.OriginalFileName,
-             version.ContentType))
+             version.ContentType,
+             company.Code))
         .SingleOrDefaultAsync(cancellationToken);
 
     public Task<AttachmentDownloadRecord?> FindAttachmentDownloadAsync(

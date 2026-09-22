@@ -31,7 +31,6 @@
 - 站內通知 / Email 通知
 - SignalR / SSE / 任何即時推播
 - LDAP / AD / SSO 登入整合
-- PDF 浮水印
 - 非同步備份 Job Queue（v1 為同步 streaming）
 
 若任務描述暗示需要以上任一項，先停下回報，不得自行擴大範圍或猜測設計。

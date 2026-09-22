@@ -194,6 +194,7 @@ builder.Services.AddScoped<IBackupStore, EfBackupStore>();
 builder.Services.AddScoped<IBackupService, BackupService>();
 builder.Services.AddScoped<IDocumentsBrowseStore, EfDocumentsBrowseStore>();
 builder.Services.AddScoped<IDocumentsBrowseService, DocumentsBrowseService>();
+builder.Services.AddSingleton<IPdfWatermarkService, PdfWatermarkService>();
 builder.Services.AddScoped<IAiImportStore, EfAiImportStore>();
 builder.Services.AddScoped<IAiImportService, AiImportService>();
 builder.Services.AddScoped<ILlmImportAnalyzer, OpenAiImportAnalyzer>();
@@ -210,6 +211,10 @@ builder.Services.AddScoped<IBackupAuditLogService>(serviceProvider =>
 builder.Services.AddScoped<IOperationAuditLogService>(serviceProvider =>
     serviceProvider.GetRequiredService<IAuditLogService>() as IOperationAuditLogService
     ?? throw new InvalidOperationException("The audit log service does not support operation auditing."));
+
+// 主文下載浮水印用字型：PDFsharp 6.x 不吃系統字型（GDI-free），必須在第一次用到 XFont 前
+// 設定好 GlobalFontSettings.FontResolver，設定一次即可、全程序共用。
+PdfSharp.Fonts.GlobalFontSettings.FontResolver = new WatermarkFontResolver();
 
 var app = builder.Build();
 

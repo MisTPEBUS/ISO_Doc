@@ -9,6 +9,7 @@ namespace IsoDocument.Api.Features.Home;
 public sealed class DocumentsBrowseService(
     IDocumentsBrowseStore browseStore,
     IDocumentStorage documentStorage,
+    IPdfWatermarkService pdfWatermarkService,
     IDownloadAuditLogService auditLogService,
     ICurrentUser currentUser) : IDocumentsBrowseService
 {
@@ -56,11 +57,15 @@ public sealed class DocumentsBrowseService(
             return Result<DownloadFileResponse>.NotFound("文件檔案尚未上傳。");
         }
 
-        var stream = await documentStorage.OpenReadAsync(record.FileKey, cancellationToken);
+        await using var stream = await documentStorage.OpenReadAsync(record.FileKey, cancellationToken);
+        var watermarked = await pdfWatermarkService.ApplyWatermarkAsync(
+            stream,
+            new PdfWatermarkContent(record.CompanyCode, documentId.ToString()),
+            cancellationToken);
         await auditLogService.WriteDocumentDownloadedAsync(
             record.CompanyId, record.VersionId, cancellationToken);
         return Result<DownloadFileResponse>.Success(new(
-            stream,
+            watermarked,
             record.ContentType ?? "application/pdf",
             record.OriginalFileName ?? "document.pdf"));
     }

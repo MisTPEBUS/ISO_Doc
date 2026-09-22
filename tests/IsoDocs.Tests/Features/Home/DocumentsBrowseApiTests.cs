@@ -11,6 +11,8 @@ using IsoDocument.Api.Security.Authorization;
 using IsoDocument.Api.Storage;
 using IsoDocs.Tests.Features.Auth;
 using IsoDocs.Tests.Features.Documents;
+using PdfSharp.Pdf;
+using PdfSharp.Pdf.IO;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -140,7 +142,8 @@ public sealed class DocumentsBrowseApiTests
         const string fileKey = "store/COMPANYA/ISO-001/v1.0/main/file.pdf";
         factory.BrowseStore.AddDocumentDownload(
             factory.DocumentId, factory.VersionId, factory.CompanyId, "PUBLISHED", fileKey);
-        factory.Storage.WrittenKeys.Add(fileKey);
+        var sourceBytes = CreateMinimalPdfBytes(pageCount: 2);
+        factory.Storage.SeedContent(fileKey, sourceBytes);
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
 
@@ -152,6 +155,15 @@ public sealed class DocumentsBrowseApiTests
         var audit = Assert.Single(factory.Audit.Entries);
         Assert.Equal("DOWNLOAD_DOCUMENT", audit.Action);
         Assert.Equal(factory.VersionId, audit.ResourceId);
+
+        // 主文下載浮水印：回傳的內容是被改過、但仍然是合法、頁數不變的 PDF；
+        // 來源檔案本身（sourceBytes）不受影響，浮水印只發生在回應內容。
+        var responseBytes = await response.Content.ReadAsByteArrayAsync();
+        Assert.NotEqual(sourceBytes, responseBytes);
+        Assert.True(responseBytes.Length > sourceBytes.Length);
+        using var watermarked = PdfReader.Open(
+            new MemoryStream(responseBytes), PdfDocumentOpenMode.Import);
+        Assert.Equal(2, watermarked.PageCount);
     }
 
     [Fact]
@@ -179,7 +191,7 @@ public sealed class DocumentsBrowseApiTests
         const string fileKey = "store/COMPANYA/ISO-001/v1.0/main/file.pdf";
         factory.BrowseStore.AddDocumentDownload(
             factory.DocumentId, factory.VersionId, factory.CompanyId, "OBSOLETE", fileKey);
-        factory.Storage.WrittenKeys.Add(fileKey);
+        factory.Storage.SeedContent(fileKey, CreateMinimalPdfBytes());
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
 
@@ -243,6 +255,19 @@ public sealed class DocumentsBrowseApiTests
             "/api/auth/login",
             new LoginRequest("EMP001", AuthWebApplicationFactory.InitialPassword));
         response.EnsureSuccessStatusCode();
+    }
+
+    private static byte[] CreateMinimalPdfBytes(int pageCount = 1)
+    {
+        using var document = new PdfDocument();
+        for (var i = 0; i < pageCount; i++)
+        {
+            document.AddPage();
+        }
+
+        using var stream = new MemoryStream();
+        document.Save(stream, closeStream: false);
+        return stream.ToArray();
     }
 }
 
@@ -408,14 +433,16 @@ internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
         Guid versionId,
         Guid companyId,
         string status,
-        string? fileKey) =>
+        string? fileKey,
+        string companyCode = "COA") =>
         _documents[(documentId, versionId)] = new(
             companyId,
             versionId,
             status,
             fileKey,
             "manual.pdf",
-            "application/pdf");
+            "application/pdf",
+            companyCode);
 
     public void AddAttachmentDownload(
         Guid documentId,
