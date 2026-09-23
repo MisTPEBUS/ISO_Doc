@@ -78,6 +78,14 @@ public sealed class DocumentService(
             return DuplicateDocumentNo<DocumentResponse>();
         }
 
+        if (request.IsoCategoryId is { } createIsoCategoryId
+            && !await documentStore.IsoCategoryBelongsToCompanyAsync(
+                request.CompanyId, createIsoCategoryId, cancellationToken))
+        {
+            return Result<DocumentResponse>.ValidationFailed(
+                FieldError("isoCategoryId", "指定的品質系統不存在，或不屬於此公司。"));
+        }
+
         var now = timeProvider.GetUtcNow();
         var document = new Document
         {
@@ -86,6 +94,7 @@ public sealed class DocumentService(
             DocumentNo = documentNo,
             Name = request.Name!.Trim(),
             IsActive = true,
+            IsoCategoryId = request.IsoCategoryId,
             CreatedBy = userId,
             CreatedAt = now,
             UpdatedAt = now
@@ -385,6 +394,7 @@ public sealed class DocumentService(
             document.CreatedBy,
             document.CreatedAt,
             document.UpdatedAt,
+            document.IsoCategoryId,
             currentVersion is null ? null : ToVersionSummary(currentVersion),
             versionSummaries,
             attachments.Select(ToAttachmentSummary).ToArray()));
@@ -413,8 +423,17 @@ public sealed class DocumentService(
                 "您沒有修改此文件的權限。");
         }
 
+        if (request.IsoCategoryId is { } updateIsoCategoryId
+            && !await documentStore.IsoCategoryBelongsToCompanyAsync(
+                document.CompanyId, updateIsoCategoryId, cancellationToken))
+        {
+            return Result<DocumentResponse>.ValidationFailed(
+                FieldError("isoCategoryId", "指定的品質系統不存在，或不屬於此公司。"));
+        }
+
         var oldValue = ToAuditValue(document);
         document.Name = request.Name!.Trim();
+        document.IsoCategoryId = request.IsoCategoryId;
         document.UpdatedAt = timeProvider.GetUtcNow();
         await documentStore.SaveChangesAsync(cancellationToken);
         await auditLogService.WriteAsync(
@@ -498,7 +517,8 @@ public sealed class DocumentService(
         document.IsActive,
         document.CreatedBy,
         document.CreatedAt,
-        document.UpdatedAt);
+        document.UpdatedAt,
+        document.IsoCategoryId);
 
     private static DocumentVersionSummary ToVersionSummary(DocumentVersion version) => new(
         version.Id,
@@ -531,7 +551,8 @@ public sealed class DocumentService(
     {
         document_no = document.DocumentNo,
         name = document.Name,
-        is_active = document.IsActive
+        is_active = document.IsActive,
+        iso_category_id = document.IsoCategoryId
     };
 
     private static Dictionary<string, string[]> ToErrors(ValidationResult validation) =>

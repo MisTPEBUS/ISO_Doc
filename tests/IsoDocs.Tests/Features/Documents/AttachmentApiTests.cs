@@ -78,7 +78,7 @@ public sealed class AttachmentApiTests
     }
 
     [Fact]
-    public async Task CreateVersion_CalculatesMinorVersion_PreservesHistoryAndDoesNotChangeMainVersion()
+    public async Task CreateVersion_WithManualVersion_PreservesHistoryAndDoesNotChangeMainVersion()
     {
         await using var factory = new AttachmentWebApplicationFactory();
         var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "表單及附件 A");
@@ -92,7 +92,7 @@ public sealed class AttachmentApiTests
         var token = await GetAntiforgeryTokenAsync(client);
         var effectiveDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
         using var request = CreateVersionRequest(
-            attachment.Id, token, "MINOR", effectiveDate, "form.pdf", "%PDF-new"u8.ToArray());
+            attachment.Id, token, "1.1", effectiveDate, "form.pdf", "%PDF-new"u8.ToArray());
 
         var response = await client.SendAsync(request);
         var body = await response.Content.ReadFromJsonAsync<AttachmentVersionResponse>();
@@ -118,7 +118,7 @@ public sealed class AttachmentApiTests
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
         var token = await GetAntiferyTokenAsync(client);
-        using var request = CreateVersionRequest(attachment.Id, token, "MINOR",
+        using var request = CreateVersionRequest(attachment.Id, token, "1.0",
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), "form.pdf", "not-pdf"u8.ToArray());
 
         var response = await client.SendAsync(request);
@@ -130,10 +130,12 @@ public sealed class AttachmentApiTests
 
     [Theory]
     [InlineData("")]
-    [InlineData("PATCH")]
-    [InlineData("major")]
-    public async Task CreateVersion_WithInvalidChangeType_ReturnsBadRequestWithoutWritingFile(
-        string changeType)
+    [InlineData("0.1")]
+    [InlineData("01.0")]
+    [InlineData("1.02")]
+    [InlineData("1.2.3")]
+    public async Task CreateVersion_WithInvalidVersion_ReturnsBadRequestWithoutWritingFile(
+        string version)
     {
         await using var factory = new AttachmentWebApplicationFactory();
         var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "表單及附件 A");
@@ -141,7 +143,7 @@ public sealed class AttachmentApiTests
         await LoginAsync(client);
         var token = await GetAntiforgeryTokenAsync(client);
         using var request = CreateVersionRequest(
-            attachment.Id, token, changeType,
+            attachment.Id, token, version,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), "form.pdf", "%PDF-new"u8.ToArray());
 
         var response = await client.SendAsync(request);
@@ -152,15 +154,17 @@ public sealed class AttachmentApiTests
     }
 
     [Fact]
-    public async Task CreateFirstVersion_UsesOnePointZeroAndDefaultsDatesToUtcToday()
+    public async Task CreateFirstVersion_UsesManuallyEnteredVersionAndDefaultsDatesToUtcToday()
     {
+        // 表單及附件版號改為手動輸入後，首版不再強制為 1.0——使用者打什麼版號就建立什麼版號，
+        // 跟ISO管理程序版本的既有行為（「ISO管理程序手動版號」）對齊。
         await using var factory = new AttachmentWebApplicationFactory();
         var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "表單及附件 A");
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);
         var token = await GetAntiforgeryTokenAsync(client);
         using var request = CreateVersionRequest(
-            attachment.Id, token, "MAJOR", null,
+            attachment.Id, token, "2.3", null,
             "form.pdf", "%PDF-new"u8.ToArray());
 
         var response = await client.SendAsync(request);
@@ -168,9 +172,29 @@ public sealed class AttachmentApiTests
         var created = Assert.Single(factory.VersionStore.Versions);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        Assert.Equal("1.0", body!.Version);
+        Assert.Equal("2.3", body!.Version);
         Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow), created.PublishDate);
         Assert.Equal(created.PublishDate, created.EffectiveDate);
+    }
+
+    [Fact]
+    public async Task CreateVersion_WithDuplicateVersion_ReturnsConflict()
+    {
+        await using var factory = new AttachmentWebApplicationFactory();
+        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "表單及附件 A");
+        factory.VersionStore.AddVersion(attachment.Id, 1, 0, "OBSOLETE", new DateOnly(2026, 1, 5));
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateVersionRequest(
+            attachment.Id, token, "1.0",
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), "form.pdf", "%PDF-new"u8.ToArray());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(factory.Storage.WrittenKeys);
+        Assert.Single(factory.VersionStore.Versions);
     }
 
     [Fact]
@@ -247,11 +271,11 @@ public sealed class AttachmentApiTests
     }
 
     private static HttpRequestMessage CreateVersionRequest(
-        Guid attachmentId, string token, string changeType, DateOnly? effectiveDate,
+        Guid attachmentId, string token, string version, DateOnly? effectiveDate,
         string fileName, byte[] content)
     {
         var multipart = new MultipartFormDataContent();
-        multipart.Add(new StringContent(changeType), "changeType");
+        multipart.Add(new StringContent(version), "version");
         if (effectiveDate.HasValue)
         {
             multipart.Add(new StringContent(effectiveDate.Value.ToString("yyyy-MM-dd")), "effectiveDate");
@@ -389,6 +413,8 @@ internal sealed class FakeAttachmentDocumentStore(Document seed, Guid userId)
         Task.FromResult<IReadOnlyList<DocumentAttachmentRecord>>([]);
     public Task<IReadOnlyList<Guid>> ListCompanyDeptIdsAsync(Guid companyId, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<Guid>>([]);
+    public Task<bool> IsoCategoryBelongsToCompanyAsync(Guid companyId, Guid isoCategoryId, CancellationToken ct) =>
+        Task.FromResult(false);
     public void Add(Document document) => Documents.Add(document);
     public void Add(DocumentVersion version) { }
     public void AddRange(IEnumerable<DocumentDeptPermission> permissions) { }

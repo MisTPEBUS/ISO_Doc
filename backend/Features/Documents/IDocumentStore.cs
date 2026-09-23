@@ -22,6 +22,8 @@ public interface IDocumentStore
     /// </summary>
     Task<IReadOnlyList<Guid>> ListCompanyDeptIdsAsync(
         Guid companyId, CancellationToken cancellationToken);
+    Task<bool> IsoCategoryBelongsToCompanyAsync(
+        Guid companyId, Guid isoCategoryId, CancellationToken cancellationToken);
     void Add(Document document);
     void Add(DocumentVersion version);
     void AddRange(IEnumerable<DocumentDeptPermission> permissions);

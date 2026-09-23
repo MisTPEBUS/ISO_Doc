@@ -68,8 +68,9 @@ public sealed class AttachmentService(
             return Result<AttachmentResponse>.Unauthorized("請先登入後再操作。");
         }
 
-        var attachmentNo = request.AttachmentNo!.Trim();
-        if (await attachmentStore.AttachmentNoExistsAsync(documentId, attachmentNo, cancellationToken))
+        var attachmentNo = NormalizeAttachmentNo(request.AttachmentNo);
+        if (attachmentNo is not null
+            && await attachmentStore.AttachmentNoExistsAsync(documentId, attachmentNo, cancellationToken))
         {
             return DuplicateAttachmentNo<AttachmentResponse>();
         }
@@ -170,16 +171,18 @@ public sealed class AttachmentService(
                 continue;
             }
 
-            var attachmentNo = item.AttachmentNo!.Trim();
-            if (!reservedAttachmentNos.Add((document.Id, attachmentNo)))
+            var attachmentNo = NormalizeAttachmentNo(item.AttachmentNo);
+            if (attachmentNo is not null
+                && !reservedAttachmentNos.Add((document.Id, attachmentNo)))
             {
                 failed.Add(new(index, item,
                     FieldError("attachmentNo", "此表單及附件編號與同文件的批次資料重複。")));
                 continue;
             }
 
-            if (await attachmentStore.AttachmentNoExistsAsync(
-                document.Id, attachmentNo, cancellationToken))
+            if (attachmentNo is not null
+                && await attachmentStore.AttachmentNoExistsAsync(
+                    document.Id, attachmentNo, cancellationToken))
             {
                 failed.Add(new(index, item, DuplicateAttachmentNoError()));
                 continue;
@@ -305,6 +308,17 @@ public sealed class AttachmentService(
                 }),
             cancellationToken);
         return Result.Success();
+    }
+
+    /// <summary>
+    /// 表單及附件編號可留空（部分掃描進來的檔案本來就沒有編號規則）。留空一律正規化為
+    /// null，而不是空字串——資料庫 uq_attachments_document_no 是 nullable 唯一鍵，同一份
+    /// 文件底下可以有多筆 attachment_no = null，不會互相衝突；空字串則會。
+    /// </summary>
+    private static string? NormalizeAttachmentNo(string? attachmentNo)
+    {
+        var trimmed = attachmentNo?.Trim();
+        return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
 
     private static Result<T> DuplicateAttachmentNo<T>() => Result<T>.ValidationFailed(

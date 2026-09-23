@@ -25,6 +25,8 @@ export const MOCK_AVAILABLE_DOCUMENTS: ReadonlyArray<AvailableDocumentResponse> 
   documentNo: String(documentNo),
   name: String(name),
   companyName: '首都客運股份有限公司',
+  isoCategoryId: null,
+  isoCategoryName: null,
   currentVersion: {
     versionId: `10000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
     version: String(version),

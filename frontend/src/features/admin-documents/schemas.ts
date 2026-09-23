@@ -15,13 +15,16 @@ export const createAdminDocumentFormSchema = z.object({
       '文件編號只能包含英文字母、數字與連字號，且開頭與結尾必須是字母或數字',
     ),
   name: documentNameSchema,
+  isoCategoryId: z.string().trim(),
 })
 
 export const updateAdminDocumentFormSchema = z.object({
   name: documentNameSchema,
+  isoCategoryId: z.string().trim(),
 })
 
 export interface AdminDocumentFormValues {
   documentNo: string
   name: string
+  isoCategoryId: string
 }

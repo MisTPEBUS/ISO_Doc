@@ -22,9 +22,9 @@ public sealed record AttachmentDownloadRecord(
 public interface IDocumentsBrowseStore
 {
     Task<int> CountAvailableAsync(
-        Guid deptId, string? keyword, CancellationToken cancellationToken);
+        Guid deptId, string? keyword, Guid? isoCategoryId, CancellationToken cancellationToken);
     Task<IReadOnlyList<AvailableDocumentResponse>> ListAvailableAsync(
-        Guid deptId, string? keyword, int skip, int take,
+        Guid deptId, string? keyword, Guid? isoCategoryId, int skip, int take,
         CancellationToken cancellationToken);
     Task<DocumentDownloadRecord?> FindDocumentDownloadAsync(
         Guid documentId, Guid versionId, CancellationToken cancellationToken);

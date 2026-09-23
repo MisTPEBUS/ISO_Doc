@@ -42,7 +42,7 @@ export function buildUploadDraftVersionFileFormData(
 }
 
 export interface AttachmentVersionFormDataInput {
-  changeType: 'MAJOR' | 'MINOR'
+  version: string
   effectiveDate: string
   file: File
 }
@@ -52,7 +52,7 @@ export function buildAttachmentVersionFormData(
 ): FormData {
   const formData = new FormData()
 
-  formData.append('changeType', input.changeType)
+  formData.append('version', input.version)
   if (input.effectiveDate.length > 0) {
     formData.append('effectiveDate', input.effectiveDate)
   }

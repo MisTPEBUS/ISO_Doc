@@ -7,6 +7,7 @@ import {
   Button,
   Input,
   Pagination,
+  Select,
   Table,
   type TableColumn,
 } from "@/components/common";
@@ -22,6 +23,7 @@ import type {
   AvailableDocumentResponse,
   ListAvailableDocumentsParams,
 } from "@/features/documents/types";
+import { useIsoCategories } from "@/features/iso-categories/queries";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 350;
@@ -46,6 +48,7 @@ export function HomePage() {
   const downloadAttachmentMutation = useDownloadAttachment();
   const [keyword, setKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
+  const [isoCategoryId, setIsoCategoryId] = useState("");
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState<string>();
   const [expandedDocumentIds, setExpandedDocumentIds] = useState<
@@ -65,12 +68,17 @@ export function HomePage() {
       page,
       pageSize: PAGE_SIZE,
       keyword: debouncedKeyword || undefined,
+      isoCategoryId: isoCategoryId || undefined,
     }),
-    [debouncedKeyword, page],
+    [debouncedKeyword, isoCategoryId, page],
   );
   const documentsQuery = useAvailableDocuments(queryParams);
   const documents = documentsQuery.data?.items ?? [];
   const totalCount = documentsQuery.data?.totalCount ?? 0;
+  const isoCategoriesQuery = useIsoCategories(
+    { companyId: currentUser.data?.companyId, page: 1, pageSize: 100 },
+    currentUser.data?.companyId !== undefined,
+  );
 
   useEffect(() => {
     if (
@@ -83,6 +91,13 @@ export function HomePage() {
 
   function updateKeyword(value: string) {
     setKeyword(value);
+    setPage(1);
+    setNotice(undefined);
+    setExpandedDocumentIds(new Set());
+  }
+
+  function updateIsoCategoryFilter(value: string) {
+    setIsoCategoryId(value);
     setPage(1);
     setNotice(undefined);
     setExpandedDocumentIds(new Set());
@@ -303,13 +318,6 @@ export function HomePage() {
         },
       },
       {
-        key: "pageCount",
-        header: "頁數",
-        headerClassName: "w-20 text-right",
-        cellClassName: "text-right text-meta text-ink-muted tabular",
-        render: (document) => document.currentVersion.pageCount ?? "－",
-      },
-      {
         key: "version",
         header: "版本",
         headerClassName: "w-20",
@@ -329,6 +337,13 @@ export function HomePage() {
         headerClassName: "w-56",
         cellClassName: "text-meta text-ink-muted",
         render: (document) => document.companyName,
+      },
+      {
+        key: "isoCategoryName",
+        header: "品質系統",
+        headerClassName: "w-40",
+        cellClassName: "text-meta text-ink-muted",
+        render: (document) => document.isoCategoryName ?? "－",
       },
     ];
 
@@ -350,9 +365,7 @@ export function HomePage() {
               }
             : undefined
         }
-        changePasswordHref={
-          currentUser.data ? "/change-password" : null
-        }
+        changePasswordHref={currentUser.data ? "/change-password" : null}
         logoutLabel={logoutMutation.isPending ? "登出中" : "登出"}
         onLogout={handleLogout}
       />
@@ -391,6 +404,29 @@ export function HomePage() {
                 value={keyword}
                 onChange={(event) => updateKeyword(event.target.value)}
               />
+            </div>
+            <div className="min-w-48">
+              <label
+                className="mb-1 block text-label text-ink"
+                htmlFor="document-iso-category"
+              >
+                品質系統
+              </label>
+              <Select
+                id="document-iso-category"
+                value={isoCategoryId}
+                disabled={isoCategoriesQuery.isPending}
+                onChange={(event) =>
+                  updateIsoCategoryFilter(event.target.value)
+                }
+              >
+                <option value="">全部分類</option>
+                {isoCategoriesQuery.data?.items.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </Select>
             </div>
             {keyword.length > 0 && (
               <Button variant="secondary" onClick={() => updateKeyword("")}>

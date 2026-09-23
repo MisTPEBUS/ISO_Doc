@@ -8,7 +8,6 @@ import {
   FormField,
   Input,
   Modal,
-  Select,
   Spinner,
   Textarea,
 } from "@/components/common";
@@ -115,7 +114,7 @@ function emptyVersionForm(version = "1.0"): VersionFormValues {
 }
 
 function emptyAttachmentVersionForm(): AttachmentVersionFormValues {
-  return { changeType: "MINOR", effectiveDate: "", file: null };
+  return { version: "", effectiveDate: "", file: null };
 }
 
 function firstMessage(messages: string[] | undefined): string | undefined {
@@ -192,6 +191,11 @@ function attachmentErrorMessage(error: unknown, fallback: string): string {
   }
 
   return error.detail ?? fallback;
+}
+
+function displayAttachmentNo(value: string | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  return value.trim().toLowerCase() === "null" ? "" : value;
 }
 
 export function AdminDocumentDetailPage() {
@@ -386,7 +390,7 @@ export function AdminDocumentDetailPage() {
     if (!parsed.success) {
       const errors = parsed.error.flatten().fieldErrors;
       setAttachmentVersionFieldErrors({
-        changeType: firstMessage(errors.changeType),
+        version: firstMessage(errors.version),
         effectiveDate: firstMessage(errors.effectiveDate),
         file: firstMessage(errors.file),
       });
@@ -414,7 +418,7 @@ export function AdminDocumentDetailPage() {
           if (error instanceof ApiError && error.status === 400) {
             const errors = error.fieldErrors();
             setAttachmentVersionFieldErrors({
-              changeType: apiFieldMessage(errors, "changeType"),
+              version: apiFieldMessage(errors, "version"),
               effectiveDate: apiFieldMessage(errors, "effectiveDate"),
               file: apiFieldMessage(errors, "file"),
             });
@@ -677,7 +681,7 @@ export function AdminDocumentDetailPage() {
                       <div>
                         <p className="text-label text-ink-muted">編號</p>
                         <p className="font-mono text-code text-ink">
-                          {attachment.attachmentNo}
+                          {displayAttachmentNo(attachment.attachmentNo)}
                         </p>
                       </div>
                       <div>
@@ -965,7 +969,12 @@ export function AdminDocumentDetailPage() {
         )}
         確定要刪除表單及附件「
         <strong className="font-semibold">
-          {deleteAttachmentTarget?.attachmentNo} {deleteAttachmentTarget?.name}
+          {[
+            displayAttachmentNo(deleteAttachmentTarget?.attachmentNo),
+            deleteAttachmentTarget?.name,
+          ]
+            .filter(Boolean)
+            .join(" ")}
         </strong>
         」嗎？
       </Modal>
@@ -976,7 +985,12 @@ export function AdminDocumentDetailPage() {
         title="表單及附件版本管理"
         description={
           versionAttachment
-            ? `${versionAttachment.attachmentNo}｜${versionAttachment.name}`
+            ? [
+                displayAttachmentNo(versionAttachment.attachmentNo),
+                versionAttachment.name,
+              ]
+                .filter(Boolean)
+                .join("｜")
             : undefined
         }
         size="md"
@@ -1062,26 +1076,20 @@ export function AdminDocumentDetailPage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField
-              label="改版類型"
-              htmlFor="attachment-version-change-type"
-              error={attachmentVersionFieldErrors.changeType}
-              hint="首版固定為 1.0；之後依大改或小改自動編版。"
+              label="版本號"
+              htmlFor="attachment-version-version"
+              error={attachmentVersionFieldErrors.version}
+              hint="請輸入正整數或「主版號.次版號」，例如 1、1.0、2.1。"
               required
             >
-              <Select
-                id="attachment-version-change-type"
-                value={attachmentVersionValues.changeType}
-                error={attachmentVersionFieldErrors.changeType !== undefined}
+              <Input
+                id="attachment-version-version"
+                value={attachmentVersionValues.version}
+                error={attachmentVersionFieldErrors.version !== undefined}
                 onChange={(event) =>
-                  updateAttachmentVersionField(
-                    "changeType",
-                    event.target.value as "MAJOR" | "MINOR",
-                  )
+                  updateAttachmentVersionField("version", event.target.value)
                 }
-              >
-                <option value="MINOR">小改（次版號 +1）</option>
-                <option value="MAJOR">大改（主版號 +1）</option>
-              </Select>
+              />
             </FormField>
 
             <FormField
@@ -1228,31 +1236,6 @@ export function AdminDocumentDetailPage() {
               />
             </FormField>
           </div>
-
-          <FormField
-            label="頁數"
-            htmlFor="version-page-count"
-            error={versionFieldErrors.pageCount}
-            hint="選填；請輸入大於 0 的整數。"
-          >
-            <Input
-              id="version-page-count"
-              type="number"
-              min="1"
-              step="1"
-              inputMode="numeric"
-              value={versionValues.pageCount}
-              error={versionFieldErrors.pageCount !== undefined}
-              aria-describedby={
-                versionFieldErrors.pageCount
-                  ? "version-page-count-error"
-                  : "version-page-count-hint"
-              }
-              onChange={(event) =>
-                updateVersionField("pageCount", event.target.value)
-              }
-            />
-          </FormField>
 
           <FormField
             label="備註"

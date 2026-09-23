@@ -97,6 +97,14 @@ public sealed class EfDocumentStore(IsoDbContext dbContext) : IDocumentStore
             .Select(dept => dept.Id)
             .ToListAsync(cancellationToken);
 
+    public Task<bool> IsoCategoryBelongsToCompanyAsync(
+        Guid companyId,
+        Guid isoCategoryId,
+        CancellationToken cancellationToken) =>
+        dbContext.IsoCategories.AnyAsync(
+            category => category.Id == isoCategoryId && category.CompanyId == companyId,
+            cancellationToken);
+
     public void Add(Document document) => dbContext.Documents.Add(document);
 
     public void Add(DocumentVersion version) => dbContext.DocumentVersions.Add(version);

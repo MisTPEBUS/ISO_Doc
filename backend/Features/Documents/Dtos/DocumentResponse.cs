@@ -8,4 +8,5 @@ public sealed record DocumentResponse(
     bool IsActive,
     Guid CreatedBy,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    Guid? IsoCategoryId);

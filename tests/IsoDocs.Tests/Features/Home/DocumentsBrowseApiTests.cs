@@ -391,7 +391,9 @@ internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
         Guid versionId,
         Guid deptId,
         string status,
-        bool isActive) =>
+        bool isActive,
+        Guid? isoCategoryId = null,
+        string? isoCategoryName = null) =>
         _available.Add(new(
             deptId,
             status,
@@ -401,6 +403,8 @@ internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
                 "ISO-001",
                 "Quality Manual",
                 "Company A",
+                isoCategoryId,
+                isoCategoryName,
                 new AvailableDocumentVersionResponse(
                     versionId, "1.0", DateOnly.FromDateTime(DateTime.UtcNow), 10, true),
                 [])));
@@ -462,21 +466,23 @@ internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
     public Task<int> CountAvailableAsync(
         Guid deptId,
         string? keyword,
+        Guid? isoCategoryId,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(Query(deptId, keyword).Count());
+        return Task.FromResult(Query(deptId, keyword, isoCategoryId).Count());
     }
 
     public Task<IReadOnlyList<AvailableDocumentResponse>> ListAvailableAsync(
         Guid deptId,
         string? keyword,
+        Guid? isoCategoryId,
         int skip,
         int take,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        IReadOnlyList<AvailableDocumentResponse> result = Query(deptId, keyword)
+        IReadOnlyList<AvailableDocumentResponse> result = Query(deptId, keyword, isoCategoryId)
             .Skip(skip)
             .Take(take)
             .Select(entry => entry.Response with
@@ -506,14 +512,15 @@ internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
             _attachments.GetValueOrDefault((attachmentId, versionId)));
     }
 
-    private IEnumerable<AvailableEntry> Query(Guid deptId, string? keyword) =>
+    private IEnumerable<AvailableEntry> Query(Guid deptId, string? keyword, Guid? isoCategoryId) =>
         _available.Where(entry =>
             entry.DeptId == deptId
             && entry.IsActive
             && entry.Status == "PUBLISHED"
             && (string.IsNullOrWhiteSpace(keyword)
                 || entry.Response.DocumentNo.Contains(keyword, StringComparison.OrdinalIgnoreCase)
-                || entry.Response.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase)));
+                || entry.Response.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            && (!isoCategoryId.HasValue || entry.Response.IsoCategoryId == isoCategoryId));
 
     private sealed record AvailableEntry(
         Guid DeptId,

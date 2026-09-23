@@ -6,7 +6,6 @@ import {
   Alert,
   Badge,
   Button,
-  FormField,
   Input,
   Table,
   type TableColumn,
@@ -52,8 +51,6 @@ export interface AttachmentBatchImportPanelProps {
 
 export function AttachmentBatchImportPanel({
   documentId,
-  documentNo,
-  documentName,
   onCancel,
   onImported,
 }: AttachmentBatchImportPanelProps) {
@@ -159,7 +156,7 @@ export function AttachmentBatchImportPanel({
         await createAttachmentVersion.mutateAsync({
           documentId,
           attachmentId: attachment.attachmentId,
-          input: { changeType: "MINOR", effectiveDate, file: row.file },
+          input: { version: "1.0", effectiveDate, file: row.file },
         });
         successCount += 1;
         nextRows.set(row.id, {
@@ -274,46 +271,46 @@ export function AttachmentBatchImportPanel({
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3 border border-line-strong bg-surface p-4">
-        <div>
-          <p className="text-label font-medium text-ink">批次新增表單及附件</p>
-          <p className="mt-1 text-meta text-ink-muted">
-            {documentNo}｜{documentName}
-            。解析後請確認檔案內容後表單及附件編號與名稱送出。
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <FormField
-            label="生效日期"
-            htmlFor="attachment-batch-effective-date"
-            className="w-40"
-          >
+        <p className="text-label font-medium text-ink">批次新增表單及附件</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="attachment-batch-effective-date"
+              className="whitespace-nowrap text-label text-ink-muted"
+            >
+              生效日期
+            </label>
             <Input
               id="attachment-batch-effective-date"
               type="date"
+              className="w-40"
               min={todayUtc()}
               value={effectiveDate}
               disabled={submitting || submitted}
               onChange={(event) => setEffectiveDate(event.target.value)}
             />
-          </FormField>
-          <Button
-            variant="secondary"
-            disabled={submitting || submitted}
-            onClick={triggerFileSelect}
-          >
-            選擇檔案
-          </Button>
-          <Button
-            disabled={!canSave}
-            loading={submitting}
-            loadingText="建立並上傳中"
-            onClick={() => void handleSave()}
-          >
-            建立並上傳
-          </Button>
-          <Button variant="ghost" onClick={onCancel}>
-            返回
-          </Button>
+          </div>
+          <span className="h-6 w-px bg-line" aria-hidden="true" />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              disabled={submitting || submitted}
+              onClick={triggerFileSelect}
+            >
+              選擇檔案
+            </Button>
+            <Button
+              disabled={!canSave}
+              loading={submitting}
+              loadingText="建立並上傳中"
+              onClick={() => void handleSave()}
+            >
+              建立並上傳
+            </Button>
+            <Button variant="ghost" onClick={onCancel}>
+              返回
+            </Button>
+          </div>
         </div>
       </div>
 

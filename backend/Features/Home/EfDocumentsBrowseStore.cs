@@ -9,20 +9,22 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
     public Task<int> CountAvailableAsync(
         Guid deptId,
         string? keyword,
+        Guid? isoCategoryId,
         CancellationToken cancellationToken)
     {
-        return AvailableQuery(deptId, keyword)
+        return AvailableQuery(deptId, keyword, isoCategoryId)
             .CountAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<AvailableDocumentResponse>> ListAvailableAsync(
         Guid deptId,
         string? keyword,
+        Guid? isoCategoryId,
         int skip,
         int take,
         CancellationToken cancellationToken)
     {
-        var documents = await AvailableQuery(deptId, keyword)
+        var documents = await AvailableQuery(deptId, keyword, isoCategoryId)
             .OrderBy(item => item.DocumentNo)
             .ThenBy(item => item.DocumentId)
             .Skip(skip)
@@ -83,6 +85,8 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
                 item.DocumentNo,
                 item.DocumentName,
                 item.CompanyName,
+                item.IsoCategoryId,
+                item.IsoCategoryName,
                 new AvailableDocumentVersionResponse(
                     item.VersionId,
                     item.Version,
@@ -137,7 +141,8 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
 
     private IQueryable<AvailableDocumentQueryItem> AvailableQuery(
         Guid deptId,
-        string? keyword)
+        string? keyword,
+        Guid? isoCategoryId)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var query =
@@ -148,6 +153,9 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
                 on document.CompanyId equals company.Id
             join version in dbContext.DocumentVersions.AsNoTracking()
                 on document.Id equals version.DocumentId
+            join category in dbContext.IsoCategories.AsNoTracking()
+                on document.IsoCategoryId equals category.Id into categories
+            from category in categories.DefaultIfEmpty()
             where permission.DeptId == deptId
                 && document.IsActive
                 && version.Status == "PUBLISHED"
@@ -160,6 +168,8 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
                 DocumentNo = document.DocumentNo,
                 DocumentName = document.Name,
                 CompanyName = company.Name,
+                IsoCategoryId = document.IsoCategoryId,
+                IsoCategoryName = category == null ? null : category.Name,
                 VersionId = version.Id,
                 Version = version.Version,
                 EffectiveDate = version.EffectiveDate,
@@ -176,6 +186,11 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
                 || EF.Functions.ILike(item.DocumentName, pattern));
         }
 
+        if (isoCategoryId.HasValue)
+        {
+            query = query.Where(item => item.IsoCategoryId == isoCategoryId.Value);
+        }
+
         return query;
     }
 
@@ -188,6 +203,10 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
         public string DocumentName { get; init; } = string.Empty;
 
         public string CompanyName { get; init; } = string.Empty;
+
+        public Guid? IsoCategoryId { get; init; }
+
+        public string? IsoCategoryName { get; init; }
 
         public Guid VersionId { get; init; }
 

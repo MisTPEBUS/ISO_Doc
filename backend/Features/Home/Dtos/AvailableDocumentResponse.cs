@@ -5,6 +5,8 @@ public sealed record AvailableDocumentResponse(
     string DocumentNo,
     string Name,
     string CompanyName,
+    Guid? IsoCategoryId,
+    string? IsoCategoryName,
     AvailableDocumentVersionResponse CurrentVersion,
     IReadOnlyList<AvailableAttachmentResponse> Attachments);
 

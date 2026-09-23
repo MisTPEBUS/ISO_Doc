@@ -36,6 +36,9 @@ public static class AuditActions
     public const string DownloadDocument = "DOWNLOAD_DOCUMENT";
     public const string DownloadAttachment = "DOWNLOAD_ATTACHMENT";
     public const string BackupCompanyDocuments = "BACKUP_COMPANY_DOCUMENTS";
+    public const string CreateIsoCategory = "CREATE_ISO_CATEGORY";
+    public const string UpdateIsoCategory = "UPDATE_ISO_CATEGORY";
+    public const string DeleteIsoCategory = "DELETE_ISO_CATEGORY";
 }
 
 public static class AuditResourceTypes
@@ -47,4 +50,5 @@ public static class AuditResourceTypes
     public const string Attachment = "Attachment";
     public const string AttachmentVersion = "AttachmentVersion";
     public const string Company = "Company";
+    public const string IsoCategory = "IsoCategory";
 }

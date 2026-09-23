@@ -10,7 +10,8 @@ namespace IsoDocument.Api.Features.Home;
 /// SIL OFL 1.1，授權原文見同目錄各自的 LICENSE 檔）：
 /// - <see cref="ChineseFamilyName"/>：Noto Sans TC，用於可能含中文的文字（文件名稱／編號）。
 /// - <see cref="LatinFamilyName"/>：Lora，用於正中央公司代碼（固定為 ASCII，見 companies.code
-///   的 `^[A-Z0-9]{2,10}$` 驗證規則）。
+///   的 `^[A-Z0-9]{2,30}$` 驗證規則）。長度上限拉到 30 後，正中央 64pt 的長代碼有可能超出
+///   頁寬，這是已知的版面風險，目前沒有自動縮字或換行處理。
 /// 兩個字型檔都只內嵌了「預設字重」這一個實例，沒有另外包裝真正的 Bold 字重檔，
 /// 所以 Bold 一律靠 PDFsharp 的 <c>MustSimulateBold</c>（合成粗體／描邊加粗）達成，
 /// 不是字型本身的 Bold 字重。

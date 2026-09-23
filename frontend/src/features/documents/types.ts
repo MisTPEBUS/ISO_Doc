@@ -24,6 +24,8 @@ export interface AvailableDocumentResponse {
   documentNo: string
   name: string
   companyName: string
+  isoCategoryId: string | null
+  isoCategoryName: string | null
   currentVersion: AvailableDocumentVersion
   attachments: AvailableDocumentAttachment[]
 }
@@ -32,4 +34,5 @@ export interface ListAvailableDocumentsParams {
   page: number
   pageSize: number
   keyword?: string
+  isoCategoryId?: string
 }

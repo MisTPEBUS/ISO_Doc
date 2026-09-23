@@ -17,9 +17,10 @@ public sealed class DocumentsBrowseController(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string? keyword = null,
+        [FromQuery] Guid? isoCategoryId = null,
         CancellationToken cancellationToken = default) =>
         (await browseService.ListAvailableAsync(
-            page, pageSize, keyword, cancellationToken)).ToOkResult(this);
+            page, pageSize, keyword, isoCategoryId, cancellationToken)).ToOkResult(this);
 
     [HttpGet("{documentId:guid}/versions/{versionId:guid}/download")]
     public async Task<IActionResult> DownloadDocument(

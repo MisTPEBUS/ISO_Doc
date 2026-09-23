@@ -12,6 +12,7 @@ import { AdminDocumentImportPage } from './pages/admin/documents/import/AdminDoc
 import { AdminAttachmentImportPage } from './pages/admin/documents/attachments/AdminAttachmentImportPage'
 import { BackupPage } from './pages/admin/backup/BackupPage'
 import { DepartmentsPage } from './pages/admin/departments/DepartmentsPage'
+import { IsoCategoriesPage } from './pages/admin/iso-categories/IsoCategoriesPage'
 import { PermissionsPage } from './pages/admin/permissions/PermissionsPage'
 import { UsersPage } from './pages/admin/users/UsersPage'
 import { ChangePasswordPage } from './pages/change-password/ChangePasswordPage'
@@ -64,6 +65,7 @@ function App() {
             <Route path="documents/:id" element={<AdminDocumentDetailPage />} />
             <Route path="backup" element={<BackupPage />} />
             <Route path="departments" element={<DepartmentsPage />} />
+            <Route path="iso-categories" element={<IsoCategoriesPage />} />
             <Route path="permissions" element={<PermissionsPage />} />
             <Route path="users" element={<UsersPage />} />
           </Route>

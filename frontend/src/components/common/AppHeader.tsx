@@ -1,48 +1,50 @@
-import { Link } from 'react-router-dom'
+import { Link } from "react-router-dom";
 
-import { classNames } from './classNames'
+import { classNames } from "./classNames";
 
 export interface AppHeaderLink {
-  label: string
-  href: string
+  label: string;
+  href: string;
 }
 
 export interface AppHeaderProps {
-  brand?: string
-  brandMark?: string
-  companyName?: string
-  departmentName?: string
-  userName?: string
-  roleLabel?: string
-  modeLink?: AppHeaderLink
-  changePasswordHref?: string | null
-  logoutLabel?: string
-  onLogout?: () => void
-  sticky?: boolean
-  className?: string
+  brand?: string;
+  brandMark?: string;
+  companyName?: string;
+  departmentName?: string;
+  userName?: string;
+  roleLabel?: string;
+  modeLink?: AppHeaderLink;
+  changePasswordHref?: string | null;
+  logoutLabel?: string;
+  onLogout?: () => void;
+  sticky?: boolean;
+  className?: string;
 }
 
 export function AppHeader({
-  brand = '首都集團 ISO 文件管理系統',
-  brandMark = 'ISO',
+  brand = "首都集團 ISO 文件管理系統 v2.0",
+  brandMark = "ISO",
   companyName,
   departmentName,
-  userName = '使用者',
+  userName = "使用者",
   roleLabel,
   modeLink,
-  changePasswordHref = '/change-password',
-  logoutLabel = '登出',
+  changePasswordHref = "/change-password",
+  logoutLabel = "登出",
   onLogout,
   sticky = true,
   className,
 }: AppHeaderProps) {
-  const organization = [companyName, departmentName].filter(Boolean).join(' / ')
+  const organization = [companyName, departmentName]
+    .filter(Boolean)
+    .join(" / ");
 
   return (
     <header
       className={classNames(
-        'z-30 flex h-header items-center justify-between gap-4 bg-shell-900 px-4 text-on-shell',
-        sticky && 'sticky top-0',
+        "z-30 flex h-header items-center justify-between gap-4 bg-shell-900 px-4 text-on-shell",
+        sticky && "sticky top-0",
         className,
       )}
     >
@@ -95,5 +97,5 @@ export function AppHeader({
         </button>
       </div>
     </header>
-  )
+  );
 }

@@ -552,6 +552,7 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
     private readonly HashSet<Guid> _companyIds = [.. companyIds];
     private readonly Dictionary<Guid, List<DocumentVersion>> _versions = [];
     private readonly Dictionary<Guid, List<Guid>> _deptIdsByCompany = [];
+    private readonly HashSet<(Guid CompanyId, Guid IsoCategoryId)> _isoCategoriesByCompany = [];
 
     public List<Document> Documents { get; } = [];
     public List<DocumentVersion> DocumentVersions { get; } = [];
@@ -572,6 +573,13 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
 
         deptIds.Add(deptId);
         return deptId;
+    }
+
+    public Guid AddIsoCategorySeed(Guid companyId)
+    {
+        var isoCategoryId = Guid.NewGuid();
+        _isoCategoriesByCompany.Add((companyId, isoCategoryId));
+        return isoCategoryId;
     }
 
     public Document AddSeed(Guid companyId, string documentNo, string name)
@@ -711,6 +719,15 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
             ? [.. stored]
             : [];
         return Task.FromResult(deptIds);
+    }
+
+    public Task<bool> IsoCategoryBelongsToCompanyAsync(
+        Guid companyId,
+        Guid isoCategoryId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(_isoCategoriesByCompany.Contains((companyId, isoCategoryId)));
     }
 
     public void Add(Document document) => Documents.Add(document);

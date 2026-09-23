@@ -21,6 +21,7 @@ public sealed class DocumentsBrowseService(
         int page,
         int pageSize,
         string? keyword,
+        Guid? isoCategoryId,
         CancellationToken cancellationToken)
     {
         if (currentUser.DeptId is not { } deptId)
@@ -32,9 +33,9 @@ public sealed class DocumentsBrowseService(
         page = page > 0 ? page : DefaultPage;
         pageSize = pageSize > 0 ? Math.Min(pageSize, MaximumPageSize) : DefaultPageSize;
         var totalCount = await browseStore.CountAvailableAsync(
-            deptId, keyword, cancellationToken);
+            deptId, keyword, isoCategoryId, cancellationToken);
         var documents = await browseStore.ListAvailableAsync(
-            deptId, keyword, (page - 1) * pageSize, pageSize, cancellationToken);
+            deptId, keyword, isoCategoryId, (page - 1) * pageSize, pageSize, cancellationToken);
         return Result<PagedResult<AvailableDocumentResponse>>.Success(new(
             documents, page, pageSize, totalCount));
     }

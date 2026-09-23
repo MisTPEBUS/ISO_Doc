@@ -29,9 +29,14 @@ import type { AdminDocument } from "@/features/admin-documents/types";
 import { useCurrentUser } from "@/features/auth/queries";
 import { USER_ROLE } from "@/features/auth/types";
 import { useCompanies } from "@/features/companies/queries";
+import { useIsoCategories } from "@/features/iso-categories/queries";
 
 const DEFAULT_PAGE_SIZE = 10;
-const EMPTY_FORM: AdminDocumentFormValues = { documentNo: "", name: "" };
+const EMPTY_FORM: AdminDocumentFormValues = {
+  documentNo: "",
+  name: "",
+  isoCategoryId: "",
+};
 
 type FieldErrors = Partial<Record<keyof AdminDocumentFormValues, string>>;
 
@@ -84,6 +89,16 @@ export function AdminDocumentsPage() {
     page,
     pageSize,
   });
+  const isoCategories = useIsoCategories(
+    { companyId, page: 1, pageSize: 100 },
+    companyId !== undefined,
+  );
+  const isoCategoryNameById = new Map(
+    (isoCategories.data?.items ?? []).map((category) => [
+      category.id,
+      category.name,
+    ]),
+  );
 
   function handlePageSizeChange(nextPageSize: number) {
     setPageSize(nextPageSize);
@@ -109,7 +124,11 @@ export function AdminDocumentsPage() {
 
   function openEditForm(document: AdminDocument) {
     setEditingDocument(document);
-    setFormValues({ documentNo: document.documentNo, name: document.name });
+    setFormValues({
+      documentNo: document.documentNo,
+      name: document.name,
+      isoCategoryId: document.isoCategoryId ?? "",
+    });
     setFieldErrors({});
     setFormError(undefined);
     setSuccessMessage(undefined);
@@ -131,6 +150,7 @@ export function AdminDocumentsPage() {
     setFieldErrors({
       documentNo: firstMessage(errors.documentNo),
       name: firstMessage(errors.name),
+      isoCategoryId: firstMessage(errors.isoCategoryId),
     });
     if (Object.keys(errors).length === 0) {
       setFormError(errorMessage(error, "無法儲存文件資料。"));
@@ -144,8 +164,10 @@ export function AdminDocumentsPage() {
     if (editingDocument) {
       const parsed = updateAdminDocumentFormSchema.safeParse(formValues);
       if (!parsed.success) {
+        const errors = parsed.error.flatten().fieldErrors;
         setFieldErrors({
-          name: firstMessage(parsed.error.flatten().fieldErrors.name),
+          name: firstMessage(errors.name),
+          isoCategoryId: firstMessage(errors.isoCategoryId),
         });
         return;
       }
@@ -153,7 +175,10 @@ export function AdminDocumentsPage() {
       updateDocument.mutate(
         {
           id: editingDocument.id,
-          request: { name: parsed.data.name },
+          request: {
+            name: parsed.data.name,
+            isoCategoryId: parsed.data.isoCategoryId || null,
+          },
         },
         {
           onSuccess: () => {
@@ -180,6 +205,7 @@ export function AdminDocumentsPage() {
       setFieldErrors({
         documentNo: firstMessage(errors.documentNo),
         name: firstMessage(errors.name),
+        isoCategoryId: firstMessage(errors.isoCategoryId),
       });
       return;
     }
@@ -189,6 +215,7 @@ export function AdminDocumentsPage() {
         companyId,
         documentNo: parsed.data.documentNo,
         name: parsed.data.name,
+        isoCategoryId: parsed.data.isoCategoryId || undefined,
       },
       {
         onSuccess: () => {
@@ -260,6 +287,16 @@ export function AdminDocumentsPage() {
           {document.name}
         </button>
       ),
+    },
+    {
+      key: "isoCategory",
+      header: "品質系統",
+      headerClassName: "w-40",
+      cellClassName: "text-meta text-ink-muted",
+      render: (document) =>
+        document.isoCategoryId === null
+          ? "－"
+          : (isoCategoryNameById.get(document.isoCategoryId) ?? "－"),
     },
     {
       key: "updatedAt",
@@ -567,6 +604,29 @@ export function AdminDocumentsPage() {
               }
               onChange={(event) => updateField("name", event.target.value)}
             />
+          </FormField>
+          <FormField
+            label="品質系統"
+            htmlFor="admin-document-iso-category"
+            error={fieldErrors.isoCategoryId}
+            hint=""
+          >
+            <Select
+              id="admin-document-iso-category"
+              value={formValues.isoCategoryId}
+              disabled={isoCategories.isPending}
+              error={fieldErrors.isoCategoryId !== undefined}
+              onChange={(event) =>
+                updateField("isoCategoryId", event.target.value)
+              }
+            >
+              <option value="">不指定分類</option>
+              {isoCategories.data?.items.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </Select>
           </FormField>
         </form>
       </Modal>

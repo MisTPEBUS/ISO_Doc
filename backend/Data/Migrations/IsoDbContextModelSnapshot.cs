@@ -255,8 +255,8 @@ namespace IsoDocument.Api.Data.Migrations
 
                     b.Property<string>("Code")
                         .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
                         .HasColumnName("code");
 
                     b.Property<DateTimeOffset>("CreatedAt")
@@ -366,6 +366,10 @@ namespace IsoDocument.Api.Data.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
+
+                    b.Property<Guid?>("IsoCategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("iso_category_id");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -530,6 +534,51 @@ namespace IsoDocument.Api.Data.Migrations
 
                             t.HasCheckConstraint("ck_published_requires_dates", "status <> 'PUBLISHED' OR (effective_date IS NOT NULL AND publish_date IS NOT NULL)");
                         });
+                });
+
+            modelBuilder.Entity("IsoDocument.Api.Data.Entities.IsoCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("uq_iso_categories_company_name");
+
+                    b.ToTable("iso_categories", (string)null);
                 });
 
             modelBuilder.Entity("IsoDocument.Api.Data.Entities.User", b =>
@@ -697,6 +746,11 @@ namespace IsoDocument.Api.Data.Migrations
                         .HasForeignKey("CreatedBy")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
+
+                    b.HasOne("IsoDocument.Api.Data.Entities.IsoCategory", null)
+                        .WithMany()
+                        .HasForeignKey("IsoCategoryId")
+                        .OnDelete(DeleteBehavior.NoAction);
                 });
 
             modelBuilder.Entity("IsoDocument.Api.Data.Entities.DocumentDeptPermission", b =>
@@ -731,6 +785,15 @@ namespace IsoDocument.Api.Data.Migrations
                     b.HasOne("IsoDocument.Api.Data.Entities.Document", null)
                         .WithMany()
                         .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("IsoDocument.Api.Data.Entities.IsoCategory", b =>
+                {
+                    b.HasOne("IsoDocument.Api.Data.Entities.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });

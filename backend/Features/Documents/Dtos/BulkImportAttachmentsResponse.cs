@@ -15,7 +15,7 @@ public sealed record BulkImportedAttachment(
     Guid AttachmentId,
     Guid DocumentId,
     string DocumentNo,
-    string AttachmentNo,
+    string? AttachmentNo,
     string Name);
 
 public sealed record BulkImportAttachmentFailure(

@@ -67,13 +67,12 @@ public sealed class AttachmentVersionService(
             return Result<AttachmentVersionResponse>.Unauthorized("請先登入後再操作。");
         }
 
+        DocumentVersionNumber.TryParse(request.Version, out var versionText, out var major, out var minor);
+
         string? writtenObjectKey = null;
         try
         {
             await using var transaction = await versionStore.BeginTransactionAsync(cancellationToken);
-            var latest = await versionStore.FindLatestVersionAsync(attachmentId, cancellationToken);
-            var (major, minor) = CalculateNextVersion(latest, request.ChangeType!);
-            var versionText = $"{major}.{minor}";
             var publishDate = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
             var effectiveDate = request.EffectiveDate ?? publishDate;
             var objectKey = storageKeyBuilder.BuildAttachmentKey(
@@ -133,7 +132,6 @@ public sealed class AttachmentVersionService(
                     {
                         attachment_id = attachmentId,
                         version = version.Version,
-                        change_type = request.ChangeType,
                         publish_date = version.PublishDate,
                         effective_date = version.EffectiveDate,
                         previous_published_version_ids = previousPublished
@@ -220,20 +218,6 @@ public sealed class AttachmentVersionService(
         {
             // Preserve the database/storage exception that caused the rollback.
         }
-    }
-
-    private static (int Major, int Minor) CalculateNextVersion(
-        AttachmentVersion? latest,
-        string changeType)
-    {
-        if (latest is null)
-        {
-            return (1, 0);
-        }
-
-        return changeType == "MAJOR"
-            ? (checked(latest.VersionMajor + 1), 0)
-            : (latest.VersionMajor, checked(latest.VersionMinor + 1));
     }
 
     private static bool IsPublishedVersionConflict(Exception exception) => exception switch
