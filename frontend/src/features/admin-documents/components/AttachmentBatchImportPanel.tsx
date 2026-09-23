@@ -202,6 +202,7 @@ export function AttachmentBatchImportPanel({
         ) : (
           <Input
             className="font-mono"
+            placeholder="留空表示無編號"
             value={row.attachmentNo}
             disabled={submitting}
             onChange={(event) =>

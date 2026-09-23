@@ -14,7 +14,7 @@ export interface AvailableAttachmentVersion {
 
 export interface AvailableDocumentAttachment {
   attachmentId: string
-  attachmentNo: string
+  attachmentNo: string | null
   name: string
   currentVersion: AvailableAttachmentVersion | null
 }
@@ -24,6 +24,7 @@ export interface AvailableDocumentResponse {
   documentNo: string
   name: string
   companyName: string
+  deptName: string | null
   isoCategoryId: string | null
   isoCategoryName: string | null
   currentVersion: AvailableDocumentVersion

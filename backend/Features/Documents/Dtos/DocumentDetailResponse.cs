@@ -10,6 +10,8 @@ public sealed record DocumentDetailResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     Guid? IsoCategoryId,
+    Guid? DeptId,
+    string? DeptName,
     DocumentVersionSummary? CurrentVersion,
     IReadOnlyList<DocumentVersionSummary> Versions,
     IReadOnlyList<DocumentAttachmentSummary> Attachments);

@@ -32,6 +32,11 @@ function formatDate(value: string | null): string {
   return value?.replaceAll("-", "/") ?? "－";
 }
 
+function displayAttachmentNo(value: string | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  return value.trim().toLowerCase() === "null" ? "" : value;
+}
+
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
     return error.detail ?? error.title ?? fallback;
@@ -200,7 +205,7 @@ export function HomePage() {
       header: "表單及附件編號",
       headerClassName: "w-44",
       cellClassName: "font-mono text-code tabular",
-      render: (attachment) => attachment.attachmentNo,
+      render: (attachment) => displayAttachmentNo(attachment.attachmentNo),
     },
     {
       key: "name",
@@ -337,6 +342,13 @@ export function HomePage() {
         headerClassName: "w-56",
         cellClassName: "text-meta text-ink-muted",
         render: (document) => document.companyName,
+      },
+      {
+        key: "deptName",
+        header: "發行單位",
+        headerClassName: "w-40",
+        cellClassName: "text-meta text-ink-muted",
+        render: (document) => document.deptName ?? "",
       },
       {
         key: "isoCategoryName",

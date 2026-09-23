@@ -78,6 +78,36 @@ public sealed class AttachmentApiTests
     }
 
     [Fact]
+    public async Task CreateIdentity_WithBlankNumber_SucceedsAndAllowsMultiplePerDocument()
+    {
+        // 表單及附件編號可留空：部分掃描進來的檔案本來就沒有編號規則。
+        // 留空正規化為 NULL，Postgres 的 UNIQUE 索引允許多筆 NULL 並存，
+        // 因此同一份文件下可以建立多筆都沒有編號的表單及附件。
+        await using var factory = new AttachmentWebApplicationFactory();
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+
+        using var firstRequest = WithXsrf(HttpMethod.Post,
+            $"/api/documents/{factory.Document.Id}/attachments", token,
+            JsonContent.Create(new CreateAttachmentRequest("  ", "First")));
+        var firstResponse = await client.SendAsync(firstRequest);
+        var first = await firstResponse.Content.ReadFromJsonAsync<AttachmentResponse>();
+
+        using var secondRequest = WithXsrf(HttpMethod.Post,
+            $"/api/documents/{factory.Document.Id}/attachments", token,
+            JsonContent.Create(new CreateAttachmentRequest(null, "Second")));
+        var secondResponse = await client.SendAsync(secondRequest);
+        var second = await secondResponse.Content.ReadFromJsonAsync<AttachmentResponse>();
+
+        Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
+        Assert.Null(first!.AttachmentNo);
+        Assert.Equal(HttpStatusCode.Created, secondResponse.StatusCode);
+        Assert.Null(second!.AttachmentNo);
+        Assert.All(factory.Store.Attachments, attachment => Assert.Null(attachment.AttachmentNo));
+    }
+
+    [Fact]
     public async Task CreateVersion_WithManualVersion_PreservesHistoryAndDoesNotChangeMainVersion()
     {
         await using var factory = new AttachmentWebApplicationFactory();
@@ -415,6 +445,8 @@ internal sealed class FakeAttachmentDocumentStore(Document seed, Guid userId)
         Task.FromResult<IReadOnlyList<Guid>>([]);
     public Task<bool> IsoCategoryBelongsToCompanyAsync(Guid companyId, Guid isoCategoryId, CancellationToken ct) =>
         Task.FromResult(false);
+    public Task<Dept?> FindCompanyDeptAsync(Guid companyId, Guid deptId, CancellationToken ct) =>
+        Task.FromResult<Dept?>(null);
     public void Add(Document document) => Documents.Add(document);
     public void Add(DocumentVersion version) { }
     public void AddRange(IEnumerable<DocumentDeptPermission> permissions) { }

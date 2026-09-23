@@ -27,6 +27,6 @@ public sealed partial class CreateAttachmentRequestValidator
             .OverridePropertyName("name");
     }
 
-    [GeneratedRegex("^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$")]
+    [GeneratedRegex("^[A-Za-z0-9](?:[A-Za-z0-9-]{0,98}[A-Za-z0-9])?$")]
     private static partial Regex AttachmentNoPattern();
 }

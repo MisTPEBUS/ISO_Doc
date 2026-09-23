@@ -29,6 +29,7 @@ import type { AdminDocument } from "@/features/admin-documents/types";
 import { useCurrentUser } from "@/features/auth/queries";
 import { USER_ROLE } from "@/features/auth/types";
 import { useCompanies } from "@/features/companies/queries";
+import { useDepts } from "@/features/departments/queries";
 import { useIsoCategories } from "@/features/iso-categories/queries";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -36,6 +37,7 @@ const EMPTY_FORM: AdminDocumentFormValues = {
   documentNo: "",
   name: "",
   isoCategoryId: "",
+  deptId: "",
 };
 
 type FieldErrors = Partial<Record<keyof AdminDocumentFormValues, string>>;
@@ -93,6 +95,10 @@ export function AdminDocumentsPage() {
     { companyId, page: 1, pageSize: 100 },
     companyId !== undefined,
   );
+  const depts = useDepts(
+    { companyId, page: 1, pageSize: 100 },
+    companyId !== undefined,
+  );
   const isoCategoryNameById = new Map(
     (isoCategories.data?.items ?? []).map((category) => [
       category.id,
@@ -128,6 +134,7 @@ export function AdminDocumentsPage() {
       documentNo: document.documentNo,
       name: document.name,
       isoCategoryId: document.isoCategoryId ?? "",
+      deptId: document.deptId ?? "",
     });
     setFieldErrors({});
     setFormError(undefined);
@@ -151,6 +158,7 @@ export function AdminDocumentsPage() {
       documentNo: firstMessage(errors.documentNo),
       name: firstMessage(errors.name),
       isoCategoryId: firstMessage(errors.isoCategoryId),
+      deptId: firstMessage(errors.deptId),
     });
     if (Object.keys(errors).length === 0) {
       setFormError(errorMessage(error, "無法儲存文件資料。"));
@@ -168,6 +176,7 @@ export function AdminDocumentsPage() {
         setFieldErrors({
           name: firstMessage(errors.name),
           isoCategoryId: firstMessage(errors.isoCategoryId),
+          deptId: firstMessage(errors.deptId),
         });
         return;
       }
@@ -178,6 +187,7 @@ export function AdminDocumentsPage() {
           request: {
             name: parsed.data.name,
             isoCategoryId: parsed.data.isoCategoryId || null,
+            deptId: parsed.data.deptId || null,
           },
         },
         {
@@ -206,6 +216,7 @@ export function AdminDocumentsPage() {
         documentNo: firstMessage(errors.documentNo),
         name: firstMessage(errors.name),
         isoCategoryId: firstMessage(errors.isoCategoryId),
+        deptId: firstMessage(errors.deptId),
       });
       return;
     }
@@ -216,6 +227,7 @@ export function AdminDocumentsPage() {
         documentNo: parsed.data.documentNo,
         name: parsed.data.name,
         isoCategoryId: parsed.data.isoCategoryId || undefined,
+        deptId: parsed.data.deptId || undefined,
       },
       {
         onSuccess: () => {
@@ -297,6 +309,13 @@ export function AdminDocumentsPage() {
         document.isoCategoryId === null
           ? "－"
           : (isoCategoryNameById.get(document.isoCategoryId) ?? "－"),
+    },
+    {
+      key: "dept",
+      header: "發行單位",
+      headerClassName: "w-40",
+      cellClassName: "text-meta text-ink-muted",
+      render: (document) => document.deptName ?? "－",
     },
     {
       key: "updatedAt",
@@ -624,6 +643,27 @@ export function AdminDocumentsPage() {
               {isoCategories.data?.items.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField
+            label="發行單位"
+            htmlFor="admin-document-dept"
+            error={fieldErrors.deptId}
+            hint=""
+          >
+            <Select
+              id="admin-document-dept"
+              value={formValues.deptId}
+              disabled={depts.isPending}
+              error={fieldErrors.deptId !== undefined}
+              onChange={(event) => updateField("deptId", event.target.value)}
+            >
+              <option value="">不指定發行單位</option>
+              {depts.data?.items.map((dept) => (
+                <option key={dept.id} value={dept.id}>
+                  {dept.name}
                 </option>
               ))}
             </Select>

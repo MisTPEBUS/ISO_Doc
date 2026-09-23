@@ -5,6 +5,7 @@ public sealed record AvailableDocumentResponse(
     string DocumentNo,
     string Name,
     string CompanyName,
+    string? DeptName,
     Guid? IsoCategoryId,
     string? IsoCategoryName,
     AvailableDocumentVersionResponse CurrentVersion,

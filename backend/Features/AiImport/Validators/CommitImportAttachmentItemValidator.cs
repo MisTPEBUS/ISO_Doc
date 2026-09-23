@@ -13,8 +13,8 @@ public sealed partial class CommitImportAttachmentItemValidator
         // 表單及附件編號可留空：部分掃描進來的檔案本來就沒有編號規則，留空一律視為新增表單及附件。
         RuleFor(item => item.AttachmentNo)
             .Cascade(CascadeMode.Stop)
-            .MaximumLength(50)
-            .WithMessage("表單及附件編號不可超過 50 個字元。")
+            .MaximumLength(100)
+            .WithMessage("表單及附件編號不可超過 100 個字元。")
             .Must(value => value is null || AttachmentNoPattern().IsMatch(value.Trim()))
             .WithMessage("表單及附件編號只能包含英文字母、數字與連字號，且開頭與結尾必須是字母或數字。")
             .When(item => !string.IsNullOrWhiteSpace(item.AttachmentNo))
@@ -44,6 +44,6 @@ public sealed partial class CommitImportAttachmentItemValidator
     private static bool IsAllowedExtension(string fileName) =>
         AttachmentFileRules.HasAllowedExtension(fileName);
 
-    [GeneratedRegex("^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$")]
+    [GeneratedRegex("^[A-Za-z0-9](?:[A-Za-z0-9-]{0,98}[A-Za-z0-9])?$")]
     private static partial Regex AttachmentNoPattern();
 }

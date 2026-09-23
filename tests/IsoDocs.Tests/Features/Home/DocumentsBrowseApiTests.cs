@@ -31,7 +31,12 @@ public sealed class DocumentsBrowseApiTests
     {
         await using var factory = new BrowseWebApplicationFactory(UserRole.USER);
         factory.BrowseStore.AddAvailable(
-            factory.DocumentId, factory.VersionId, factory.DeptId, "PUBLISHED", isActive: true);
+            factory.DocumentId,
+            factory.VersionId,
+            factory.DeptId,
+            "PUBLISHED",
+            isActive: true,
+            deptName: "品保部");
         factory.BrowseStore.AddAvailableAttachment(
             factory.DocumentId,
             factory.AttachmentId,
@@ -49,6 +54,7 @@ public sealed class DocumentsBrowseApiTests
         var document = Assert.Single(body!.Items);
         Assert.Equal(factory.DocumentId, document.DocumentId);
         Assert.Equal(factory.VersionId, document.CurrentVersion.VersionId);
+        Assert.Equal("品保部", document.DeptName);
         Assert.True(document.CurrentVersion.HasFile);
         var attachment = Assert.Single(document.Attachments);
         Assert.Equal(factory.AttachmentId, attachment.AttachmentId);
@@ -77,6 +83,7 @@ public sealed class DocumentsBrowseApiTests
             "/api/documents/available");
 
         var document = Assert.Single(body!.Items);
+        Assert.Null(document.DeptName);
         var attachment = Assert.Single(document.Attachments);
         Assert.Equal("FM-HR-002", attachment.AttachmentNo);
         Assert.Equal("加班申請表", attachment.Name);
@@ -393,7 +400,8 @@ internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
         string status,
         bool isActive,
         Guid? isoCategoryId = null,
-        string? isoCategoryName = null) =>
+        string? isoCategoryName = null,
+        string? deptName = null) =>
         _available.Add(new(
             deptId,
             status,
@@ -403,6 +411,7 @@ internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
                 "ISO-001",
                 "Quality Manual",
                 "Company A",
+                deptName,
                 isoCategoryId,
                 isoCategoryName,
                 new AvailableDocumentVersionResponse(

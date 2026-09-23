@@ -33,6 +33,7 @@ public sealed class EfDocumentStore(IsoDbContext dbContext) : IDocumentStore
         int take,
         CancellationToken cancellationToken) =>
         await Query(companyId, keyword)
+            .Include(document => document.Dept)
             .OrderBy(document => document.DocumentNo)
             .ThenBy(document => document.Id)
             .Skip(skip)
@@ -40,7 +41,9 @@ public sealed class EfDocumentStore(IsoDbContext dbContext) : IDocumentStore
             .ToListAsync(cancellationToken);
 
     public Task<Document?> FindByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.Documents.SingleOrDefaultAsync(document => document.Id == id, cancellationToken);
+        dbContext.Documents
+            .Include(document => document.Dept)
+            .SingleOrDefaultAsync(document => document.Id == id, cancellationToken);
 
     public async Task<IReadOnlyList<DocumentVersion>> ListVersionsAsync(
         Guid documentId,
@@ -103,6 +106,14 @@ public sealed class EfDocumentStore(IsoDbContext dbContext) : IDocumentStore
         CancellationToken cancellationToken) =>
         dbContext.IsoCategories.AnyAsync(
             category => category.Id == isoCategoryId && category.CompanyId == companyId,
+            cancellationToken);
+
+    public Task<Dept?> FindCompanyDeptAsync(
+        Guid companyId,
+        Guid deptId,
+        CancellationToken cancellationToken) =>
+        dbContext.Depts.SingleOrDefaultAsync(
+            dept => dept.Id == deptId && dept.CompanyId == companyId,
             cancellationToken);
 
     public void Add(Document document) => dbContext.Documents.Add(document);

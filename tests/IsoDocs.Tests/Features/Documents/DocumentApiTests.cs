@@ -115,6 +115,54 @@ public sealed class DocumentApiTests
     }
 
     [Fact]
+    public async Task Create_WithDeptId_ReturnsDeptIdAndDeptName()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        var deptId = factory.DocumentStore.AddDeptSeed(factory.CompanyA, "品保部");
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWriteRequest(
+            HttpMethod.Post,
+            "/api/documents",
+            token,
+            new CreateDocumentRequest(
+                factory.CompanyA, "ISO-001", "Quality Manual", DeptId: deptId));
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<DocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal(deptId, body.DeptId);
+        Assert.Equal("品保部", body.DeptName);
+    }
+
+    [Fact]
+    public async Task Create_WithDeptFromAnotherCompany_ReturnsValidationErrorAndDoesNotCreate()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        var deptOfCompanyB = factory.DocumentStore.AddDeptSeed(factory.CompanyB, "另一間公司的部門");
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWriteRequest(
+            HttpMethod.Post,
+            "/api/documents",
+            token,
+            new CreateDocumentRequest(
+                factory.CompanyA, "ISO-001", "Quality Manual", DeptId: deptOfCompanyB));
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Contains("deptId", body.Errors.Keys);
+        Assert.Empty(factory.DocumentStore.Documents);
+    }
+
+    [Fact]
     public async Task List_AsCompanyAdmin_ReturnsOnlyOwnCompanyDocuments()
     {
         await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
@@ -242,6 +290,45 @@ public sealed class DocumentApiTests
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("Original Name", document.Name);
+    }
+
+    [Fact]
+    public async Task Update_WithDeptId_ChangesDeptAndCanClearToNull()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        var oldDept = factory.DocumentStore.AddDeptSeed(factory.CompanyA, "品保部");
+        var newDept = factory.DocumentStore.AddDeptSeed(factory.CompanyA, "研發部");
+        var document = factory.DocumentStore.AddSeed(factory.CompanyA, "ISO-001", "Manual");
+        document.DeptId = oldDept;
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+
+        using var changeRequest = CreateWriteRequest(
+            HttpMethod.Put,
+            $"/api/documents/{document.Id}",
+            token,
+            new UpdateDocumentRequest("Manual", DeptId: newDept));
+        var changeResponse = await client.SendAsync(changeRequest);
+        var changed = await changeResponse.Content.ReadFromJsonAsync<DocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, changeResponse.StatusCode);
+        Assert.NotNull(changed);
+        Assert.Equal(newDept, changed.DeptId);
+        Assert.Equal("研發部", changed.DeptName);
+
+        using var clearRequest = CreateWriteRequest(
+            HttpMethod.Put,
+            $"/api/documents/{document.Id}",
+            token,
+            new UpdateDocumentRequest("Manual"));
+        var clearResponse = await client.SendAsync(clearRequest);
+        var cleared = await clearResponse.Content.ReadFromJsonAsync<DocumentResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, clearResponse.StatusCode);
+        Assert.NotNull(cleared);
+        Assert.Null(cleared.DeptId);
+        Assert.Null(cleared.DeptName);
     }
 
     [Fact]
@@ -552,6 +639,7 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
     private readonly HashSet<Guid> _companyIds = [.. companyIds];
     private readonly Dictionary<Guid, List<DocumentVersion>> _versions = [];
     private readonly Dictionary<Guid, List<Guid>> _deptIdsByCompany = [];
+    private readonly Dictionary<Guid, Dept> _deptsById = [];
     private readonly HashSet<(Guid CompanyId, Guid IsoCategoryId)> _isoCategoriesByCompany = [];
 
     public List<Document> Documents { get; } = [];
@@ -562,7 +650,7 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
     public int CommittedTransactionCount { get; private set; }
     public string? DocumentNoToFailOnSave { get; set; }
 
-    public Guid AddDeptSeed(Guid companyId)
+    public Guid AddDeptSeed(Guid companyId, string name = "部門")
     {
         var deptId = Guid.NewGuid();
         if (!_deptIdsByCompany.TryGetValue(companyId, out var deptIds))
@@ -572,6 +660,15 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
         }
 
         deptIds.Add(deptId);
+        var now = DateTimeOffset.UtcNow;
+        _deptsById[deptId] = new Dept
+        {
+            Id = deptId,
+            CompanyId = companyId,
+            Name = name,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
         return deptId;
     }
 
@@ -677,6 +774,7 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
             .ThenBy(document => document.Id)
             .Skip(skip)
             .Take(take)
+            .Select(WithDept)
             .ToArray();
         return Task.FromResult(documents);
     }
@@ -684,7 +782,18 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
     public Task<Document?> FindByIdAsync(Guid id, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(Documents.SingleOrDefault(document => document.Id == id));
+        var document = Documents.SingleOrDefault(document => document.Id == id);
+        return Task.FromResult(document is null ? null : WithDept(document));
+    }
+
+    /// <summary>
+    /// 模擬真正 EfDocumentStore 對 Dept 的 .Include()：依 DeptId 補上 Dept 導覽屬性，
+    /// 讓測試不必每次自己手動組裝，行為與正式環境的 join 結果一致。
+    /// </summary>
+    private Document WithDept(Document document)
+    {
+        document.Dept = document.DeptId is { } deptId ? _deptsById.GetValueOrDefault(deptId) : null;
+        return document;
     }
 
     public Task<IReadOnlyList<DocumentVersion>> ListVersionsAsync(
@@ -728,6 +837,16 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(_isoCategoriesByCompany.Contains((companyId, isoCategoryId)));
+    }
+
+    public Task<Dept?> FindCompanyDeptAsync(
+        Guid companyId,
+        Guid deptId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var dept = _deptsById.GetValueOrDefault(deptId);
+        return Task.FromResult(dept is not null && dept.CompanyId == companyId ? dept : null);
     }
 
     public void Add(Document document) => Documents.Add(document);

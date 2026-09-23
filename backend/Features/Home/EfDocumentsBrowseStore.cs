@@ -85,6 +85,7 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
                 item.DocumentNo,
                 item.DocumentName,
                 item.CompanyName,
+                item.DeptName,
                 item.IsoCategoryId,
                 item.IsoCategoryName,
                 new AvailableDocumentVersionResponse(
@@ -151,6 +152,9 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
                 on permission.DocumentId equals document.Id
             join company in dbContext.Companies.AsNoTracking()
                 on document.CompanyId equals company.Id
+            join issuingDept in dbContext.Depts.AsNoTracking()
+                on document.DeptId equals (Guid?)issuingDept.Id into issuingDepts
+            from issuingDept in issuingDepts.DefaultIfEmpty()
             join version in dbContext.DocumentVersions.AsNoTracking()
                 on document.Id equals version.DocumentId
             join category in dbContext.IsoCategories.AsNoTracking()
@@ -168,6 +172,7 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
                 DocumentNo = document.DocumentNo,
                 DocumentName = document.Name,
                 CompanyName = company.Name,
+                DeptName = issuingDept == null ? null : issuingDept.Name,
                 IsoCategoryId = document.IsoCategoryId,
                 IsoCategoryName = category == null ? null : category.Name,
                 VersionId = version.Id,
@@ -203,6 +208,8 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
         public string DocumentName { get; init; } = string.Empty;
 
         public string CompanyName { get; init; } = string.Empty;
+
+        public string? DeptName { get; init; }
 
         public Guid? IsoCategoryId { get; init; }
 

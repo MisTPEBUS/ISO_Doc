@@ -16,15 +16,18 @@ export const createAdminDocumentFormSchema = z.object({
     ),
   name: documentNameSchema,
   isoCategoryId: z.string().trim(),
+  deptId: z.string().trim(),
 })
 
 export const updateAdminDocumentFormSchema = z.object({
   name: documentNameSchema,
   isoCategoryId: z.string().trim(),
+  deptId: z.string().trim(),
 })
 
 export interface AdminDocumentFormValues {
   documentNo: string
   name: string
   isoCategoryId: string
+  deptId: string
 }

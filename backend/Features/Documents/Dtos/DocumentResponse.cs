@@ -9,4 +9,6 @@ public sealed record DocumentResponse(
     Guid CreatedBy,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    Guid? IsoCategoryId);
+    Guid? IsoCategoryId,
+    Guid? DeptId,
+    string? DeptName);

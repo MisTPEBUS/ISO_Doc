@@ -24,6 +24,12 @@ public interface IDocumentStore
         Guid companyId, CancellationToken cancellationToken);
     Task<bool> IsoCategoryBelongsToCompanyAsync(
         Guid companyId, Guid isoCategoryId, CancellationToken cancellationToken);
+    /// <summary>
+    /// 發行單位需屬於文件所在公司；找不到或不屬於該公司時回傳 null。
+    /// 同時回傳 Dept 實體（而非單純 bool），讓呼叫端不必再多查一次就能取得 dept.Name。
+    /// </summary>
+    Task<Dept?> FindCompanyDeptAsync(
+        Guid companyId, Guid deptId, CancellationToken cancellationToken);
     void Add(Document document);
     void Add(DocumentVersion version);
     void AddRange(IEnumerable<DocumentDeptPermission> permissions);

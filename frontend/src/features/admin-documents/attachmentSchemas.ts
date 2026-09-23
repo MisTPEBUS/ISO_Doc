@@ -8,12 +8,13 @@ export interface AttachmentFormValues {
 }
 
 export const createAttachmentFormSchema = z.object({
+  // 表單及附件編號可留空：部分掃描進來的檔案本來就沒有編號規則，留空一律視為新增表單及附件
+  // （比照後端 CreateAttachmentRequestValidator / CommitImportAttachmentItemValidator，前後端規則需一致）。
   attachmentNo: z.string()
     .trim()
-    .min(1, '請輸入表單及附件編號')
-    .max(50, '表單及附件編號不可超過 50 個字元')
-    .regex(
-      /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$/,
+    .max(100, '表單及附件編號不可超過 100 個字元')
+    .refine(
+      (value) => value.length === 0 || /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,98}[A-Za-z0-9])?$/.test(value),
       '表單及附件編號只能包含英文字母、數字與連字號，且開頭與結尾必須是字母或數字',
     ),
   name: z.string()

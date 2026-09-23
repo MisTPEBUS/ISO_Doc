@@ -86,6 +86,18 @@ public sealed class DocumentService(
                 FieldError("isoCategoryId", "指定的品質系統不存在，或不屬於此公司。"));
         }
 
+        Dept? dept = null;
+        if (request.DeptId is { } createDeptId)
+        {
+            dept = await documentStore.FindCompanyDeptAsync(
+                request.CompanyId, createDeptId, cancellationToken);
+            if (dept is null)
+            {
+                return Result<DocumentResponse>.ValidationFailed(
+                    FieldError("deptId", "指定的發行單位不存在，或不屬於此公司。"));
+            }
+        }
+
         var now = timeProvider.GetUtcNow();
         var document = new Document
         {
@@ -95,6 +107,8 @@ public sealed class DocumentService(
             Name = request.Name!.Trim(),
             IsActive = true,
             IsoCategoryId = request.IsoCategoryId,
+            DeptId = request.DeptId,
+            Dept = dept,
             CreatedBy = userId,
             CreatedAt = now,
             UpdatedAt = now
@@ -395,6 +409,8 @@ public sealed class DocumentService(
             document.CreatedAt,
             document.UpdatedAt,
             document.IsoCategoryId,
+            document.DeptId,
+            document.Dept?.Name,
             currentVersion is null ? null : ToVersionSummary(currentVersion),
             versionSummaries,
             attachments.Select(ToAttachmentSummary).ToArray()));
@@ -431,9 +447,23 @@ public sealed class DocumentService(
                 FieldError("isoCategoryId", "指定的品質系統不存在，或不屬於此公司。"));
         }
 
+        Dept? updateDept = null;
+        if (request.DeptId is { } updateDeptId)
+        {
+            updateDept = await documentStore.FindCompanyDeptAsync(
+                document.CompanyId, updateDeptId, cancellationToken);
+            if (updateDept is null)
+            {
+                return Result<DocumentResponse>.ValidationFailed(
+                    FieldError("deptId", "指定的發行單位不存在，或不屬於此公司。"));
+            }
+        }
+
         var oldValue = ToAuditValue(document);
         document.Name = request.Name!.Trim();
         document.IsoCategoryId = request.IsoCategoryId;
+        document.DeptId = request.DeptId;
+        document.Dept = updateDept;
         document.UpdatedAt = timeProvider.GetUtcNow();
         await documentStore.SaveChangesAsync(cancellationToken);
         await auditLogService.WriteAsync(
@@ -518,7 +548,9 @@ public sealed class DocumentService(
         document.CreatedBy,
         document.CreatedAt,
         document.UpdatedAt,
-        document.IsoCategoryId);
+        document.IsoCategoryId,
+        document.DeptId,
+        document.Dept?.Name);
 
     private static DocumentVersionSummary ToVersionSummary(DocumentVersion version) => new(
         version.Id,
@@ -552,7 +584,8 @@ public sealed class DocumentService(
         document_no = document.DocumentNo,
         name = document.Name,
         is_active = document.IsActive,
-        iso_category_id = document.IsoCategoryId
+        iso_category_id = document.IsoCategoryId,
+        dept_id = document.DeptId
     };
 
     private static Dictionary<string, string[]> ToErrors(ValidationResult validation) =>

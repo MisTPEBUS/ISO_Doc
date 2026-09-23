@@ -14,6 +14,8 @@ export interface AdminDocument {
   name: string
   isActive: boolean
   isoCategoryId: string | null
+  deptId: string | null
+  deptName: string | null
   createdBy: string
   createdAt: string
   updatedAt: string
@@ -54,11 +56,13 @@ export interface CreateAdminDocumentRequest {
   documentNo: string
   name: string
   isoCategoryId?: string | null
+  deptId?: string | null
 }
 
 export interface UpdateAdminDocumentRequest {
   name: string
   isoCategoryId?: string | null
+  deptId?: string | null
 }
 
 export interface BulkImportDocumentItem {

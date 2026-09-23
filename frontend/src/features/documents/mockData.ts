@@ -25,6 +25,7 @@ export const MOCK_AVAILABLE_DOCUMENTS: ReadonlyArray<AvailableDocumentResponse> 
   documentNo: String(documentNo),
   name: String(name),
   companyName: '首都客運股份有限公司',
+  deptName: index % 2 === 0 ? '品保部' : null,
   isoCategoryId: null,
   isoCategoryName: null,
   currentVersion: {
