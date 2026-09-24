@@ -21,6 +21,7 @@ public sealed class EfAttachmentVersionStore(IsoDbContext dbContext) : IAttachme
              attachment.IsActive,
              document.Id,
              document.CompanyId,
+             document.IsoCategoryId,
              document.DocumentNo,
              company.Code))
         .SingleOrDefaultAsync(cancellationToken);

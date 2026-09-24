@@ -14,7 +14,7 @@
    ├─ /documents         ISO 文件維護
    ├─ /permissions       權限維護
    ├─ /backup            ISO 文件備份
-   └─ /about             關於
+   └─ /about             版本資訊
 ```
 
 ## MainLayout
@@ -51,4 +51,4 @@
 3. ISO 文件維護
 4. 權限維護
 5. ISO 文件備份
-6. 關於
+6. 版本資訊

@@ -7,9 +7,8 @@ Reverse Proxy 終止 TLS 後轉發進來。三個 service 都不對外露 port�
 ## 前置需求
 
 - NAS 已開 SSH，且 DSM 版本的 Container Manager 支援 `docker compose`（v2 CLI）
-- 已在 DSM **控制台 → 共用資料夾** 建立一個叫 `ISO` 的共用資料夾（對應 `/volume1/ISO`）——
-  文件/表單及附件會直接放在這裡，才能用 File Station 瀏覽。單純用 SSH `mkdir /volume1/ISO`
-  不會自動變成共用資料夾，一定要透過 DSM 控制台建立。
+- 已建立 GCP bucket `sodu-iso-documents`，並準備具備物件讀取、建立、移動與列出權限的 service account JSON。
+- 舊的 `/volume1/ISO` 資料保留；正式環境切換後，API 只從 GCP bucket 讀寫檔案。
 - 其餘資料夾（`docker` 共用資料夾底下放 postgres 資料）下面步驟會建立
 
 ## 第一次部署
@@ -57,48 +56,27 @@ ssh <nasuser>@<nas-host> "mkdir -p /volume1/docker/iso/app && tar -xzf /volume1/
 ```bash
 cd /volume1/docker/iso/app/deploy/nas
 
-# 2. 建立資料目錄，權限對齊 backend Dockerfile 裡固定的 UID/GID(1654:1654)
+# 2. 建立資料目錄與憑證目錄，權限對齊 backend Dockerfile 裡固定的 UID/GID(1654:1654)
 mkdir -p /volume1/docker/iso/postgres-data
 mkdir -p /volume1/ISO/{store,staging,trash}
 chown -R 1654:1654 /volume1/ISO
-# 若要讓某個 DSM 使用者/群組能在 File Station 打開這個資料夾瀏覽，
-# 記得回 DSM 控制台 -> 共用資料夾 -> ISO -> 編輯權限，額外授予該帳號讀取權限
-# （DSM admin 預設就能透過 File Station 看到，不需要額外設定）
+mkdir -p /volume1/docker/iso/secrets
+# 將 service account JSON 放到 /volume1/docker/iso/secrets/gcp-service-account.json，
+# 設定容器使用者 1654 可讀；檔案不要放進專案或映像檔。
 
 # 3. 建立正式環境變數檔
 cp .env.nas.example .env.nas
-# 編輯 .env.nas：至少改 POSTGRES_PASSWORD，確認路徑跟上面建的資料夾一致
+# 編輯 .env.nas：設定資料庫密碼、GCP_STORAGE_BUCKET 與 GCP_SERVICE_ACCOUNT_PATH
 
 # 4. 先啟動 postgres，等它 healthy
 docker compose -f docker-compose.nas.yml --env-file .env.nas up -d postgres
 docker compose -f docker-compose.nas.yml --env-file .env.nas ps
 ```
 
-### 搬移現有本機開發資料（若有）
+### 既有資料
 
-在還沒啟動 backend 之前，把本機開發端的資料搬過來（backend 啟動時會自動套用
-migration，先還原好資料可以確保這個動作是 no-op，不會跟空 schema 打架）。
-
-**Windows 開發機：**
-
-```bash
-# dump 開發用 DB（custom format，不帶 owner 資訊）
-docker exec -t iso-postgres-development pg_dump -U root -d iso_development -F c --no-owner -f /tmp/iso_dev.dump
-docker cp iso-postgres-development:/tmp/iso_dev.dump ./iso_dev.dump
-
-# 傳到 NAS（scp 需要 Windows 內建 OpenSSH client，或改用 mapped SMB 磁碟機 + robocopy）
-scp ./iso_dev.dump <nasuser>@<nas-host>:/volume1/docker/iso/migration/iso_dev.dump
-scp -r backend/storage-data/store <nasuser>@<nas-host>:/volume1/ISO/store
-# 只搬 store/，staging/ 跟 trash/ 是暫存/軟刪除區，不要搬
-```
-
-**NAS：**
-
-```bash
-docker cp /volume1/docker/iso/migration/iso_dev.dump iso-postgres-production:/tmp/iso_dev.dump
-docker exec iso-postgres-production pg_restore -U <POSTGRES_USER> -d <POSTGRES_DB> \
-  --clean --if-exists --no-owner --no-privileges /tmp/iso_dev.dump
-```
+開發端 `storage-data` 不搬遷。正式環境若已有指向地端 `store/` 的 `file_key`，
+切換 GCP 前須另行處理這些物件；GCP 儲存供應者只讀取 bucket 中的物件。
 
 ### 啟動 backend + frontend
 
@@ -118,7 +96,7 @@ DSM 控制台 → 登入入口 → 進階 → 反向代理 → 新增規則：
 ## 驗證
 
 1. `curl -s https://<你的網域>/api/health` → 200
-2. 瀏覽器開 `https://<你的網域>/ISO/`，登入、下載一份文件確認 storage bind mount 生效
+2. 瀏覽器開 `https://<你的網域>/ISO/`，登入、上傳及下載一份新文件，確認 GCP bucket 內出現 `documents/iso/...` 物件
 3. `docker compose -f docker-compose.nas.yml --env-file .env.nas logs backend` 確認沒有 redirect loop / storage 錯誤
 
 ## 之後更新部署

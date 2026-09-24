@@ -8,7 +8,7 @@
 - 時間欄位統一使用 `timestamptz`
 - 資料表與欄位名稱統一使用 `snake_case`
 - ISO管理程序與表單及附件皆採版本化管理
-- 檔案實體透過 `IDocumentStorage` 儲存於 local filesystem / NAS bind mount，資料庫僅保存 Object Key 與檔案 Metadata
+- 檔案實體透過 `IDocumentStorage` 儲存；開發使用 local filesystem，正式環境使用 GCP Cloud Storage，資料庫僅保存 Object Key 與檔案 Metadata
 - 已發布版本原則上不進行 Hard Delete
 - 使用者透過部門取得公司歸屬，不在 `users` 重複保存 `company_id`
 - ISO管理程序版本與表單及附件皆支援「先建立中繼資料、稍後補檔」：未補檔前檔案欄位可為 NULL / 版本維持 `DRAFT`
@@ -122,7 +122,7 @@
 | `expired_date` | date | 是 | `NULL` | — | 失效日期 |
 | `page_count` | integer | 是 | `NULL` | — | 頁數 |
 | `memo` | text | 是 | `NULL` | — | 備註 |
-| `file_key` | varchar(500) | 是 | `NULL` | UNIQUE | MinIO Object Key（未補檔時為 NULL） |
+| `file_key` | varchar(1024) | 是 | `NULL` | UNIQUE | Storage Object Key（未補檔時為 NULL） |
 | `original_file_name` | varchar(255) | 是 | `NULL` | — | 原始檔名（未補檔時為 NULL） |
 | `content_type` | varchar(100) | 是 | `NULL` | — | MIME Type（未補檔時為 NULL） |
 | `file_size` | bigint | 是 | `NULL` | — | 檔案大小，Bytes（未補檔時為 NULL） |
@@ -190,7 +190,7 @@
 | `publish_date` | date | 是 | `NULL` | — | 發布日期 |
 | `effective_date` | date | 是 | `NULL` | INDEX | 生效日期（預先建立時可為 NULL） |
 | `expired_date` | date | 是 | `NULL` | — | 失效日期 |
-| `file_key` | varchar(500) | 是 | `NULL` | UNIQUE | MinIO Object Key（未補檔時為 NULL） |
+| `file_key` | varchar(1024) | 是 | `NULL` | UNIQUE | Storage Object Key（未補檔時為 NULL） |
 | `original_file_name` | varchar(255) | 是 | `NULL` | — | 原始檔名（未補檔時為 NULL） |
 | `content_type` | varchar(100) | 是 | `NULL` | — | MIME Type（未補檔時為 NULL） |
 | `file_size` | bigint | 是 | `NULL` | — | 檔案大小，Bytes（未補檔時為 NULL） |

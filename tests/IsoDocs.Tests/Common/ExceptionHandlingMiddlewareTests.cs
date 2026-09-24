@@ -1,5 +1,6 @@
 using System.Text.Json;
 using IsoDocument.Api.Common;
+using IsoDocument.Api.Storage;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
@@ -55,6 +56,24 @@ public sealed class ExceptionHandlingMiddlewareTests
         Assert.Equal(
             "處理要求時發生未預期的錯誤。",
             body.RootElement.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task InvokeAsync_WhenGcpUploadIsUnavailable_ReturnsRetryableProblemWithoutInternalDetails()
+    {
+        using var services = CreateServices();
+        var context = CreateContext(services);
+        var middleware = CreateMiddleware(services,
+            _ => throw new GcpStorageUnavailableException(
+                new TimeoutException("private bucket details")));
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
+        Assert.Equal("5", context.Response.Headers.RetryAfter);
+        using var body = await ReadBodyAsync(context);
+        Assert.DoesNotContain("private bucket details", body.RootElement.GetRawText());
+        Assert.Equal("檔案儲存暫時無法使用", body.RootElement.GetProperty("title").GetString());
     }
 
     [Fact]

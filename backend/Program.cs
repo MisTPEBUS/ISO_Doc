@@ -153,20 +153,56 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 });
+var storageProvider = builder.Configuration.GetValue<string>("Storage:Provider") ?? "Local";
 builder.Services.AddOptions<StorageOptions>()
     .BindConfiguration(StorageOptions.SectionName)
     .Validate(
-        options => !string.IsNullOrWhiteSpace(options.RootPath),
-        "Storage:RootPath must be configured.")
+        options => options.Provider is "Local" or "GoogleCloud",
+        "Storage:Provider must be Local or GoogleCloud.")
+    .Validate(
+        options => options.Provider != "Local" || !string.IsNullOrWhiteSpace(options.RootPath),
+        "Storage:RootPath must be configured for Local storage.")
+    .Validate(
+        options => options.Provider != "GoogleCloud" || !string.IsNullOrWhiteSpace(options.BucketName),
+        "Storage:BucketName must be configured for GoogleCloud storage.")
     .ValidateOnStart();
+builder.Services.AddOptions<GcpStorageOptions>()
+    .BindConfiguration(GcpStorageOptions.SectionName);
 builder.Services.AddOptions<AiImportLlmOptions>()
     .BindConfiguration(AiImportLlmOptions.SectionName);
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton<StoragePathGuard>();
 builder.Services.AddSingleton<StorageKeyBuilder>();
-builder.Services.AddSingleton<IDocumentStorage, LocalFileStorage>();
-builder.Services.AddHealthChecks()
-    .AddCheck<StorageHealthCheck>("storage", tags: ["startup"]);
+builder.Services.AddScoped<StorageObjectKeyService>();
+if (storageProvider == "GoogleCloud")
+{
+    builder.Services.AddSingleton(_ =>
+    {
+        var serviceAccount = builder.Configuration.GetSection("Gcp:ServiceAccount");
+        var privateKey = serviceAccount["private_key"];
+        if (string.IsNullOrWhiteSpace(privateKey))
+        {
+            return Google.Cloud.Storage.V1.StorageClient.Create();
+        }
+
+        var credentials = serviceAccount.GetChildren()
+            .ToDictionary(child => child.Key, child => child.Value);
+        var json = System.Text.Json.JsonSerializer.Serialize(credentials);
+        var credential = Google.Apis.Auth.OAuth2.CredentialFactory
+            .FromJson<Google.Apis.Auth.OAuth2.ServiceAccountCredential>(json)
+            .ToGoogleCredential();
+        return Google.Cloud.Storage.V1.StorageClient.Create(credential);
+    });
+    builder.Services.AddSingleton<IDocumentStorage, GcpDocumentStorage>();
+    builder.Services.AddHealthChecks()
+        .AddCheck<GcpStorageHealthCheck>("storage", tags: ["startup"]);
+}
+else
+{
+    builder.Services.AddSingleton<StoragePathGuard>();
+    builder.Services.AddSingleton<IDocumentStorage, LocalFileStorage>();
+    builder.Services.AddHealthChecks()
+        .AddCheck<StorageHealthCheck>("storage", tags: ["startup"]);
+}
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' was not found.");

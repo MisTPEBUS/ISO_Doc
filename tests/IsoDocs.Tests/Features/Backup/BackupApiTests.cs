@@ -60,11 +60,11 @@ public sealed class BackupApiTests
         await using var factory = new BackupWebApplicationFactory(UserRole.COMPANY_ADMIN);
         factory.Store.Files.AddRange(
         [
-            new("ISO-001", "1.1", "PUBLISHED", "published-main", "品質手冊.pdf", null),
-            new("ISO-001", "1.1", "PUBLISHED", "published-att", "表單.xlsx", "ATT-01"),
-            new("ISO-001", "1.0", "OBSOLETE", "obsolete-main", "舊版.pdf", null),
-            new("ISO-002", "1.0", "DRAFT", "draft-main", "草稿.pdf", null),
-            new("ISO-001", "1.1", "PUBLISHED", null, null, "ATT-02")
+            new("ISO-001", "1.1", "PUBLISHED", "published-main", "品質手冊.pdf", null, null),
+            new("ISO-001", "1.1", "PUBLISHED", "published-att", "表單.xlsx", Guid.Empty, "ATT-01"),
+            new("ISO-001", "1.0", "OBSOLETE", "obsolete-main", "舊版.pdf", null, null),
+            new("ISO-002", "1.0", "DRAFT", "draft-main", "草稿.pdf", null, null),
+            new("ISO-001", "1.1", "PUBLISHED", null, null, Guid.Empty, "ATT-02")
         ]);
         factory.Storage.Add("published-main", [1, 2, 3]);
         factory.Storage.Add("published-att", [4, 5, 6]);
@@ -100,7 +100,7 @@ public sealed class BackupApiTests
         const long fileSize = 8L * 1024 * 1024;
         var trackingStream = new IncrementalContentStream(fileSize);
         factory.Store.Files.Add(new(
-            "ISO-003", "2.0", "PUBLISHED", "large-main", "large.pdf", null));
+            "ISO-003", "2.0", "PUBLISHED", "large-main", "large.pdf", null, null));
         factory.Storage.Add("large-main", () => trackingStream);
         using var client = factory.CreateSecureClient();
         await LoginAsync(client);

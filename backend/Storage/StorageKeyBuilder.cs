@@ -56,6 +56,84 @@ public sealed partial class StorageKeyBuilder
         return $"store/{companyCode}/{documentNo}/att/{attachmentSegment}/v{version}/{fileId:N}_{ToSafeName(originalFileName)}";
     }
 
+    public string BuildGcpMainKey(
+        string prefix,
+        Guid companyId,
+        string? categoryName,
+        string documentNo,
+        string version,
+        Guid fileId,
+        string originalFileName)
+    {
+        ValidateIdentifier(documentNo, nameof(documentNo));
+        ValidateVersion(version);
+        return $"{ValidatePrefix(prefix)}/{companyId:D}/{CategorySegment(categoryName)}/{documentNo}" +
+            $"/main/v{version}/{CloudFileName(fileId, originalFileName)}";
+    }
+
+    public string BuildGcpAttachmentKey(
+        string prefix,
+        Guid companyId,
+        string? categoryName,
+        string documentNo,
+        string? attachmentNo,
+        Guid attachmentId,
+        string version,
+        Guid fileId,
+        string originalFileName)
+    {
+        ValidateIdentifier(documentNo, nameof(documentNo));
+        ValidateVersion(version);
+        var attachmentSegment = string.IsNullOrWhiteSpace(attachmentNo)
+            ? $"_{attachmentId:N}"
+            : EncodeSegment(attachmentNo);
+        return $"{ValidatePrefix(prefix)}/{companyId:D}/{CategorySegment(categoryName)}/{documentNo}" +
+            $"/att/{attachmentSegment}/v{version}/{CloudFileName(fileId, originalFileName)}";
+    }
+
+    private static string CategorySegment(string? categoryName) =>
+        string.IsNullOrWhiteSpace(categoryName)
+            ? "_uncategorized"
+            : EncodeSegment(categoryName);
+
+    private string CloudFileName(Guid fileId, string originalFileName)
+    {
+        var safeName = ToSafeName(originalFileName);
+        var extension = Path.GetExtension(safeName);
+        return $"{fileId:N}{extension}";
+    }
+
+    private static string EncodeSegment(string value)
+    {
+        var result = new StringBuilder();
+        foreach (var character in value.Trim())
+        {
+            if (character is '%' or '/' or '\\' || char.IsControl(character))
+            {
+                result.Append(Uri.EscapeDataString(character.ToString()));
+            }
+            else
+            {
+                result.Append(character);
+            }
+        }
+
+        var segment = result.ToString();
+        return segment is "." or ".." ? string.Concat(segment.Select(_ => "%2E")) : segment;
+    }
+
+    private static string ValidatePrefix(string prefix)
+    {
+        var trimmed = prefix.Trim('/');
+        if (trimmed.Length == 0 || trimmed.Contains('\\')
+            || trimmed.Split('/').Any(segment => segment is "" or "." or ".."))
+        {
+            throw new ArgumentException("Invalid GCP object prefix.", nameof(prefix));
+        }
+
+        return trimmed;
+    }
+
     public string ToSafeName(string originalFileName)
     {
         ArgumentNullException.ThrowIfNull(originalFileName);

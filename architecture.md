@@ -38,7 +38,7 @@
 | Auth          | Cookie-based (同源) + Antiforgery                  | —                                      |
 | Log           | Serilog（stdout structured）                       | —                                      |
 | 前端          | React + TypeScript + Vite（靜態檔，由 nginx 服務） | —                                      |
-| 部署          | Docker Compose，單一 instance，NAS bind mount      | —                                      |
+| 部署          | Docker Compose，單一 instance；檔案儲存可選 Local 或 GCP Cloud Storage      | —                                      |
 
 **單一 instance 前提**：背景工作（備份、GC）以 `BackgroundService` in-process 執行，不做水平擴展。若未來需要多 instance，需重新設計背景工作協調機制。
 
@@ -296,7 +296,7 @@ CRUD + 密碼重設。刪除一律是 `is_active = false`（軟刪除），理�
 
 - **Authorization**：全部透過 policy-based handler，不在 Controller 內寫角色判斷式。
 - **Validation**：FluentValidation，validator 與 feature 放在同一資料夾。
-- **File Storage**：`IDocumentStorage` 抽象，v1 實作 `LocalFileStorage`（NAS bind mount），未來可替換不影響 Service 層。`StorageKeyBuilder` 是唯一產生 `objectKey` 的入口。
+- **File Storage**：`IDocumentStorage` 抽象，保留 `LocalFileStorage`（NAS bind mount），新增 `GcpDocumentStorage`。`Storage:Provider` 選擇 `Local` 或 `GoogleCloud`；開發環境使用 Local，正式環境透過 `appsettings.Production.json` 使用 GoogleCloud，版控提供 `appsettings.Production.json.example` 範本。`StorageKeyBuilder` 是唯一產生 `objectKey` 的入口。GCP 物件以 `documents/iso/{companyId}/{isoCategoryName}/{documentNo}` 為前綴，主文與表單及附件分別放在 `main/` 和 `att/` 下；完整規則見 `SPEC.md` 第 5 節。下載與備份皆由 API 經 `IDocumentStorage` 串流讀取。
 - **Audit Log**：新增 / 修改 / 刪除 / 下載 / 備份等動作於 Service 層統一寫入，透過 `IAuditLogWriter`，避免各處手動組字串。
 - **並發控制**：`document_versions` 狀態切換（尤其 Publish）使用 DB transaction + partial unique index（同文件同時只能有一筆 `Published`）雙重保護。
 - **時間**：全部欄位使用 `timestamptz`，儲存 UTC，前端顯示轉 `Asia/Taipei`。

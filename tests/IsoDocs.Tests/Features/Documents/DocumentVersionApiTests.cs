@@ -25,6 +25,28 @@ namespace IsoDocs.Tests.Features.Documents;
 public sealed class DocumentVersionApiTests
 {
     [Fact]
+    public async Task UploadVersion_WhenGcpStorageIsUnavailable_Returns503WithoutCreatingVersion()
+    {
+        await using var factory = new DocumentVersionWebApplicationFactory();
+        factory.Storage.WriteException = new GcpStorageUnavailableException(
+            new TimeoutException("bucket details"));
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateUploadRequest(
+            factory.Document.Id, token, "1.0", UtcToday(), "manual.pdf", ValidPdf());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("5", response.Headers.RetryAfter?.Delta?.TotalSeconds.ToString("0")
+            ?? response.Headers.GetValues("Retry-After").Single());
+        Assert.Empty(factory.VersionStore.Versions);
+        Assert.False(factory.VersionStore.TransactionCommitted);
+        Assert.Empty(factory.Storage.WrittenKeys);
+    }
+
+    [Fact]
     public async Task UploadManualVersion_UsesRequestedVersionNumber()
     {
         await using var factory = new DocumentVersionWebApplicationFactory();
@@ -651,6 +673,7 @@ internal sealed class FakeDocumentStorage : IDocumentStorage
 
     public List<string> WrittenKeys { get; } = [];
     public List<string> TrashedKeys { get; } = [];
+    public Exception? WriteException { get; set; }
 
     /// <summary>
     /// 提供一個 key 實際的檔案內容，供之後 OpenReadAsync 讀回；不經過 WriteAsync
@@ -667,6 +690,7 @@ internal sealed class FakeDocumentStorage : IDocumentStorage
         Stream content,
         CancellationToken cancellationToken = default)
     {
+        if (WriteException is not null) throw WriteException;
         WrittenKeys.Add(objectKey);
         using var buffered = new MemoryStream();
         await content.CopyToAsync(buffered, cancellationToken);

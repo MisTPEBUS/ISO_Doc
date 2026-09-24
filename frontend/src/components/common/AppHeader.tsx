@@ -30,7 +30,7 @@ export interface AppHeaderProps {
 }
 
 export function AppHeader({
-  brand = "首都集團 ISO 文件管理系統 v2.0",
+  brand = "首都集團 ISO 文件管理系統 v2.2",
   brandMark = "ISO",
   companyName,
   departmentName,

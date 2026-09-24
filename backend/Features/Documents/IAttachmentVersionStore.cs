@@ -8,6 +8,7 @@ public sealed record AttachmentVersionCreateContext(
     bool AttachmentIsActive,
     Guid DocumentId,
     Guid CompanyId,
+    Guid? IsoCategoryId,
     string DocumentNo,
     string CompanyCode);
 

@@ -14,11 +14,12 @@ namespace IsoDocument.Api.Features.Documents;
 public sealed class AttachmentVersionService(
     IAttachmentVersionStore versionStore,
     IDocumentStorage documentStorage,
-    StorageKeyBuilder storageKeyBuilder,
+    StorageObjectKeyService storageKeyBuilder,
     ICurrentUser currentUser,
     IValidator<CreateAttachmentVersionRequest> validator,
     IOperationAuditLogService auditLogService,
-    TimeProvider timeProvider) : IAttachmentVersionService
+    TimeProvider timeProvider,
+    ILogger<AttachmentVersionService> logger) : IAttachmentVersionService
 {
     public async Task<Result<AttachmentVersionResponse>> CreateAsync(
         Guid attachmentId,
@@ -75,14 +76,12 @@ public sealed class AttachmentVersionService(
             await using var transaction = await versionStore.BeginTransactionAsync(cancellationToken);
             var publishDate = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
             var effectiveDate = request.EffectiveDate ?? publishDate;
-            var objectKey = storageKeyBuilder.BuildAttachmentKey(
-                context.CompanyCode,
-                context.DocumentNo,
-                context.AttachmentNo,
-                context.AttachmentId,
-                versionText,
-                Guid.NewGuid(),
-                request.File!.FileName);
+            var objectKey = await storageKeyBuilder.BuildAttachmentKeyAsync(
+                context.CompanyId, context.IsoCategoryId,
+                context.CompanyCode, context.DocumentNo,
+                context.AttachmentNo, context.AttachmentId,
+                versionText, Guid.NewGuid(), request.File!.FileName,
+                cancellationToken);
 
             await using var fileStream = request.File.OpenReadStream();
             var writeResult = await documentStorage.WriteAsync(
@@ -210,14 +209,7 @@ public sealed class AttachmentVersionService(
 
     private async Task TryMoveToTrashAsync(string objectKey)
     {
-        try
-        {
-            await documentStorage.MoveToTrashAsync(objectKey, CancellationToken.None);
-        }
-        catch
-        {
-            // Preserve the database/storage exception that caused the rollback.
-        }
+        await StorageCleanup.TryMoveToTrashAsync(documentStorage, objectKey, logger);
     }
 
     private static bool IsPublishedVersionConflict(Exception exception) => exception switch

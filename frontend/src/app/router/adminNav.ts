@@ -49,4 +49,16 @@ export const adminNavGroups: ReadonlyArray<SidebarNavGroup> = [
       },
     ],
   },
+  {
+    key: "system",
+    label: "系統",
+    items: [
+      {
+        key: "about",
+        label: "版本資訊",
+        href: "/admin/about",
+        icon: "版",
+      },
+    ],
+  },
 ];

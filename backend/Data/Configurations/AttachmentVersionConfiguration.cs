@@ -81,8 +81,8 @@ public sealed class AttachmentVersionConfiguration
 
         builder.Property(x => x.FileKey)
             .HasColumnName("file_key")
-            .HasColumnType("character varying(500)")
-            .HasMaxLength(500);
+            .HasColumnType("character varying(1024)")
+            .HasMaxLength(1024);
 
         builder.Property(x => x.OriginalFileName)
             .HasColumnName("original_file_name")

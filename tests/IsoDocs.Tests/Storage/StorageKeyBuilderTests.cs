@@ -33,6 +33,7 @@ public sealed class StorageKeyBuilderTests
             "ACME",
             "HR-I-01",
             "ATT-A",
+            Guid.Empty,
             "2.3",
             FileId,
             "表單及附件.XLSX");
@@ -81,5 +82,49 @@ public sealed class StorageKeyBuilderTests
             "1.0",
             FileId,
             "document.pdf"));
+    }
+
+    [Fact]
+    public void BuildGcpMainKey_UsesCompanyIdCategoryAndImmutableFileId()
+    {
+        var builder = new StorageKeyBuilder();
+        var companyId = Guid.Parse("aabbccdd-1122-3344-5566-77889900aabb");
+
+        var result = builder.BuildGcpMainKey(
+            "documents/iso", companyId, "ISO 9001", "HR-I-01", "2.1", FileId, "程序.PDF");
+
+        Assert.Equal(
+            "documents/iso/aabbccdd-1122-3344-5566-77889900aabb/ISO 9001/HR-I-01/main/v2.1/00112233445566778899aabbccddeeff.pdf",
+            result);
+    }
+
+    [Fact]
+    public void BuildGcpAttachmentKey_WithoutNumberUsesAttachmentId()
+    {
+        var builder = new StorageKeyBuilder();
+        var companyId = Guid.Parse("aabbccdd-1122-3344-5566-77889900aabb");
+        var attachmentId = Guid.Parse("12345678-1234-1234-1234-123456789abc");
+
+        var result = builder.BuildGcpAttachmentKey(
+            "documents/iso", companyId, null, "HR-I-01", null,
+            attachmentId, "1.0", FileId, "表單.xlsx");
+
+        Assert.Equal(
+            "documents/iso/aabbccdd-1122-3344-5566-77889900aabb/_uncategorized/HR-I-01/att/_12345678123412341234123456789abc/v1.0/00112233445566778899aabbccddeeff.xlsx",
+            result);
+    }
+
+    [Theory]
+    [InlineData("ISO/39001", "ISO%2F39001")]
+    [InlineData("..", "%2E%2E")]
+    [InlineData("中文分類", "中文分類")]
+    public void BuildGcpMainKey_KeepsCategoryInOneSegment(string category, string expectedSegment)
+    {
+        var builder = new StorageKeyBuilder();
+
+        var result = builder.BuildGcpMainKey(
+            "documents/iso", Guid.Empty, category, "DOC-1", "1.0", FileId, "original.pdf");
+
+        Assert.Contains($"/{expectedSegment}/DOC-1/main/", result);
     }
 }

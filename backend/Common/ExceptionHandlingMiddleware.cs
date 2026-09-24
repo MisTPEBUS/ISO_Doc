@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
+using IsoDocument.Api.Storage;
 
 namespace IsoDocument.Api.Common;
 
@@ -22,6 +23,21 @@ public sealed class ExceptionHandlingMiddleware(
             }
 
             await WriteDomainProblemAsync(context, exception.Result);
+        }
+        catch (GcpStorageUnavailableException exception)
+        {
+            logger.LogWarning(exception, "GCP storage upload is temporarily unavailable.");
+            if (context.Response.HasStarted)
+            {
+                throw;
+            }
+
+            await WriteProblemAsync(
+                context,
+                StatusCodes.Status503ServiceUnavailable,
+                "檔案儲存暫時無法使用",
+                "上傳未完成，請稍後重新整理並確認版本狀態後再試一次。",
+                retryAfterSeconds: 5);
         }
         catch (Exception exception)
         {
@@ -56,7 +72,8 @@ public sealed class ExceptionHandlingMiddleware(
         int status,
         string title,
         string? detail,
-        Dictionary<string, string[]>? errors = null)
+        Dictionary<string, string[]>? errors = null,
+        int? retryAfterSeconds = null)
     {
         if (context.Response.HasStarted)
         {
@@ -73,6 +90,11 @@ public sealed class ExceptionHandlingMiddleware(
 
         context.Response.Clear();
         context.Response.StatusCode = status;
+        if (retryAfterSeconds is not null)
+        {
+            context.Response.Headers.RetryAfter = retryAfterSeconds.Value.ToString(
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
         await context.Response.WriteAsJsonAsync(
             problem,
             problem.GetType(),

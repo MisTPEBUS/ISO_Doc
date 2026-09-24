@@ -35,11 +35,14 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
-      Storage__RootPath: /app/storage-data
+      Storage__Provider: GoogleCloud
+      Storage__BucketName: ${GCP_STORAGE_BUCKET}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp-service-account.json
       Database__AutoMigrate: "true"
       TZ: Asia/Taipei
     volumes:
       - ${NAS_STORAGE_DATA_PATH}:/app/storage-data
+      - ${GCP_SERVICE_ACCOUNT_PATH}:/run/secrets/gcp-service-account.json:ro
     restart: unless-stopped
     # 不對外露 port：ForwardedHeaders 信任模型假設 backend 只有 frontend(nginx) 打得到
 

@@ -20,13 +20,14 @@ public sealed class AiImportService(
     IAttachmentStore attachmentStore,
     IAttachmentVersionStore attachmentVersionStore,
     IDocumentStorage documentStorage,
-    StorageKeyBuilder storageKeyBuilder,
+    StorageObjectKeyService storageKeyBuilder,
     ICurrentUser currentUser,
     IValidator<CommitImportDocumentItem> documentItemValidator,
     IValidator<CommitImportAttachmentItem> attachmentItemValidator,
     ILlmImportAnalyzer llmAnalyzer,
     IOperationAuditLogService auditLogService,
-    TimeProvider timeProvider) : IAiImportService
+    TimeProvider timeProvider,
+    ILogger<AiImportService> logger) : IAiImportService
 {
     private static readonly byte[] PdfMagicBytes = "%PDF-"u8.ToArray();
 
@@ -415,8 +416,9 @@ public sealed class AiImportService(
             await using var transaction = await documentStore.BeginTransactionAsync(cancellationToken);
             if (item.MainFile is not null)
             {
-                var objectKey = storageKeyBuilder.BuildMainKey(
-                    companyCode!, documentNo, versionText, Guid.NewGuid(), item.MainFile.FileName);
+                var objectKey = await storageKeyBuilder.BuildMainKeyAsync(
+                    document, companyCode!, versionText, Guid.NewGuid(),
+                    item.MainFile.FileName, cancellationToken);
                 await using var fileStream = item.MainFile.OpenReadStream();
                 var writeResult = await documentStorage.WriteAsync(objectKey, fileStream, cancellationToken);
                 writtenObjectKey = objectKey;
@@ -504,8 +506,9 @@ public sealed class AiImportService(
         try
         {
             await using var transaction = await documentVersionStore.BeginTransactionAsync(cancellationToken);
-            var objectKey = storageKeyBuilder.BuildMainKey(
-                companyCode, document.DocumentNo, draftVersion.Version, Guid.NewGuid(), item.MainFile!.FileName);
+            var objectKey = await storageKeyBuilder.BuildMainKeyAsync(
+                document, companyCode, draftVersion.Version, Guid.NewGuid(),
+                item.MainFile!.FileName, cancellationToken);
             await using var fileStream = item.MainFile.OpenReadStream();
             var writeResult = await documentStorage.WriteAsync(objectKey, fileStream, cancellationToken);
             writtenObjectKey = objectKey;
@@ -612,8 +615,9 @@ public sealed class AiImportService(
         try
         {
             await using var transaction = await documentVersionStore.BeginTransactionAsync(cancellationToken);
-            var objectKey = storageKeyBuilder.BuildMainKey(
-                companyCode, document.DocumentNo, versionText, Guid.NewGuid(), item.MainFile!.FileName);
+            var objectKey = await storageKeyBuilder.BuildMainKeyAsync(
+                document, companyCode, versionText, Guid.NewGuid(),
+                item.MainFile!.FileName, cancellationToken);
             await using var fileStream = item.MainFile.OpenReadStream();
             var writeResult = await documentStorage.WriteAsync(objectKey, fileStream, cancellationToken);
             writtenObjectKey = objectKey;
@@ -810,9 +814,11 @@ public sealed class AiImportService(
         try
         {
             await using var transaction = await attachmentVersionStore.BeginTransactionAsync(cancellationToken);
-            var objectKey = storageKeyBuilder.BuildAttachmentKey(
-                context.CompanyCode, context.DocumentNo, attachmentNo, attachment.Id, versionText,
-                Guid.NewGuid(), item.File.FileName);
+            var objectKey = await storageKeyBuilder.BuildAttachmentKeyAsync(
+                context.CompanyId, context.IsoCategoryId,
+                context.CompanyCode, context.DocumentNo,
+                attachmentNo, attachment.Id, versionText,
+                Guid.NewGuid(), item.File.FileName, cancellationToken);
             await using var fileStream = item.File.OpenReadStream();
             var writeResult = await documentStorage.WriteAsync(objectKey, fileStream, cancellationToken);
             writtenObjectKey = objectKey;
@@ -998,14 +1004,7 @@ public sealed class AiImportService(
 
     private async Task TryMoveToTrashAsync(string objectKey)
     {
-        try
-        {
-            await documentStorage.MoveToTrashAsync(objectKey, CancellationToken.None);
-        }
-        catch
-        {
-            // Preserve the original exception that caused the rollback.
-        }
+        await StorageCleanup.TryMoveToTrashAsync(documentStorage, objectKey, logger);
     }
 
     private static async Task<bool> HasPdfMagicBytesAsync(

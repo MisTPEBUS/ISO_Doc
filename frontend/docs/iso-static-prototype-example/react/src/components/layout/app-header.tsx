@@ -17,7 +17,7 @@ export function AppHeader({
         <span className="grid size-6 place-items-center rounded-sm border border-shell-700 text-fine text-primary-on-shell">
           ISO
         </span>
-        <span>首都集團 ISO 文件管理系統 V2.0</span>
+        <span>首都集團 ISO 文件管理系統 V2.2</span>
       </div>
 
       <div className="flex items-center gap-3 text-label">

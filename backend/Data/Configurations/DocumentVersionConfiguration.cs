@@ -26,7 +26,7 @@ public sealed class DocumentVersionConfiguration : IEntityTypeConfiguration<Docu
         builder.Property(x => x.ExpiredDate).HasColumnName("expired_date").HasColumnType("date");
         builder.Property(x => x.PageCount).HasColumnName("page_count").HasColumnType("integer");
         builder.Property(x => x.Memo).HasColumnName("memo").HasColumnType("text");
-        builder.Property(x => x.FileKey).HasColumnName("file_key").HasColumnType("character varying(500)").HasMaxLength(500);
+        builder.Property(x => x.FileKey).HasColumnName("file_key").HasColumnType("character varying(1024)").HasMaxLength(1024);
         builder.Property(x => x.OriginalFileName).HasColumnName("original_file_name").HasColumnType("character varying(255)").HasMaxLength(255);
         builder.Property(x => x.ContentType).HasColumnName("content_type").HasColumnType("character varying(100)").HasMaxLength(100);
         builder.Property(x => x.FileSize).HasColumnName("file_size").HasColumnType("bigint");

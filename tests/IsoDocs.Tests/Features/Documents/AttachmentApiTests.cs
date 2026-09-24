@@ -509,7 +509,7 @@ internal sealed class FakeAttachmentVersionStore(
         var attachment = attachmentStore.Attachments.SingleOrDefault(x => x.Id == attachmentId);
         return Task.FromResult(attachment is null ? null : new AttachmentVersionCreateContext(
             attachment.Id, attachment.AttachmentNo, attachment.IsActive, document.Id,
-            document.CompanyId, document.DocumentNo, "COMPANYA"));
+            document.CompanyId, document.IsoCategoryId, document.DocumentNo, "COMPANYA"));
     }
 
     public Task<AttachmentVersion?> FindLatestVersionAsync(Guid attachmentId, CancellationToken ct) =>

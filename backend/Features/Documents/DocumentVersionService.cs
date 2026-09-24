@@ -14,12 +14,13 @@ namespace IsoDocument.Api.Features.Documents;
 public sealed class DocumentVersionService(
     IDocumentVersionStore versionStore,
     IDocumentStorage documentStorage,
-    StorageKeyBuilder storageKeyBuilder,
+    StorageObjectKeyService storageKeyBuilder,
     ICurrentUser currentUser,
     IValidator<CreateDocumentVersionRequest> validator,
     IValidator<UploadDocumentVersionFileRequest> uploadValidator,
     IOperationAuditLogService auditLogService,
-    TimeProvider timeProvider) : IDocumentVersionService
+    TimeProvider timeProvider,
+    ILogger<DocumentVersionService> logger) : IDocumentVersionService
 {
     private static readonly byte[] PdfMagicBytes = "%PDF-"u8.ToArray();
 
@@ -93,12 +94,9 @@ public sealed class DocumentVersionService(
             await using var transaction = await versionStore.BeginTransactionAsync(cancellationToken);
             var publishDate = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
             var effectiveDate = request.EffectiveDate!.Value;
-            var objectKey = storageKeyBuilder.BuildMainKey(
-                companyCode,
-                document.DocumentNo,
-                versionText,
-                Guid.NewGuid(),
-                request.File!.FileName);
+            var objectKey = await storageKeyBuilder.BuildMainKeyAsync(
+                document, companyCode, versionText, Guid.NewGuid(),
+                request.File!.FileName, cancellationToken);
 
             await using var fileStream = request.File.OpenReadStream();
             var writeResult = await documentStorage.WriteAsync(
@@ -281,12 +279,9 @@ public sealed class DocumentVersionService(
         try
         {
             await using var transaction = await versionStore.BeginTransactionAsync(cancellationToken);
-            var objectKey = storageKeyBuilder.BuildMainKey(
-                companyCode,
-                document.DocumentNo,
-                version.Version,
-                Guid.NewGuid(),
-                request.File!.FileName);
+            var objectKey = await storageKeyBuilder.BuildMainKeyAsync(
+                document, companyCode, version.Version, Guid.NewGuid(),
+                request.File!.FileName, cancellationToken);
 
             await using var fileStream = request.File.OpenReadStream();
             var writeResult = await documentStorage.WriteAsync(
@@ -415,14 +410,7 @@ public sealed class DocumentVersionService(
 
     private async Task TryMoveToTrashAsync(string objectKey)
     {
-        try
-        {
-            await documentStorage.MoveToTrashAsync(objectKey, CancellationToken.None);
-        }
-        catch
-        {
-            // Preserve the database/storage exception that caused the rollback.
-        }
+        await StorageCleanup.TryMoveToTrashAsync(documentStorage, objectKey, logger);
     }
 
     private static async Task<bool> HasPdfMagicBytesAsync(

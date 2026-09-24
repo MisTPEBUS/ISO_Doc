@@ -6,6 +6,7 @@ import { RoleGuard } from "./app/guards/RoleGuard";
 import { PageLoading } from "./components/common";
 import { USER_ROLE } from "./features/auth/types";
 import { AdminLayout } from "./layouts/AdminLayout";
+import { AboutPage } from "./pages/admin/about/AboutPage";
 import { AdminDocumentsPage } from "./pages/admin/documents/AdminDocumentsPage";
 import { AdminDocumentDetailPage } from "./pages/admin/documents/[id]/AdminDocumentDetailPage";
 import { AdminDocumentImportPage } from "./pages/admin/documents/import/AdminDocumentImportPage";
@@ -77,6 +78,7 @@ function App() {
             <Route path="iso-categories" element={<IsoCategoriesPage />} />
             <Route path="permissions" element={<PermissionsPage />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="about" element={<AboutPage />} />
           </Route>
           {ComponentPreview && (
             <Route path="/_component-preview" element={<ComponentPreview />} />
