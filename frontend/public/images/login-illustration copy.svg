@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="80 20 540 480" width="540" height="480" role="img" aria-labelledby="title">
+  <title id="title">首都、北客、大都會共用 ISO 文件管理示意插圖</title>
+
+  <!-- Background decorations -->
+  <g fill="none" stroke="#B4C3CF" stroke-width="3" stroke-linecap="round">
+    <path d="M335 30v18M326 39h18" />
+    <path d="M578 322v14M571 329h14" />
+    <path d="M112 102v14M105 109h14" />
+  </g>
+  <g fill="#B4C3CF">
+    <circle cx="280" cy="98" r="4" />
+    <circle cx="480" cy="72" r="4" />
+    <circle cx="560" cy="120" r="3" />
+    <circle cx="150" cy="172" r="3" />
+    <circle cx="206" cy="80" r="3" />
+    <circle cx="112" cy="222" r="4" />
+    <circle cx="592" cy="228" r="5" />
+    <circle cx="120" cy="300" r="3" />
+  </g>
+
+  <!-- Backdrop -->
+  <circle cx="360" cy="230" r="140" fill="#DCE6EF" />
+  <g fill="#C9D6E2">
+    <circle cx="262" cy="200" r="11" />
+    <circle cx="458" cy="236" r="9" />
+    <circle cx="300" cy="318" r="10" />
+    <circle cx="452" cy="318" r="8" />
+  </g>
+
+  <!-- Orbit -->
+  <ellipse cx="360" cy="215" rx="185" ry="55" transform="rotate(12 360 215)" fill="none" stroke="#153A5B" stroke-width="5" />
+
+  <!-- Central controlled document -->
+  <path d="M313 140h80l22 22v110a8 8 0 0 1-8 8h-94a8 8 0 0 1-8-8v-124a8 8 0 0 1 8-8z" fill="#FFFFFF" stroke="#153A5B" stroke-width="4" stroke-linejoin="round" />
+  <path d="M393 140v22h22" fill="#D6E2EC" stroke="#153A5B" stroke-width="4" stroke-linejoin="round" />
+  <rect x="320" y="156" width="36" height="18" rx="3" fill="#2563EB" />
+  <text x="338" y="169.5" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" text-anchor="middle">ISO</text>
+  <g fill="#C9D6E2">
+    <rect x="320" y="186" width="80" height="7" rx="3.5" />
+    <rect x="320" y="200" width="64" height="7" rx="3.5" />
+    <rect x="320" y="214" width="80" height="7" rx="3.5" />
+    <rect x="320" y="228" width="52" height="7" rx="3.5" />
+  </g>
+  <circle cx="336" cy="258" r="14" fill="#F4C542" />
+  <path d="M329 258l5 5 9-10" fill="none" stroke="#153A5B" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Version tag -->
+  <rect x="368" y="112" width="48" height="24" rx="12" fill="#153A5B" />
+  <text x="392" y="128.5" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" text-anchor="middle">v2.0</text>
+
+  <!-- Pin: folder -->
+  <path d="M177 118a24 24 0 1 1 48 0c0 13-12 22-24 38-12-16-24-25-24-38z" fill="#F4C542" />
+  <path d="M190 111h8l3 3h12v14h-23z" fill="#FFFFFF" />
+
+  <!-- Pin: permission shield -->
+  <path d="M436 149a24 24 0 1 1 48 0c0 13-12 22-24 38-12-16-24-25-24-38z" fill="#2563EB" />
+  <path d="M460 136l11 4v8c0 8-5 13-11 15-6-2-11-7-11-15v-8z" fill="#FFFFFF" />
+  <path d="M455 149l4 4 7-8" fill="none" stroke="#2563EB" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Pin: history -->
+  <path d="M498 182a24 24 0 1 1 48 0c0 13-12 22-24 38-12-16-24-25-24-38z" fill="#94A3B8" />
+  <circle cx="522" cy="182" r="10" fill="none" stroke="#FFFFFF" stroke-width="3" />
+  <path d="M522 176v6l4 3" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Magnifier over the document -->
+  <path d="M444 324l-18-18" stroke="#153A5B" stroke-width="8" stroke-linecap="round" />
+  <circle cx="410" cy="290" r="22" fill="#EFF6FF" stroke="#153A5B" stroke-width="7" />
+
+  <!-- Group companies: sticker-style lettering (white outline + offset shadow) -->
+  <g font-family="'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', 'Heiti TC', sans-serif" font-weight="900" text-anchor="middle" stroke-linejoin="round">
+    <g transform="rotate(-8 192 352)" font-size="50">
+      <text x="197" y="375" fill="#153A5B" stroke="#153A5B" stroke-width="12">首都</text>
+      <text x="192" y="369" fill="#2563EB" stroke="#FFFFFF" stroke-width="12" paint-order="stroke">首都</text>
+    </g>
+    <g transform="rotate(8 505 356)" font-size="50">
+      <text x="510" y="379" fill="#153A5B" stroke="#153A5B" stroke-width="12">北客</text>
+      <text x="505" y="373" fill="#F4C542" stroke="#FFFFFF" stroke-width="12" paint-order="stroke">北客</text>
+    </g>
+    <g transform="rotate(-3 345 448)" font-size="46">
+      <text x="350" y="471" fill="#F4C542" stroke="#F4C542" stroke-width="12">大都會</text>
+      <text x="345" y="465" fill="#153A5B" stroke="#FFFFFF" stroke-width="12" paint-order="stroke">大都會</text>
+    </g>
+  </g>
+
+  <!-- Sparkles -->
+  <g fill="#F4C542">
+    <path d="M146 306l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" />
+    <path d="M562 318l2.5 6.5 6.5 2.5-6.5 2.5-2.5 6.5-2.5-6.5-6.5-2.5 6.5-2.5z" />
+    <path d="M268 430l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" />
+  </g>
+</svg>

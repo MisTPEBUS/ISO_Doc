@@ -58,7 +58,7 @@ export function Modal({
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
       className={classNames(
-        'm-auto w-[calc(100%-2rem)] rounded-md border border-line bg-surface p-0 text-left text-ink shadow-float backdrop:bg-shell-900/50',
+        'm-auto w-[calc(100%-2rem)] rounded-md border border-line-strong bg-surface p-0 text-left text-ink shadow-float backdrop:bg-overlay',
         sizeClasses[size],
         className,
       )}

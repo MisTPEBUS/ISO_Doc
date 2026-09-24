@@ -5,6 +5,8 @@
 ```text
 /
 ├─ /                     首頁
+├─ /login                原版登入頁
+├─ /login_1              高對比登入頁
 ├─ /change-password      修改密碼
 └─ /admin
    ├─ /departments       部門維護

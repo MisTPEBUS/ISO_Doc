@@ -19,6 +19,24 @@ export function useDepts(params: ListDeptsParams, enabled = true) {
   })
 }
 
+/** Select options must include every company department, not only the first page. */
+export function useCompanyDeptOptions(companyId: string | undefined) {
+  return useQuery({
+    queryKey: [...deptKeys.lists(), 'options', companyId],
+    enabled: companyId !== undefined,
+    queryFn: async () => {
+      const first = await departmentsApi.list({ companyId, page: 1, pageSize: 100 })
+      const items = [...first.items]
+      const totalPages = Math.ceil(first.totalCount / first.pageSize)
+      for (let page = 2; page <= totalPages; page += 1) {
+        const result = await departmentsApi.list({ companyId, page, pageSize: first.pageSize })
+        items.push(...result.items)
+      }
+      return items
+    },
+  })
+}
+
 export function useDept(id: string | undefined) {
   return useQuery({
     queryKey: deptKeys.detail(id ?? ''),

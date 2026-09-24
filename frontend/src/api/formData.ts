@@ -71,6 +71,8 @@ export interface AiImportCommitAttachmentInput {
 export interface AiImportCommitDocumentInput {
   documentNo: string
   name: string
+  isoCategoryId?: string
+  deptId?: string
   version: string
   effectiveDate: string
   pageCount?: number
@@ -95,6 +97,12 @@ export function buildAiImportCommitFormData(input: AiImportCommitFormDataInput):
     const prefix = `documents[${documentIndex}]`
     formData.append(`${prefix}.documentNo`, document.documentNo)
     formData.append(`${prefix}.name`, document.name)
+    if (document.isoCategoryId) {
+      formData.append(`${prefix}.isoCategoryId`, document.isoCategoryId)
+    }
+    if (document.deptId) {
+      formData.append(`${prefix}.deptId`, document.deptId)
+    }
     formData.append(`${prefix}.version`, document.version)
     formData.append(`${prefix}.effectiveDate`, document.effectiveDate)
     if (document.pageCount !== undefined) {

@@ -2,7 +2,6 @@ import {
   CheckCircle2,
   ChevronRight,
   Circle,
-  FileArchive,
   FileStack,
   FolderOpen,
   LoaderCircle,
@@ -49,6 +48,8 @@ import {
 } from "@/features/admin-attachments/queries";
 import type { AnalyzeImportResponse } from "@/features/admin-attachments/types";
 import { useCurrentUser } from "@/features/auth/queries";
+import { useCompanyDeptOptions } from "@/features/departments/queries";
+import { useCompanyIsoCategoryOptions } from "@/features/iso-categories/queries";
 
 const ROLE_LABELS: Record<FileRole, string> = {
   [FILE_ROLE.Main]: "ISO管理程序",
@@ -90,6 +91,11 @@ interface AnalysisHint {
   suggestedVersion: string | null;
   effectiveDate: string | null;
   predictedAction: string;
+}
+
+interface DocumentMetadataSelection {
+  isoCategoryId: string;
+  deptId: string;
 }
 
 function fileIdentity(file: ParsedAttachmentFile): string {
@@ -191,7 +197,7 @@ function applyAnalysisToFiles(
       updates.set(attachment.relativePath, {
         role: FILE_ROLE.Attachment,
         documentCode: document.documentNo,
-        attachmentCode: attachment.attachmentNo,
+        attachmentCode: attachment.attachmentNo ?? "",
         displayName: attachment.name,
       });
     }
@@ -225,6 +231,9 @@ export function AdminAttachmentImportPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [message, setMessage] = useState<string>();
   const [analysis, setAnalysis] = useState<AnalyzeImportResponse>();
+  const [metadataByMainId, setMetadataByMainId] = useState<
+    Record<string, DocumentMetadataSelection>
+  >({});
   const [importProgress, setImportProgress] = useState<ImportProgress>();
   const [summary, setSummary] = useState<CommitSummary>();
   const [submitError, setSubmitError] = useState<string>();
@@ -233,6 +242,8 @@ export function AdminAttachmentImportPage() {
   const companyId = currentUser.data?.companyId;
   const analyzeImport = useAnalyzeImport();
   const commitImport = useCommitImport();
+  const isoCategories = useCompanyIsoCategoryOptions(companyId);
+  const depts = useCompanyDeptOptions(companyId);
 
   useEffect(
     () => () => {
@@ -241,7 +252,20 @@ export function AdminAttachmentImportPage() {
     [],
   );
 
-  const groups = attachmentFileGroups(files);
+  const confirmedMissingMainCodes = new Set(
+    analysis?.documents
+      .filter(
+        (document) =>
+          document.mainFile === null &&
+          document.attachments.some(
+            (attachment) =>
+              attachment.predictedAction === "NEW_ATTACHMENT" ||
+              attachment.predictedAction === "NEW_VERSION",
+          ),
+      )
+      .map((document) => document.documentNo) ?? [],
+  );
+  const groups = attachmentFileGroups(files, confirmedMissingMainCodes);
   const analysisHints = buildAnalysisHints(analysis);
   const normalizedKeyword = keyword.trim().toLowerCase();
   const visibleGroups = groups.filter((group) => {
@@ -268,12 +292,11 @@ export function AdminAttachmentImportPage() {
     (file) => file.role === FILE_ROLE.Attachment,
   ).length;
   const duplicateMainIds = duplicateMainFileIds(groups);
-  const warningCount = files.filter(
-    (file) =>
-      file.parseStatus !== PARSE_STATUS.Ok ||
-      file.role === FILE_ROLE.MainCandidate ||
-      file.role === FILE_ROLE.Unresolved ||
-      duplicateMainIds.has(file.id),
+  const completeGroupCount = groups.filter(
+    (group) => group.status === GROUP_STATUS.Ok,
+  ).length;
+  const warningCount = groups.filter(
+    (group) => group.status === GROUP_STATUS.Warning,
   ).length;
   const missingMainCount = groups.filter(
     (group) => group.status === GROUP_STATUS.MissingMain,
@@ -281,8 +304,7 @@ export function AdminAttachmentImportPage() {
   const isAnalyzing = analyzeImport.isPending;
   const isSubmitting = importProgress?.status === IMPORT_STATUS.Running;
   const isBusy = isSubmitting || isAnalyzing;
-  const canSubmit =
-    files.length > 0 && warningCount === 0 && missingMainCount === 0;
+  const canSubmit = files.length > 0 && completeGroupCount === groups.length;
   const progressPercentage =
     importProgress === undefined
       ? 0
@@ -296,6 +318,28 @@ export function AdminAttachmentImportPage() {
     setSubmitError(undefined);
     setSummary(undefined);
     setAnalysis(undefined);
+    setStatusFilter((current) =>
+      current === GROUP_STATUS.MissingMain ? GROUP_STATUS.All : current,
+    );
+  }
+
+  function updateDocumentMetadata(
+    mainFileId: string,
+    field: keyof DocumentMetadataSelection,
+    value: string,
+  ) {
+    submissionRunRef.current += 1;
+    setImportProgress(undefined);
+    setSubmitError(undefined);
+    setSummary(undefined);
+    setMetadataByMainId((current) => ({
+      ...current,
+      [mainFileId]: {
+        isoCategoryId: current[mainFileId]?.isoCategoryId ?? "",
+        deptId: current[mainFileId]?.deptId ?? "",
+        [field]: value,
+      },
+    }));
   }
 
   function addFiles(selectedFiles: File[]) {
@@ -508,6 +552,7 @@ export function AdminAttachmentImportPage() {
         const mainHint = mainFile
           ? analysisHints.get(mainFile.relativePath)
           : undefined;
+        const metadata = mainFile ? metadataByMainId[mainFile.id] : undefined;
 
         const formData = buildAiImportCommitFormData({
           companyId,
@@ -516,6 +561,8 @@ export function AdminAttachmentImportPage() {
             {
               documentNo: group.documentCode,
               name: mainFile?.displayName || group.documentCode,
+              isoCategoryId: metadata?.isoCategoryId || undefined,
+              deptId: metadata?.deptId || undefined,
               version: mainHint?.suggestedVersion ?? "1.0",
               effectiveDate: mainHint?.effectiveDate ?? todayIsoDate(),
               mainFile: mainFile?.file,
@@ -674,6 +721,12 @@ export function AdminAttachmentImportPage() {
         分析」會呼叫後端修正待確認項目並取得建議版號，「儲存」會依ISO管理程序群組逐批寫入資料庫與檔案。
       </Alert>
 
+      {(isoCategories.isError || depts.isError) && (
+        <Alert className="mb-4" variant="warning" title="部分選項無法載入">
+          品質系統或發行部門清單載入失敗；未指定時新文件會留空，既有文件保留原值。
+        </Alert>
+      )}
+
       <section className="border border-line-strong bg-surface">
         <div
           role="button"
@@ -757,10 +810,13 @@ export function AdminAttachmentImportPage() {
             <div className="flex flex-wrap gap-2">
               <Badge variant="neutral">ISO管理程序群組 {groups.length}</Badge>
               <Badge variant="neutral">檔案 {files.length}</Badge>
+              <Badge variant="success">完整 {completeGroupCount}</Badge>
               <Badge variant="success">ISO管理程序 {mainCount}</Badge>
               <Badge variant="info">表單及附件 {attachmentCount}</Badge>
               <Badge variant="warning">待確認 {warningCount}</Badge>
-              <Badge variant="danger">缺ISO管理程序 {missingMainCount}</Badge>
+              {missingMainCount > 0 && (
+                <Badge variant="danger">缺ISO管理程序 {missingMainCount}</Badge>
+              )}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <div
@@ -801,6 +857,7 @@ export function AdminAttachmentImportPage() {
                   onClick={() => {
                     resetProgress();
                     setFiles([]);
+                    setMetadataByMainId({});
                     setOpenGroupKeys(new Set());
                     setMessage("資料已清除。");
                   }}
@@ -852,7 +909,9 @@ export function AdminAttachmentImportPage() {
             className="border-t border-line px-4 py-2 text-meta text-state-danger"
             role="status"
           >
-            尚有待確認或缺少ISO管理程序的資料，請完成修正後再儲存。
+            {missingMainCount > 0
+              ? "尚有待確認或缺少ISO管理程序的資料，請完成修正後再儲存。"
+              : "尚有待確認的資料，請完成修正後再儲存。"}
           </p>
         )}
 
@@ -947,7 +1006,9 @@ export function AdminAttachmentImportPage() {
           >
             <option value={GROUP_STATUS.All}>全部群組</option>
             <option value={GROUP_STATUS.Ok}>完整</option>
-            <option value={GROUP_STATUS.MissingMain}>缺ISO管理程序</option>
+            {missingMainCount > 0 && (
+              <option value={GROUP_STATUS.MissingMain}>缺ISO管理程序</option>
+            )}
             <option value={GROUP_STATUS.Warning}>有待確認</option>
           </Select>
         </div>
@@ -975,6 +1036,12 @@ export function AdminAttachmentImportPage() {
           ) : (
             visibleGroups.map((group) => {
               const open = openGroupKeys.has(group.key);
+              const mainFile = group.files.find(
+                (file) => file.role === FILE_ROLE.Main,
+              );
+              const metadata = mainFile
+                ? metadataByMainId[mainFile.id]
+                : undefined;
               const groupMainCount = group.files.filter(
                 (file) => file.role === FILE_ROLE.Main,
               ).length;
@@ -1014,7 +1081,9 @@ export function AdminAttachmentImportPage() {
                       </p>
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
-                      <Badge variant="success">ISO管理程序 {groupMainCount}</Badge>
+                      <Badge variant="success">
+                        ISO管理程序 {groupMainCount}
+                      </Badge>
                       <Badge variant="neutral">
                         表單及附件 {groupAttachmentCount}
                       </Badge>
@@ -1048,6 +1117,62 @@ export function AdminAttachmentImportPage() {
                         <Badge variant="neutral">
                           共 {group.files.length} 個檔案
                         </Badge>
+                        {mainFile && (
+                          <>
+                            <label
+                              className="text-label font-medium text-ink"
+                              htmlFor={`group-category-${mainFile.id}`}
+                            >
+                              品質系統
+                            </label>
+                            <Select
+                              id={`group-category-${mainFile.id}`}
+                              className="w-52"
+                              value={metadata?.isoCategoryId ?? ""}
+                              disabled={isBusy || isoCategories.isPending || isoCategories.isError}
+                              onChange={(event) =>
+                                updateDocumentMetadata(
+                                  mainFile.id,
+                                  "isoCategoryId",
+                                  event.target.value,
+                                )
+                              }
+                            >
+                              <option value="">不指定（既有文件沿用）</option>
+                              {isoCategories.data?.map((category) => (
+                                <option key={category.id} value={category.id}>
+                                  {category.name}
+                                </option>
+                              ))}
+                            </Select>
+                            <label
+                              className="text-label font-medium text-ink"
+                              htmlFor={`group-dept-${mainFile.id}`}
+                            >
+                              發行部門
+                            </label>
+                            <Select
+                              id={`group-dept-${mainFile.id}`}
+                              className="w-52"
+                              value={metadata?.deptId ?? ""}
+                              disabled={isBusy || depts.isPending || depts.isError}
+                              onChange={(event) =>
+                                updateDocumentMetadata(
+                                  mainFile.id,
+                                  "deptId",
+                                  event.target.value,
+                                )
+                              }
+                            >
+                              <option value="">不指定（既有文件沿用）</option>
+                              {depts.data?.map((dept) => (
+                                <option key={dept.id} value={dept.id}>
+                                  {dept.name}
+                                </option>
+                              ))}
+                            </Select>
+                          </>
+                        )}
                       </div>
 
                       <div className="overflow-x-auto">
@@ -1165,7 +1290,9 @@ export function AdminAttachmentImportPage() {
                                         <Badge variant="success">已辨識</Badge>
                                       ) : file.role ===
                                         FILE_ROLE.MainCandidate ? (
-                                        <Badge variant="info">疑似ISO管理程序</Badge>
+                                        <Badge variant="info">
+                                          疑似ISO管理程序
+                                        </Badge>
                                       ) : (
                                         <Badge variant="warning">待確認</Badge>
                                       )}
@@ -1308,15 +1435,6 @@ export function AdminAttachmentImportPage() {
               );
             })
           )}
-        </div>
-
-        <div className="flex items-start gap-2 border-t border-line px-4 py-3 text-meta text-ink-muted">
-          <FileArchive className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <p>
-            判斷規則依 IFOLDER
-            範例：含表單及附件尾碼者辨識為表單及附件；ISO管理程序編號檔名辨識為疑似ISO管理程序；資料夾內無法辨識編號的檔案歸入該ISO管理程序並標記待確認。ZIP
-            不會自動解壓。
-          </p>
         </div>
       </section>
     </section>

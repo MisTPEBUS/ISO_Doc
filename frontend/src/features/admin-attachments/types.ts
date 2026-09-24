@@ -29,7 +29,7 @@ export interface ExistingAttachmentState {
 }
 
 export interface AnalyzedAttachment {
-  attachmentNo: string
+  attachmentNo: string | null
   name: string
   effectiveDate: string | null
   suggestedVersion: string | null

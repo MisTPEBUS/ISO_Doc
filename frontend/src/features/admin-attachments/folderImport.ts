@@ -61,6 +61,17 @@ export interface ExportedAttachmentFile {
   parseStatus: ParseStatus
 }
 
+const DOCUMENT_NO_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$/
+const ATTACHMENT_NO_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,98}[A-Za-z0-9])?$/
+const ATTACHMENT_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'odt', 'ods',
+])
+
+function hasValidName(value: string): boolean {
+  const name = value.trim()
+  return name.length > 0 && name.length <= 255
+}
+
 function createId(): string {
   return typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
@@ -101,13 +112,11 @@ export function parseAttachmentFile(file: File): ParsedAttachmentFile {
   let attachmentCode = ''
   let attachmentSequence = ''
   let displayName = baseName
-  let parseStatus: ParseStatus = PARSE_STATUS.Warning
 
   if (attachmentMatch?.[1] && attachmentMatch[2]) {
     attachmentSequence = attachmentMatch[2].toUpperCase()
     attachmentCode = `${attachmentMatch[1].toUpperCase()}-${attachmentSequence}`
     role = FILE_ROLE.Attachment
-    parseStatus = PARSE_STATUS.Ok
     displayName = cleanDisplayName(baseName.slice(attachmentMatch[0].length))
   } else if (
     documentCode !== ''
@@ -121,7 +130,7 @@ export function parseAttachmentFile(file: File): ParsedAttachmentFile {
     displayName = baseName
   }
 
-  return {
+  return recalculateFile({
     id: createId(),
     file,
     relativePath,
@@ -132,8 +141,8 @@ export function parseAttachmentFile(file: File): ParsedAttachmentFile {
     attachmentSequence,
     displayName,
     extension: extensionOf(file.name),
-    parseStatus,
-  }
+    parseStatus: PARSE_STATUS.Warning,
+  })
 }
 
 function groupingKey(file: ParsedAttachmentFile): string {
@@ -170,7 +179,7 @@ export function resolveMainCandidates(files: ParsedAttachmentFile[]): ParsedAtta
   const promoted = files.map((file) => {
     if (file.role !== FILE_ROLE.MainCandidate) return file
     return singleCandidateIds.has(file.id)
-      ? { ...file, role: FILE_ROLE.Main, parseStatus: PARSE_STATUS.Ok }
+      ? recalculateFile({ ...file, role: FILE_ROLE.Main })
       : { ...file, parseStatus: PARSE_STATUS.Warning }
   })
 
@@ -212,20 +221,30 @@ function resolveDuplicateMains(files: ParsedAttachmentFile[]): ParsedAttachmentF
 }
 
 export function recalculateFile(file: ParsedAttachmentFile): ParsedAttachmentFile {
+  const commonFieldsReady = DOCUMENT_NO_PATTERN.test(file.documentCode.trim())
+    && hasValidName(file.displayName)
+    && file.file.name.length <= 255
+
   if (file.role === FILE_ROLE.Main) {
     return {
       ...file,
       attachmentCode: '',
       attachmentSequence: '',
-      parseStatus: file.documentCode === '' ? PARSE_STATUS.Warning : PARSE_STATUS.Ok,
+      parseStatus: commonFieldsReady && file.extension === 'pdf'
+        ? PARSE_STATUS.Ok
+        : PARSE_STATUS.Warning,
     }
   }
 
   if (file.role === FILE_ROLE.Attachment) {
+    const attachmentCode = file.attachmentCode.trim()
+    const attachmentCodeReady = attachmentCode === ''
+      || ATTACHMENT_NO_PATTERN.test(attachmentCode)
     return {
       ...file,
-      parseStatus:
-        file.documentCode !== '' && file.attachmentCode !== ''
+      parseStatus: commonFieldsReady
+        && attachmentCodeReady
+        && ATTACHMENT_EXTENSIONS.has(file.extension)
           ? PARSE_STATUS.Ok
           : PARSE_STATUS.Warning,
     }
@@ -244,7 +263,10 @@ function roleRank(role: FileRole): number {
   return ranks[role]
 }
 
-export function attachmentFileGroups(files: ParsedAttachmentFile[]): AttachmentFileGroup[] {
+export function attachmentFileGroups(
+  files: ParsedAttachmentFile[],
+  confirmedMissingMainCodes: ReadonlySet<string> = new Set(),
+): AttachmentFileGroup[] {
   const grouped = new Map<string, ParsedAttachmentFile[]>()
   for (const file of files) {
     const key = groupingKey(file)
@@ -265,15 +287,19 @@ export function attachmentFileGroups(files: ParsedAttachmentFile[]): AttachmentF
           || file.role === FILE_ROLE.MainCandidate
           || file.role === FILE_ROLE.Unresolved,
       )
-      const status: GroupStatus = mainCount === 0
+      const documentCode = sortedFiles.find((file) => file.documentCode !== '')?.documentCode ?? ''
+      const confirmedMissingMain = mainCount === 0
+        && sortedFiles.every((file) => file.role === FILE_ROLE.Attachment)
+        && confirmedMissingMainCodes.has(documentCode)
+      const status: GroupStatus = confirmedMissingMain
         ? GROUP_STATUS.MissingMain
-        : mainCount > 1 || hasWarning
+        : mainCount !== 1 || hasWarning
           ? GROUP_STATUS.Warning
           : GROUP_STATUS.Ok
 
       return {
         key,
-        documentCode: sortedFiles.find((file) => file.documentCode !== '')?.documentCode ?? '',
+        documentCode,
         sourceFolder: sortedFiles.find((file) => file.sourceFolder !== '')?.sourceFolder ?? '',
         files: sortedFiles,
         status,

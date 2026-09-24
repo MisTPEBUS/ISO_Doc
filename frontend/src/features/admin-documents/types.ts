@@ -66,9 +66,10 @@ export interface UpdateAdminDocumentRequest {
 }
 
 export interface BulkImportDocumentItem {
+  deptId?: string | null
   documentNo: string
   name: string
-  pageCount: number | null
+  pageCount?: number | null
   effectiveDate: string | null
   version: string
 }
@@ -83,7 +84,7 @@ export interface BulkImportedDocument {
   documentVersionId: string
   documentNo: string
   name: string
-  pageCount: number
+  pageCount: number | null
   effectiveDate: string | null
   version: string
   status: string

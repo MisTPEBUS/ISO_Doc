@@ -52,9 +52,9 @@ function createRow(source: RowSource, values: DraftDocumentRow): EditableDocumen
 
 function createBlankRow(): EditableDocumentRow {
   return createRow('manual', {
+    deptId: '',
     documentNo: '',
     name: '',
-    pageCount: '',
     effectiveDate: '',
     version: '',
   })
@@ -64,15 +64,15 @@ function createSampleRows(): EditableDocumentRow[] {
   return [
     createRow('manual', {
       documentNo: 'HR-I-01',
+      deptId: '',
       name: '人力資源管理程序',
-      pageCount: '12',
       effectiveDate: '2026-09-01',
       version: '1.0',
     }),
     createRow('manual', {
       documentNo: 'HR-I-02',
+      deptId: '',
       name: '教育訓練管理程序',
-      pageCount: '8',
       effectiveDate: '2026-09-01',
       version: '2.1',
     }),
@@ -221,16 +221,14 @@ export function IsoDocumentInlineEntryPreview() {
       ),
     },
     {
-      key: 'pageCount',
-      header: '頁數',
-      headerClassName: 'w-24',
+      key: 'deptId',
+      header: '發行部門',
+      headerClassName: 'min-w-40',
       render: (row) => (
         <Input
-          className="tabular"
-          type="number"
-          min={0}
-          value={row.pageCount}
-          onChange={(event) => updateRow(row.id, { pageCount: event.target.value })}
+          value={row.deptId}
+          placeholder="部門名稱或 ID"
+          onChange={(event) => updateRow(row.id, { deptId: event.target.value })}
         />
       ),
     },
@@ -282,7 +280,7 @@ export function IsoDocumentInlineEntryPreview() {
   const jsonPreview = rows.map((row) => ({
     documentNo: row.documentNo,
     name: row.name,
-    pageCount: row.pageCount,
+    deptId: row.deptId,
     effectiveDate: row.effectiveDate,
     version: row.version,
   }))

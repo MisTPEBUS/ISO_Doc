@@ -536,8 +536,83 @@ public sealed class DocumentApiTests
         Assert.Equal(deptA, permission.DeptId);
     }
 
-    private static BulkImportDocumentItem ValidBulkItem(string documentNo) => new()
+    [Fact]
+    public async Task BulkImport_WithDeptId_PersistsIssuingDeptAndAllowsNull()
     {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        var deptA = factory.DocumentStore.AddDeptSeed(factory.CompanyA);
+        var deptB = factory.DocumentStore.AddDeptSeed(factory.CompanyA);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWriteRequest(HttpMethod.Post, "/api/documents/bulk-import", token,
+            new BulkImportDocumentsRequest
+            {
+                CompanyId = factory.CompanyA,
+                Items = [ValidBulkItem("DEPT-01", deptA), new BulkImportDocumentItem
+                {
+                    DocumentNo = "DEPT-02", Name = "頁數待補文件", Version = "1.0"
+                }]
+            });
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<BulkImportDocumentsResponse>();
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal(2, body.SuccessCount);
+        Assert.Equal(0, body.FailureCount);
+        Assert.Null(body.Succeeded[1].Document.PageCount);
+        Assert.Equal(deptA, factory.DocumentStore.Documents.Single(d => d.DocumentNo == "DEPT-01").DeptId);
+        Assert.Null(factory.DocumentStore.Documents.Single(d => d.DocumentNo == "DEPT-02").DeptId);
+        Assert.Null(factory.DocumentStore.DocumentVersions.Single(v =>
+            v.DocumentId == factory.DocumentStore.Documents.Single(d => d.DocumentNo == "DEPT-02").Id).PageCount);
+        Assert.All(factory.DocumentStore.Documents, document =>
+            Assert.Equal(new[] { deptA, deptB }.OrderBy(id => id),
+                factory.DocumentStore.DocumentDeptPermissions
+                    .Where(p => p.DocumentId == document.Id).Select(p => p.DeptId).OrderBy(id => id)));
+        var detail = await client.GetFromJsonAsync<DocumentDetailResponse>(
+            $"/api/documents/{body.Succeeded[0].Document.DocumentId}");
+        Assert.NotNull(detail);
+        Assert.Equal(deptA, detail.DeptId);
+        Assert.NotNull(detail.DeptName);
+    }
+
+    [Fact]
+    public async Task BulkImport_WithInvalidDeptIds_FailsOnlyAffectedRows()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        var ownDept = factory.DocumentStore.AddDeptSeed(factory.CompanyA);
+        var foreignDept = factory.DocumentStore.AddDeptSeed(factory.CompanyB);
+        var missingDept = Guid.NewGuid();
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWriteRequest(HttpMethod.Post, "/api/documents/bulk-import", token,
+            new BulkImportDocumentsRequest
+            {
+                CompanyId = factory.CompanyA,
+                Items = [ValidBulkItem("DEPT-01", foreignDept), ValidBulkItem("DEPT-02", missingDept),
+                    ValidBulkItem("DEPT-03", ownDept)]
+            });
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<BulkImportDocumentsResponse>();
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal(1, body.SuccessCount);
+        Assert.Equal(2, body.FailureCount);
+        Assert.Equal(new[] { 1, 2 }, body.Failed.Select(f => f.Index));
+        Assert.All(body.Failed, f => Assert.Contains("deptId", f.Errors.Keys));
+        Assert.Equal(foreignDept, body.Failed[0].OriginalData.DeptId);
+        Assert.Equal(missingDept, body.Failed[1].OriginalData.DeptId);
+        Assert.Equal(ownDept, Assert.Single(factory.DocumentStore.Documents).DeptId);
+        Assert.Single(factory.DocumentStore.DocumentVersions);
+        Assert.Equal(1, factory.DocumentStore.CommittedTransactionCount);
+    }
+
+    private static BulkImportDocumentItem ValidBulkItem(string documentNo, Guid? deptId = null) => new()
+    {
+        DeptId = deptId,
         DocumentNo = documentNo,
         Name = $"{documentNo} 名稱",
         PageCount = 1,

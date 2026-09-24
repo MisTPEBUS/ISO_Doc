@@ -8,6 +8,12 @@ export default defineConfig({
 
   base: "/ISO/",
 
+  build: {
+    target: "chrome109",
+    cssTarget: "chrome109",
+    cssMinify: "lightningcss",
+  },
+
   server: {
     host: "0.0.0.0",
     port: 5173,

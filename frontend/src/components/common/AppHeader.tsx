@@ -1,5 +1,12 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
+import {
+  APP_THEME,
+  applyTheme,
+  getAppliedTheme,
+  type AppTheme,
+} from "@/app/theme";
 import { classNames } from "./classNames";
 
 export interface AppHeaderLink {
@@ -36,9 +43,17 @@ export function AppHeader({
   sticky = true,
   className,
 }: AppHeaderProps) {
+  const [theme, setTheme] = useState<AppTheme>(getAppliedTheme);
   const organization = [companyName, departmentName]
     .filter(Boolean)
     .join(" / ");
+  const nextTheme = theme === APP_THEME.Dark ? APP_THEME.Light : APP_THEME.Dark;
+  const nextThemeLabel = nextTheme === APP_THEME.Light ? "淺色" : "深色";
+
+  function toggleTheme() {
+    applyTheme(nextTheme);
+    setTheme(nextTheme);
+  }
 
   return (
     <header
@@ -88,6 +103,16 @@ export function AppHeader({
             修改密碼
           </Link>
         )}
+        <button
+          type="button"
+          className="h-control-sm rounded-sm border border-shell-700 px-2 text-primary-on-shell transition-colors hover:bg-shell-800 hover:text-on-shell"
+          aria-label={`切換為${nextThemeLabel}模式`}
+          aria-pressed={theme === APP_THEME.Light}
+          title={`切換為${nextThemeLabel}模式`}
+          onClick={toggleTheme}
+        >
+          {nextThemeLabel}模式
+        </button>
         <button
           type="button"
           className="h-control-sm rounded-sm px-2 text-primary-on-shell transition-colors hover:bg-shell-800 hover:text-on-shell"

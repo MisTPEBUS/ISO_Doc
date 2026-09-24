@@ -1,6 +1,6 @@
 # Dark Mode 與 Windows 7 配色相容性規格
 
-> 狀態：設計與相容性規格，尚未實作  
+> 狀態：已實作主題切換與配色降級；整站 legacy build 尚未實作
 > 適用範圍：`frontend/` 的主題色、狀態色、邊框、遮罩與陰影  
 > 不影響：API contract、資料庫 schema、角色與 Domain 規則
 
@@ -13,7 +13,7 @@
 
 本文件所稱「目前 dark 樣式」是目前產品的「深色頁首／側邊欄 + 淺色工作區」，不是全畫面黑底。導入 dark mode 時須原樣保留這個外觀；若未來要改成全暗色工作區，需另開設計規格，不在本文件中自行推導。
 
-本文件只定義主題 token 與相容性邊界，不定義切換按鈕的位置、使用者偏好保存方式或後端欄位。
+主題切換按鈕位於共用 `AppHeader`。未設定偏好時使用 `dark`；使用者選擇保存在瀏覽器 `localStorage` 的 `isodocs.theme`，不新增後端欄位。
 
 ## 2. 現況與相容性邊界
 
@@ -60,7 +60,7 @@ light/legacy 路徑禁止：
 
 ### 4.1 核心 token
 
-既有 token 的 dark 欄完全沿用目前 `theme.css`；light 欄是 legacy-safe 的明確 sRGB 色值。表內新增的 `state-danger-hover` 是用來取代目前 `brightness-95` 的相容性 token，不代表既有樣式已經存在這個變數。
+既有 token 的 dark 欄完全沿用目前 `theme.css`；light 欄是 legacy-safe 的明確 sRGB 色值。`state-danger-hover` 已新增為明確色值，用來取代原本的 `brightness-95`。
 
 | Token | dark（目前樣式） | light（Win7 legacy） | 用途 |
 | --- | --- | --- | --- |
@@ -115,6 +115,8 @@ light 模式將 obsolete 文字改為 `#475569`，因為目前的 `#64748B` 搭�
 | Token／情境 | legacy-safe 值或規則 |
 | --- | --- |
 | `--color-overlay` | `rgba(15, 23, 42, 0.50)` |
+| Login 品牌區 | 固定 `#153A5B`，不受主題 shell 色覆寫 |
+| Login 卡片外框 | 固定 `#8FA1B2`，陰影消失時仍可辨識範圍 |
 | `--shadow-sticky-y` | `0 1px 0 #E2E8F0, 0 2px 4px rgba(15, 23, 42, 0.04)` |
 | `--shadow-sticky-x` | `1px 0 0 #E2E8F0, 2px 0 4px rgba(15, 23, 42, 0.04)` |
 | `--shadow-float` | `0 4px 12px rgba(15, 23, 42, 0.12)` |
@@ -123,7 +125,7 @@ light 模式將 obsolete 文字改為 `#475569`，因為目前的 `#64748B` 搭�
 | hover | 直接切換到明確的 HEX token，不用 brightness、混色或透明度計算 |
 | loading／disabled | 必須有文字、spinner、`disabled` 屬性或游標差異，不能只降低透明度 |
 
-目前 `theme.css` 的三個 shadow 使用 `rgb(15 23 42 / alpha)`，以及 `Modal.tsx` 使用 `backdrop:bg-shell-900/50`。這些是實作時優先替換的已知位置。
+實作已將 `theme.css` 的 shadow 改為傳統 `rgba()`，並以 `bg-overlay` 取代 `Modal.tsx` 原本的 `backdrop:bg-shell-900/50`；登入頁改用固定高對比實色品牌區，不再以背景圖片與透明遮罩承載文字，danger hover 也已改用明確 token。
 
 ## 6. CSS 契約
 
@@ -161,7 +163,7 @@ light 模式將 obsolete 文字改為 `#475569`，因為目前的 `#64748B` 搭�
 
 兩種主題都要逐一檢查：
 
-- `AppHeader`、`SidebarNav`：預設、hover、active、focus、收合狀態。
+- `AppHeader`、`SidebarNav`：預設、hover、active、focus、收合狀態，以及 Header 主題切換按鈕。
 - `Button`：primary、secondary、danger、ghost、disabled、loading。
 - `Input`、`Select`、`Textarea`：預設、placeholder、focus、error、disabled。
 - `Badge`、`Alert`：neutral、info、success、warning、danger，且保留文字或圖示。
@@ -171,10 +173,10 @@ light 模式將 obsolete 文字改為 `#475569`，因為目前的 `#64748B` 搭�
 
 ## 8. 實作前必須決定的 build 路徑
 
-### 路徑 A：只修正顏色降級
+### 路徑 A：只修正顏色降級（目前採用）
 
 - 保留 Tailwind CSS v4 與目前 Vite 設定。
-- 把本文件列出的 light token、overlay、shadow 與 hover 色改為明確 HEX／傳統 `rgba()`。
+- light token、overlay、shadow 與 hover 色已改為明確 HEX／傳統 `rgba()`。
 - 適合解決「部分顏色或遮罩不顯示」，但不得宣稱完整支援 Windows 7。
 
 ### 路徑 B：正式支援 Windows 7 + Edge/Chrome 109

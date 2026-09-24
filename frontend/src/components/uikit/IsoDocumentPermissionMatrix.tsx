@@ -198,7 +198,7 @@ export function IsoDocumentPermissionMatrix() {
 
   return (
     <section className="overflow-hidden rounded-md border border-line-strong bg-surface">
-      <div className="flex flex-col gap-4 border-b border-line bg-surface-header/50 p-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-4 border-b border-line bg-surface-zebra p-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-section-label text-ink">ISO 文件權限矩陣</h2>
           <p className="mt-1 text-meta text-ink-muted">勾選可查看各ISO管理程序的部門。</p>

@@ -19,6 +19,26 @@ export function useIsoCategories(params: ListIsoCategoriesParams, enabled = true
   })
 }
 
+/** The import selector must not silently omit categories beyond the first page. */
+export function useCompanyIsoCategoryOptions(companyId: string | undefined) {
+  return useQuery({
+    queryKey: [...isoCategoryKeys.lists(), 'options', companyId],
+    enabled: companyId !== undefined,
+    queryFn: async () => {
+      const first = await isoCategoriesApi.list({ companyId, includeInactive: true, page: 1, pageSize: 100 })
+      const items = [...first.items]
+      const totalPages = Math.ceil(first.totalCount / first.pageSize)
+      for (let page = 2; page <= totalPages; page += 1) {
+        const result = await isoCategoriesApi.list({
+          companyId, includeInactive: true, page, pageSize: first.pageSize,
+        })
+        items.push(...result.items)
+      }
+      return items
+    },
+  })
+}
+
 export function useIsoCategory(id: string | undefined) {
   return useQuery({
     queryKey: isoCategoryKeys.detail(id ?? ''),

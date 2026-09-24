@@ -16,7 +16,7 @@ public sealed record BulkImportedDocument(
     Guid DocumentVersionId,
     string DocumentNo,
     string Name,
-    int PageCount,
+    int? PageCount,
     DateOnly? EffectiveDate,
     string Version,
     string Status);

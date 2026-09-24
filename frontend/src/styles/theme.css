@@ -32,11 +32,25 @@
   --color-state-obsolete: #64748b;
   --color-state-obsolete-subtle: #f1f5f9;
   --color-state-danger: #b91c1c;
+  --color-state-danger-hover: #991b1b;
   --color-state-danger-subtle: #fef2f2;
 
   --color-line: #e2e8f0;
   --color-line-strong: #cbd5e1;
   --color-control-border: #8492a6;
+  --color-overlay: rgba(15, 23, 42, 0.5);
+
+  --color-login-brand: #153a5b;
+  --color-login-brand-deep: #0b2b45;
+  --color-login-brand-border: #52738d;
+  --color-login-brand-text: #ffffff;
+  --color-login-brand-muted: #d6e2ec;
+  --color-login-accent: #f4c542;
+  --color-login-page: #e9eff4;
+  --color-login-card-border: #8fa1b2;
+  --color-login-help: #eef4f8;
+  --color-login-help-border: #b4c3cf;
+  --color-login-badge-border: #bfdbfe;
 
   --font-sans: "Inter", "Noto Sans TC", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
@@ -86,9 +100,21 @@
   --radius-sm: 4px;
   --radius-md: 6px;
 
-  --shadow-sticky-y: 0 1px 0 #e2e8f0, 0 2px 4px rgb(15 23 42 / 0.04);
-  --shadow-sticky-x: 1px 0 0 #e2e8f0, 2px 0 4px rgb(15 23 42 / 0.04);
-  --shadow-float: 0 4px 12px rgb(15 23 42 / 0.12);
+  --shadow-sticky-y: 0 1px 0 #e2e8f0, 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-sticky-x: 1px 0 0 #e2e8f0, 2px 0 4px rgba(15, 23, 42, 0.04);
+  --shadow-float: 0 4px 12px rgba(15, 23, 42, 0.12);
+  --shadow-login: 0 6px 20px rgba(15, 23, 42, 0.16);
+}
+
+:root[data-theme="light"] {
+  --color-shell-900: #ffffff;
+  --color-shell-800: #f8fafc;
+  --color-shell-700: #eff6ff;
+  --color-on-shell: #0f172a;
+  --color-primary-on-shell: #1d4ed8;
+  --color-ink-faint: #64748b;
+  --color-ink-disabled: #94a3b8;
+  --color-state-obsolete: #475569;
 }
 
 @layer base {
@@ -124,5 +150,69 @@
 
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+}
+
+/* login_1 uses the same high-contrast palette in both application themes. */
+.login-1 {
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-shell-900: #0f172a;
+  --color-shell-700: #334155;
+  --color-on-shell: #ffffff;
+  --color-primary-on-shell: #60a5fa;
+  --color-ink-muted: #475569;
+  --color-ink-faint: #526175;
+  --color-ink-disabled: #526175;
+  /* Lightest border that still keeps 3:1 against the #eef4f8 form panel (doc 13). */
+  --color-control-border: #808da0;
+  --spacing-control: 48px;
+  font-family: "Inter", "Noto Sans TC", "Microsoft JhengHei", "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+
+/* Explicit values avoid relying on @property initialization in Chrome 109. */
+.login-1,
+.login-1 * {
+  --tw-border-style: solid;
+  --tw-space-y-reverse: 0;
+}
+
+.login-1 input {
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.login-1 input::placeholder {
+  color: var(--color-ink-faint);
+  opacity: 1;
+}
+
+/*
+ * Inputs: the brand-blue border is the focus indicator (over 3:1); the halo is
+ * a plain rgba() shadow, so it needs no @property support. The transparent
+ * outline stays visible in forced-colors mode.
+ */
+.login-1 input:focus {
+  border-color: var(--color-primary);
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.login-1 input[aria-invalid="true"]:focus {
+  border-color: var(--color-state-danger);
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.15);
+}
+
+/* A solid focus outline does not depend on shadow or @property support. */
+.login-1 button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-1 * {
+    animation: none;
+    transition: none;
   }
 }

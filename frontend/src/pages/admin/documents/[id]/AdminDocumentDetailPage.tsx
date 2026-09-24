@@ -562,9 +562,16 @@ export function AdminDocumentDetailPage() {
     <section>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div>
+          <p className="mb-1 text-label font-medium text-primary">文件管理</p>
           <h1 className="text-page-title text-ink">{detail.name}</h1>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => navigate("/admin/documents")}
+          >
+            返回 ISO 文件
+          </Button>
           {detail.isActive && (
             <Button onClick={openVersionModal}>更新ISO表單版本</Button>
           )}

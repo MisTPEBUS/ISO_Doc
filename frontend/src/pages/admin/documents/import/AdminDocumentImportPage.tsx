@@ -22,21 +22,24 @@ import {
   type ColumnMapping,
   type MappingTargetKey,
 } from '@/features/admin-documents/bulkImportExcel'
+import { resolveImportDept } from '@/features/admin-documents/bulkImportDepartment'
 import { useBulkImportAdminDocuments } from '@/features/admin-documents/queries'
 import type { BulkImportDocumentItem } from '@/features/admin-documents/types'
 import { useCurrentUser } from '@/features/auth/queries'
 import { USER_ROLE } from '@/features/auth/types'
 import { useCompanies } from '@/features/companies/queries'
+import { useCompanyDeptOptions } from '@/features/departments/queries'
 
 type RowSource = 'manual' | 'excel'
 type RowStatus = 'editing' | 'success' | 'failed'
 
 interface ImportRow {
+  deptId: string
+  departmentCleared: boolean
   id: string
   source: RowSource
   documentNo: string
   name: string
-  pageCount: string
   effectiveDate: string
   version: string
   status: RowStatus
@@ -64,7 +67,7 @@ function createId(): string {
 }
 
 function makeRow(source: RowSource, draft = blankDraftRow()): ImportRow {
-  return { id: createId(), source, ...draft, status: 'editing', errorMessage: null }
+  return { id: createId(), source, ...draft, departmentCleared: false, status: 'editing', errorMessage: null }
 }
 
 function formatServerErrors(errors: Record<string, string[]>): string {
@@ -92,6 +95,12 @@ export function AdminDocumentImportPage() {
   const companyId = isSystemAdmin
     ? selectedCompanyId || undefined
     : currentUser.data?.companyId
+  const depts = useCompanyDeptOptions(companyId)
+  const deptNameById = new Map((depts.data ?? []).map((dept) => [dept.id.toLowerCase(), dept.name]))
+  function resolveDept(row: ImportRow) {
+    if (row.departmentCleared) return { id: null, unknownExplicit: false }
+    return resolveImportDept(row.deptId, row.documentNo, depts.data ?? [])
+  }
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [rows, setRows] = useState<ImportRow[]>([])
@@ -215,10 +224,14 @@ export function AdminDocumentImportPage() {
     if (rows.length === 0) return
 
     setSubmitError(undefined)
+    if (rows.some((row) => resolveDept(row).unknownExplicit)) {
+      setSubmitError('部分發行部門不屬於所選公司，請在表格重新選擇或清空後再送出。')
+      return
+    }
     const items: BulkImportDocumentItem[] = rows.map((row) => ({
+      deptId: resolveDept(row).id,
       documentNo: row.documentNo.trim(),
       name: row.name.trim(),
-      pageCount: row.pageCount.trim() === '' ? null : Number(row.pageCount),
       effectiveDate: row.effectiveDate.trim() === '' ? null : row.effectiveDate.trim(),
       version: row.version.trim(),
     }))
@@ -298,21 +311,35 @@ export function AdminDocumentImportPage() {
         ),
     },
     {
-      key: 'pageCount',
-      header: '頁數',
-      headerClassName: 'w-24',
-      render: (row) =>
-        submitted ? (
-          <span className="tabular">{row.pageCount || '－'}</span>
+      key: 'deptId',
+      header: '發行部門',
+      headerClassName: 'min-w-48',
+      render: (row) => {
+        const resolved = resolveDept(row)
+        const selectedId = resolved.id?.toLowerCase() ?? ''
+        return submitted ? (
+          deptNameById.get(selectedId) ?? row.deptId
         ) : (
-          <Input
-            type="number"
-            min={0}
-            value={row.pageCount}
-            disabled={bulkImport.isPending}
-            onChange={(event) => updateRow(row.id, { pageCount: event.target.value })}
-          />
-        ),
+          <div>
+            <Select
+              aria-label={`發行部門 ${row.documentNo || '未編號文件'}`}
+              value={resolved.unknownExplicit ? row.deptId : selectedId}
+              disabled={companyId === undefined || depts.isPending || depts.isError || bulkImport.isPending}
+              error={resolved.unknownExplicit && depts.isSuccess}
+              onChange={(event) => updateRow(row.id, {
+                deptId: event.target.value,
+                departmentCleared: event.target.value === '',
+              })}
+            >
+              <option value="">不指定發行部門</option>
+              {resolved.unknownExplicit && <option value={row.deptId}>待確認：{row.deptId}</option>}
+              {depts.data?.map((dept) => <option key={dept.id} value={dept.id.toLowerCase()}>{dept.name}</option>)}
+            </Select>
+            {resolved.unknownExplicit && depts.isSuccess && <p className="mt-1 text-meta text-state-danger">請選擇此公司的部門或清空。</p>}
+            {resolved.id && !row.deptId.trim() && <p className="mt-1 text-fine text-ink-muted">依文件編號推定：{resolved.inferredName}</p>}
+          </div>
+        )
+      },
     },
     {
       key: 'effectiveDate',
@@ -398,6 +425,7 @@ export function AdminDocumentImportPage() {
             可直接在表格新增一筆資料，也可以拖曳或選擇 Excel 檔案匯入。一次最多{' '}
             {MAX_BULK_IMPORT_ROWS} 筆。
           </p>
+          <p className="mt-1 text-meta text-ink-muted">未填發行部門時，依文件編號 GM／GA／OP／MT／FN／IT／HR 推定；仍可逐筆修改。</p>
         </div>
         <Button variant="secondary" onClick={() => navigate('/admin/documents')}>
           返回文件列表
@@ -437,6 +465,12 @@ export function AdminDocumentImportPage() {
       {fileError && (
         <Alert className="mb-4" variant="error" title="無法匯入">
           {fileError}
+        </Alert>
+      )}
+      {depts.isError && (
+        <Alert className="mb-4" variant="error" title="無法載入發行部門">
+          請重新載入部門清單後再送出。
+          <Button variant="secondary" size="sm" onClick={() => void depts.refetch()}>重新載入</Button>
         </Alert>
       )}
       {submitError && (
@@ -522,7 +556,7 @@ export function AdminDocumentImportPage() {
                   key={target.key}
                   label={target.label}
                   htmlFor={`mapping-${target.key}`}
-                  hint={columnIndex === null ? '請手動指定對應欄位' : '已對應'}
+                  hint={target.key === 'deptId' ? '可用部門名稱或 UUID；未對應時依文件編號推定。' : columnIndex === null ? '請手動指定對應欄位' : '已對應'}
                 >
                   <Select
                     id={`mapping-${target.key}`}
@@ -601,7 +635,7 @@ export function AdminDocumentImportPage() {
             <Button
               loading={bulkImport.isPending}
               loadingText="送出中"
-              disabled={companyId === undefined || rows.length === 0}
+              disabled={companyId === undefined || rows.length === 0 || depts.isPending || depts.isError}
               onClick={handleSubmit}
             >
               送出並建立文件

@@ -188,6 +188,26 @@ public sealed class AiImportService(
                 continue;
             }
 
+            var metadataErrors = new Dictionary<string, string[]>();
+            if (item.IsoCategoryId is { } isoCategoryId
+                && !await documentStore.IsoCategoryBelongsToCompanyAsync(
+                    request.CompanyId, isoCategoryId, cancellationToken))
+            {
+                metadataErrors["isoCategoryId"] = ["指定的品質系統不存在，或不屬於此公司。"];
+            }
+            if (item.DeptId is { } deptId
+                && await documentStore.FindCompanyDeptAsync(
+                    request.CompanyId, deptId, cancellationToken) is null)
+            {
+                metadataErrors["deptId"] = ["指定的發行單位不存在，或不屬於此公司。"];
+            }
+            if (metadataErrors.Count > 0)
+            {
+                documentFailed.Add(new(documentIndex, item.DocumentNo, metadataErrors));
+                MarkAttachmentsAsParentFailed(attachments, documentIndex, attachmentSkipped);
+                continue;
+            }
+
             var (ok, success, errors) = await ProcessDocumentAsync(
                 request.CompanyId, documentIndex, item, userId, now, cancellationToken);
             if (!ok || success is null)
@@ -227,6 +247,76 @@ public sealed class AiImportService(
                 attachmentSucceeded, attachmentSkipped, attachmentFailed)));
     }
 
+    private sealed record DocumentMetadataSnapshot(
+        Guid? IsoCategoryId, Guid? DeptId, DateTimeOffset UpdatedAt);
+
+    private static DocumentMetadataSnapshot? ApplyDocumentMetadata(
+        Document document, CommitImportDocumentItem item, DateTimeOffset now)
+    {
+        var isoCategoryId = item.IsoCategoryId ?? document.IsoCategoryId;
+        var deptId = item.DeptId ?? document.DeptId;
+        if (isoCategoryId == document.IsoCategoryId && deptId == document.DeptId)
+        {
+            return null;
+        }
+
+        var previous = new DocumentMetadataSnapshot(
+            document.IsoCategoryId, document.DeptId, document.UpdatedAt);
+        document.IsoCategoryId = isoCategoryId;
+        document.DeptId = deptId;
+        document.UpdatedAt = now;
+        return previous;
+    }
+
+    private static void RestoreDocumentMetadata(Document document, DocumentMetadataSnapshot? previous)
+    {
+        if (previous is null) return;
+        document.IsoCategoryId = previous.IsoCategoryId;
+        document.DeptId = previous.DeptId;
+        document.UpdatedAt = previous.UpdatedAt;
+    }
+
+    private async Task AuditDocumentMetadataAsync(
+        Document document, DocumentMetadataSnapshot? previous, CancellationToken cancellationToken)
+    {
+        if (previous is null) return;
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                document.CompanyId,
+                AuditActions.UpdateDocument,
+                AuditResourceTypes.Document,
+                document.Id,
+                new
+                {
+                    old_value = new { iso_category_id = previous.IsoCategoryId, dept_id = previous.DeptId },
+                    new_value = new { iso_category_id = document.IsoCategoryId, dept_id = document.DeptId },
+                    ai_import = true
+                }),
+            cancellationToken);
+    }
+
+    private async Task SaveMetadataOnlyAsync(
+        Document document, CommitImportDocumentItem item, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var previous = ApplyDocumentMetadata(document, item, now);
+        if (previous is null) return;
+
+        try
+        {
+            await using var transaction = await documentStore.BeginTransactionAsync(cancellationToken);
+            await documentStore.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            RestoreDocumentMetadata(document, previous);
+            throw;
+        }
+
+        await AuditDocumentMetadataAsync(document, previous, cancellationToken);
+    }
+
     private async Task<(bool Ok, CommitImportDocumentSuccess? Success, Dictionary<string, string[]>? Errors)>
         ProcessDocumentAsync(
             Guid companyId, int documentIndex, CommitImportDocumentItem item, Guid userId, DateTimeOffset now,
@@ -245,16 +335,18 @@ public sealed class AiImportService(
         {
             if (item.MainFile is null)
             {
+                await SaveMetadataOnlyAsync(document, item, now, cancellationToken);
                 return (true, new CommitImportDocumentSuccess(
                     documentIndex, documentNo, document.Id, ImportActions.SkipUnchanged,
                     latestVersion.Id, latestVersion.Version, latestVersion.EffectiveDate, latestVersion.Status), null);
             }
 
-            return await UploadDraftFileAsync(document, latestVersion, documentIndex, item, cancellationToken);
+            return await UploadDraftFileAsync(document, latestVersion, documentIndex, item, now, cancellationToken);
         }
 
         if (item.MainFile is null)
         {
+            await SaveMetadataOnlyAsync(document, item, now, cancellationToken);
             return (true, new CommitImportDocumentSuccess(
                 documentIndex, documentNo, document.Id, ImportActions.SkipUnchanged,
                 latestVersion?.Id, latestVersion?.Version, latestVersion?.EffectiveDate, latestVersion?.Status), null);
@@ -294,6 +386,8 @@ public sealed class AiImportService(
             CompanyId = companyId,
             DocumentNo = documentNo,
             Name = item.Name!.Trim(),
+            IsoCategoryId = item.IsoCategoryId,
+            DeptId = item.DeptId,
             IsActive = true,
             CreatedBy = userId,
             CreatedAt = now,
@@ -370,6 +464,8 @@ public sealed class AiImportService(
                 {
                     document_no = document.DocumentNo,
                     name = document.Name,
+                    iso_category_id = document.IsoCategoryId,
+                    dept_id = document.DeptId,
                     version = version.Version,
                     status = version.Status,
                     ai_import = true
@@ -384,7 +480,7 @@ public sealed class AiImportService(
     private async Task<(bool Ok, CommitImportDocumentSuccess? Success, Dictionary<string, string[]>? Errors)>
         UploadDraftFileAsync(
             Document document, DocumentVersion draftVersion, int documentIndex, CommitImportDocumentItem item,
-            CancellationToken cancellationToken)
+            DateTimeOffset now, CancellationToken cancellationToken)
     {
         if (!await HasPdfMagicBytesAsync(item.MainFile!, cancellationToken))
         {
@@ -404,6 +500,7 @@ public sealed class AiImportService(
         }
 
         string? writtenObjectKey = null;
+        DocumentMetadataSnapshot? previousMetadata = null;
         try
         {
             await using var transaction = await documentVersionStore.BeginTransactionAsync(cancellationToken);
@@ -429,12 +526,14 @@ public sealed class AiImportService(
             draftVersion.ContentType = "application/pdf";
             draftVersion.FileSize = writeResult.FileSize;
             draftVersion.Checksum = writeResult.Checksum;
+            previousMetadata = ApplyDocumentMetadata(document, item, now);
 
             await documentVersionStore.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
         catch (Exception exception) when (IsPublishedVersionConflict(exception))
         {
+            RestoreDocumentMetadata(document, previousMetadata);
             if (writtenObjectKey is not null)
             {
                 await TryMoveToTrashAsync(writtenObjectKey);
@@ -444,6 +543,7 @@ public sealed class AiImportService(
         }
         catch
         {
+            RestoreDocumentMetadata(document, previousMetadata);
             if (writtenObjectKey is not null)
             {
                 await TryMoveToTrashAsync(writtenObjectKey);
@@ -467,6 +567,8 @@ public sealed class AiImportService(
                     ai_import = true
                 }),
             cancellationToken);
+
+        await AuditDocumentMetadataAsync(document, previousMetadata, cancellationToken);
 
         return (true, new CommitImportDocumentSuccess(
             documentIndex, document.DocumentNo, document.Id, ImportActions.UploadDraftFile,
@@ -505,6 +607,8 @@ public sealed class AiImportService(
         }
 
         string? writtenObjectKey = null;
+        DocumentMetadataSnapshot? previousMetadata = null;
+        var committed = false;
         try
         {
             await using var transaction = await documentVersionStore.BeginTransactionAsync(cancellationToken);
@@ -526,6 +630,8 @@ public sealed class AiImportService(
             {
                 await documentVersionStore.SaveChangesAsync(cancellationToken);
             }
+
+            previousMetadata = ApplyDocumentMetadata(document, item, now);
 
             var version = new DocumentVersion
             {
@@ -549,6 +655,7 @@ public sealed class AiImportService(
             documentVersionStore.Add(version);
             await documentVersionStore.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            committed = true;
 
             await auditLogService.WriteAsync(
                 new AuditLogWriteRequest(
@@ -564,6 +671,7 @@ public sealed class AiImportService(
                         ai_import = true
                     }),
                 cancellationToken);
+            await AuditDocumentMetadataAsync(document, previousMetadata, cancellationToken);
 
             return (true, new CommitImportDocumentSuccess(
                 documentIndex, document.DocumentNo, document.Id, ImportActions.NewVersion,
@@ -571,7 +679,8 @@ public sealed class AiImportService(
         }
         catch (Exception exception) when (IsDuplicateVersionConflict(exception))
         {
-            if (writtenObjectKey is not null)
+            if (!committed) RestoreDocumentMetadata(document, previousMetadata);
+            if (!committed && writtenObjectKey is not null)
             {
                 await TryMoveToTrashAsync(writtenObjectKey);
             }
@@ -580,7 +689,8 @@ public sealed class AiImportService(
         }
         catch (Exception exception) when (IsPublishedVersionConflict(exception))
         {
-            if (writtenObjectKey is not null)
+            if (!committed) RestoreDocumentMetadata(document, previousMetadata);
+            if (!committed && writtenObjectKey is not null)
             {
                 await TryMoveToTrashAsync(writtenObjectKey);
             }
@@ -589,7 +699,8 @@ public sealed class AiImportService(
         }
         catch
         {
-            if (writtenObjectKey is not null)
+            if (!committed) RestoreDocumentMetadata(document, previousMetadata);
+            if (!committed && writtenObjectKey is not null)
             {
                 await TryMoveToTrashAsync(writtenObjectKey);
             }

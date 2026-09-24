@@ -6,9 +6,9 @@
 export const MAX_BULK_IMPORT_ROWS = 200
 
 export type MappingTargetKey =
+  | 'deptId'
   | 'documentNo'
   | 'name'
-  | 'pageCount'
   | 'effectiveDate'
   | 'version'
 
@@ -20,6 +20,11 @@ export interface MappingTarget {
 
 export const MAPPING_TARGETS: readonly MappingTarget[] = [
   {
+    key: 'deptId',
+    label: '發行部門（選填）',
+    aliases: ['發行部門', '發行單位', '部門', 'deptid', 'departmentid', '發行單位id', '部門id'],
+  },
+  {
     key: 'documentNo',
     label: '文件編號',
     aliases: ['文件編號', '文件代號', '文號', '編號', 'documentno', 'code'],
@@ -28,11 +33,6 @@ export const MAPPING_TARGETS: readonly MappingTarget[] = [
     key: 'name',
     label: '文件名稱',
     aliases: ['文件名稱', '文件名', '名稱', 'documentname', 'title', 'name'],
-  },
-  {
-    key: 'pageCount',
-    label: '頁數',
-    aliases: ['頁數', '頁碼', 'pages', 'pagecount'],
   },
   {
     key: 'effectiveDate',
@@ -238,15 +238,15 @@ export async function parseDocumentsWorkbook(file: File): Promise<ParsedWorkbook
 }
 
 export interface DraftDocumentRow {
+  deptId: string
   documentNo: string
   name: string
-  pageCount: string
   effectiveDate: string
   version: string
 }
 
 export function blankDraftRow(): DraftDocumentRow {
-  return { documentNo: '', name: '', pageCount: '', effectiveDate: '', version: '' }
+  return { documentNo: '', name: '', effectiveDate: '', version: '', deptId: '' }
 }
 
 export function buildRowsFromMapping(

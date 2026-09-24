@@ -216,14 +216,14 @@ public sealed class DocumentService(
             var item = items[i];
             var index = i + 1;
             var createRequest = new CreateDocumentRequest(
-                request.CompanyId, item.DocumentNo, item.Name);
+                request.CompanyId, item.DocumentNo, item.Name, DeptId: item.DeptId);
             var validation = await createValidator.ValidateAsync(createRequest, cancellationToken);
             var errors = ToErrors(validation);
-            if (!item.PageCount.HasValue)
+            if (item.DeptId is { } issuingDeptId && !companyDeptIds.Contains(issuingDeptId))
             {
-                AddError(errors, "pageCount", "請輸入頁數。");
+                AddError(errors, "deptId", "指定的發行單位不存在，或不屬於此公司。");
             }
-            else if (item.PageCount.Value < 0)
+            if (item.PageCount is < 0)
             {
                 AddError(errors, "pageCount", "頁數不可小於零。");
             }
@@ -261,6 +261,7 @@ public sealed class DocumentService(
                 CompanyId = request.CompanyId,
                 DocumentNo = documentNo,
                 Name = item.Name!.Trim(),
+                DeptId = item.DeptId,
                 IsActive = true,
                 CreatedBy = userId,
                 CreatedAt = now,
@@ -278,7 +279,7 @@ public sealed class DocumentService(
                 PublishDate = null,
                 EffectiveDate = item.EffectiveDate,
                 ExpiredDate = null,
-                PageCount = item.PageCount!.Value,
+                PageCount = item.PageCount,
                 CreatedBy = userId,
                 CreatedAt = now
             };
@@ -368,7 +369,7 @@ public sealed class DocumentService(
                     documentVersion.Id,
                     document.DocumentNo,
                     document.Name,
-                    documentVersion.PageCount!.Value,
+                    documentVersion.PageCount,
                     documentVersion.EffectiveDate,
                     documentVersion.Version,
                     documentVersion.Status)));
