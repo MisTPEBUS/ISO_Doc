@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ChevronRight } from "lucide-react";
 
 import { ApiError } from "@/api/httpClient";
 import {
@@ -182,7 +183,7 @@ export function HomePage() {
       key: "attachmentNo",
       header: "表單及附件編號",
       headerClassName: "w-44",
-      cellClassName: "font-mono text-code tabular",
+      cellClassName: "font-mono text-code tabular text-ink-muted",
       render: (attachment) => displayAttachmentNo(attachment.attachmentNo),
     },
     {
@@ -197,7 +198,7 @@ export function HomePage() {
         return attachment.currentVersion?.hasFile === true ? (
           <button
             type="button"
-            className="h-control-sm rounded-sm px-1 text-left text-cell font-medium text-primary hover:underline disabled:cursor-wait disabled:text-ink-disabled"
+            className="min-h-control-sm cursor-pointer rounded-sm px-1 text-left font-medium text-primary hover:text-primary-hover hover:underline disabled:cursor-wait disabled:text-ink-disabled"
             disabled={isDownloading}
             onClick={() => handleAttachmentDownload(attachment)}
           >
@@ -214,7 +215,7 @@ export function HomePage() {
       key: "version",
       header: "版本",
       headerClassName: "w-20",
-      cellClassName: "font-mono text-revision tabular",
+      cellClassName: "font-mono text-revision tabular text-ink-muted",
       render: (attachment) =>
         attachment.currentVersion
           ? `V${attachment.currentVersion.version}`
@@ -225,33 +226,32 @@ export function HomePage() {
   const documentColumns: ReadonlyArray<TableColumn<AvailableDocumentResponse>> =
     [
       {
+        key: "expand",
+        header: <span className="sr-only">展開表單及附件</span>,
+        headerClassName: "w-12 px-2",
+        cellClassName: "w-12 px-2",
+        render: (document, _rowIndex, context) =>
+          context.expandable ? (
+            <button
+              type="button"
+              className="grid size-8 cursor-pointer place-items-center rounded-sm text-ink-muted hover:bg-primary-subtle hover:text-primary focus-visible:outline-primary"
+              aria-expanded={context.expanded}
+              aria-label={`${context.expanded ? "收合" : "展開"} ${document.documentNo} 表單及附件清單`}
+              onClick={context.toggleExpansion}
+            >
+              <ChevronRight
+                className={`size-4 transition-transform ${context.expanded ? "rotate-90" : ""}`}
+                aria-hidden="true"
+              />
+            </button>
+          ) : null,
+      },
+      {
         key: "documentNo",
         header: "文件編號",
-        headerClassName: "w-48",
-        cellClassName: "font-mono text-code tabular",
-        render: (document, _rowIndex, context) => (
-          <div className="flex items-center">
-            {context.expandable ? (
-              <button
-                type="button"
-                className="mr-1 grid size-8 shrink-0 place-items-center rounded-sm text-primary hover:bg-primary-subtle"
-                aria-expanded={context.expanded}
-                aria-label={`${context.expanded ? "收合" : "展開"} ${document.documentNo} 表單及附件清單`}
-                onClick={context.toggleExpansion}
-              >
-                <span
-                  className={`text-control transition-transform ${context.expanded ? "rotate-90" : ""}`}
-                  aria-hidden="true"
-                >
-                  ›
-                </span>
-              </button>
-            ) : (
-              <span className="mr-1 size-8 shrink-0" aria-hidden="true" />
-            )}
-            {document.documentNo}
-          </div>
-        ),
+        headerClassName: "w-44",
+        cellClassName: "font-mono text-code tabular text-ink-muted whitespace-nowrap",
+        render: (document) => document.documentNo,
       },
       {
         key: "name",
@@ -266,7 +266,7 @@ export function HomePage() {
           return document.currentVersion.hasFile ? (
             <button
               type="button"
-              className="h-control-sm rounded-sm px-1 text-left text-cell font-medium text-primary hover:underline disabled:cursor-wait disabled:text-ink-disabled"
+              className="min-h-control-sm cursor-pointer rounded-sm px-1 text-left font-medium text-primary hover:text-primary-hover hover:underline disabled:cursor-wait disabled:text-ink-disabled"
               disabled={isDownloading}
               onClick={() => handleDocumentDownload(document)}
             >
@@ -438,7 +438,7 @@ export function HomePage() {
           )}
 
           <Table
-            className="border-0"
+            className="border-0 [&>table]:min-w-[1120px]"
             columns={documentColumns}
             data={documents}
             loading={documentsQuery.isPending}
@@ -460,8 +460,12 @@ export function HomePage() {
                 </Button>
               </div>
             }
-            rowClassName={(_document, index) =>
-              index % 2 === 1 ? "bg-surface-zebra" : undefined
+            rowClassName={(document, index) =>
+              expandedDocumentIds.has(document.documentId)
+                ? "bg-primary-subtle"
+                : index % 2 === 1
+                  ? "bg-surface-zebra"
+                  : undefined
             }
             expansion={{
               canExpand: (document) => document.attachments.length > 0,
@@ -470,17 +474,18 @@ export function HomePage() {
               onToggle: toggleDocument,
               toggleOnRowClick: true,
               render: (document) => (
-                <div>
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <h2 className="text-section-label text-ink">
-                      {document.documentNo} 表單及附件清單
-                    </h2>
-                    <span className="text-meta text-ink-muted">
-                      共 {document.attachments.length} 筆
+                <div className="border-l-2 border-line-strong bg-surface-zebra px-3 py-3 sm:px-5">
+                  <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <h2 className="text-label font-semibold text-ink">表單及附件</h2>
+                    <span className="rounded-sm border border-line-strong bg-surface px-2 py-0.5 text-fine tabular text-ink-muted">
+                      {document.attachments.length} 筆
+                    </span>
+                    <span className="text-fine font-mono text-ink-muted">
+                      {document.documentNo}
                     </span>
                   </div>
                   <Table
-                    className="border-line"
+                    className="border-line bg-surface [&>table]:min-w-[480px]"
                     columns={attachmentColumns}
                     data={document.attachments}
                     getRowKey={(attachment) => attachment.attachmentId}
