@@ -24,13 +24,10 @@ import type {
   ListAvailableDocumentsParams,
 } from "@/features/documents/types";
 import { useIsoCategories } from "@/features/iso-categories/queries";
+import { formatRocDate } from "@/lib/date";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 350;
-
-function formatDate(value: string | null): string {
-  return value?.replaceAll("-", "/") ?? "－";
-}
 
 function displayAttachmentNo(value: string | null | undefined): string {
   if (value === null || value === undefined) return "";
@@ -182,25 +179,6 @@ export function HomePage() {
     TableColumn<AvailableDocumentAttachment>
   > = [
     {
-      key: "status",
-      header: "檔案狀態",
-      headerClassName: "w-28",
-      render: (attachment) => {
-        const hasFile = attachment.currentVersion?.hasFile === true;
-        return (
-          <span
-            className={
-              hasFile
-                ? "text-label font-medium text-state-active"
-                : "text-label text-state-expiring"
-            }
-          >
-            {hasFile ? "可下載" : "待補檔"}
-          </span>
-        );
-      },
-    },
-    {
       key: "attachmentNo",
       header: "表單及附件編號",
       headerClassName: "w-44",
@@ -210,9 +188,27 @@ export function HomePage() {
     {
       key: "name",
       header: "表單及附件名稱",
-      render: (attachment) => (
-        <span className="font-medium">{attachment.name}</span>
-      ),
+      render: (attachment) => {
+        const isDownloading =
+          downloadAttachmentMutation.isPending &&
+          downloadAttachmentMutation.variables?.attachmentId ===
+            attachment.attachmentId;
+
+        return attachment.currentVersion?.hasFile === true ? (
+          <button
+            type="button"
+            className="h-control-sm rounded-sm px-1 text-left text-cell font-medium text-primary hover:underline disabled:cursor-wait disabled:text-ink-disabled"
+            disabled={isDownloading}
+            onClick={() => handleAttachmentDownload(attachment)}
+          >
+            {isDownloading ? "下載中…" : attachment.name}
+          </button>
+        ) : (
+          <span className="font-medium text-ink-disabled">
+            {attachment.name}
+          </span>
+        );
+      },
     },
     {
       key: "version",
@@ -224,49 +220,10 @@ export function HomePage() {
           ? `V${attachment.currentVersion.version}`
           : "－",
     },
-    {
-      key: "download",
-      header: "操作",
-      headerClassName: "w-24",
-      render: (attachment) => {
-        const canDownload = attachment.currentVersion?.hasFile === true;
-        const isDownloading =
-          downloadAttachmentMutation.isPending &&
-          downloadAttachmentMutation.variables?.attachmentId ===
-            attachment.attachmentId;
-
-        return canDownload ? (
-          <button
-            type="button"
-            className="h-control-sm rounded-sm px-2 text-control font-medium text-primary hover:bg-primary-subtle disabled:cursor-wait disabled:text-ink-disabled"
-            disabled={isDownloading}
-            onClick={() => handleAttachmentDownload(attachment)}
-          >
-            {isDownloading ? "下載中" : "下載"}
-          </button>
-        ) : (
-          <span className="text-ink-disabled">－</span>
-        );
-      },
-    },
   ];
 
   const documentColumns: ReadonlyArray<TableColumn<AvailableDocumentResponse>> =
     [
-      {
-        key: "status",
-        header: "狀態",
-        headerClassName: "w-28",
-        render: () => (
-          <span className="inline-flex items-center gap-1.5 text-label font-medium text-state-active">
-            <span
-              className="size-1.5 rounded-full bg-state-active"
-              aria-hidden="true"
-            />
-            已發布
-          </span>
-        ),
-      },
       {
         key: "documentNo",
         header: "文件編號",
@@ -323,6 +280,27 @@ export function HomePage() {
         },
       },
       {
+        key: "isoCategoryName",
+        header: "品質系統",
+        headerClassName: "w-40",
+        cellClassName: "text-meta text-ink-muted",
+        render: (document) => document.isoCategoryName ?? "－",
+      },
+      {
+        key: "deptName",
+        header: "發行單位",
+        headerClassName: "w-40",
+        cellClassName: "text-meta text-ink-muted",
+        render: (document) => document.deptName ?? "",
+      },
+      {
+        key: "companyName",
+        header: "公司別",
+        headerClassName: "w-56",
+        cellClassName: "text-meta text-ink-muted",
+        render: (document) => document.companyName,
+      },
+      {
         key: "version",
         header: "版本",
         headerClassName: "w-20",
@@ -334,28 +312,7 @@ export function HomePage() {
         header: "生效日期",
         headerClassName: "w-36",
         cellClassName: "text-meta text-ink-muted tabular",
-        render: (document) => formatDate(document.currentVersion.effectiveDate),
-      },
-      {
-        key: "companyName",
-        header: "公司別",
-        headerClassName: "w-56",
-        cellClassName: "text-meta text-ink-muted",
-        render: (document) => document.companyName,
-      },
-      {
-        key: "deptName",
-        header: "發行單位",
-        headerClassName: "w-40",
-        cellClassName: "text-meta text-ink-muted",
-        render: (document) => document.deptName ?? "",
-      },
-      {
-        key: "isoCategoryName",
-        header: "品質系統",
-        headerClassName: "w-40",
-        cellClassName: "text-meta text-ink-muted",
-        render: (document) => document.isoCategoryName ?? "－",
+        render: (document) => formatRocDate(document.currentVersion.effectiveDate),
       },
     ];
 

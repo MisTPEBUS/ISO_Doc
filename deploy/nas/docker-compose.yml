@@ -1,0 +1,23 @@
+services:
+  linehook-api:
+    image: linehook-api:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+      cache_from:
+        - linehook-api:latest
+    container_name: linehook-api
+    pull_policy: if_not_present
+    ports:
+      - "5001:5001"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production # 改為 Production
+      - ASPNETCORE_CORS_ORIGINS=https://35.221.146.143.nip.io
+    networks:
+      - backend_network # 改用現有的網路
+
+networks:
+  backend_network:
+    external: true # 使用現有的網路

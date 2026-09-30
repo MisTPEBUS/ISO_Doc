@@ -1,4 +1,5 @@
 using IsoDocument.Api.Features.Home;
+using System.IO.Pipelines;
 using PdfSharp.Fonts;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.IO;
@@ -45,6 +46,24 @@ public sealed class PdfWatermarkServiceTests
             new MemoryStream(sourceBytes), content, CancellationToken.None);
 
         Assert.Equal(sourceCopy, sourceBytes);
+    }
+
+    [Fact]
+    public async Task ApplyWatermarkAsync_AcceptsNonSeekableGcpDownloadStream()
+    {
+        var pipe = new Pipe();
+        await pipe.Writer.WriteAsync(CreatePdfBytes(pageCount: 1));
+        await pipe.Writer.CompleteAsync();
+        await using var source = pipe.Reader.AsStream();
+        Assert.False(source.CanSeek);
+
+        var service = new PdfWatermarkService();
+        await using var result = await service.ApplyWatermarkAsync(
+            source, new PdfWatermarkContent("COA", Guid.NewGuid().ToString()),
+            CancellationToken.None);
+
+        using var pdf = PdfReader.Open(result, PdfDocumentOpenMode.Import);
+        Assert.Equal(1, pdf.PageCount);
     }
 
     private static byte[] CreatePdfBytes(int pageCount)

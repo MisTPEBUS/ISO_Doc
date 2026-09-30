@@ -33,7 +33,7 @@ public sealed class StorageObjectKeyService(
         var categoryName = await FindCategoryNameAsync(document.IsoCategoryId, cancellationToken);
         return builder.BuildGcpMainKey(
             gcpOptions.Value.ObjectPrefix,
-            document.CompanyId,
+            companyCode,
             categoryName,
             document.DocumentNo,
             version,
@@ -42,7 +42,6 @@ public sealed class StorageObjectKeyService(
     }
 
     public async Task<string> BuildAttachmentKeyAsync(
-        Guid companyId,
         Guid? isoCategoryId,
         string companyCode,
         string documentNo,
@@ -68,7 +67,7 @@ public sealed class StorageObjectKeyService(
         var categoryName = await FindCategoryNameAsync(isoCategoryId, cancellationToken);
         return builder.BuildGcpAttachmentKey(
             gcpOptions.Value.ObjectPrefix,
-            companyId,
+            companyCode,
             categoryName,
             documentNo,
             attachmentNo,

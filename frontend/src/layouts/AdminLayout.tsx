@@ -44,7 +44,7 @@ export function AdminLayout() {
         departmentName={user?.deptName}
         userName={user?.name ?? '使用者'}
         roleLabel={user ? USER_ROLE_LABEL[user.role] : undefined}
-        modeLink={{ label: '前台查閱', href: '/' }}
+        modeLink={{ label: 'ISO文件列表', href: '/' }}
         changePasswordHref="/change-password"
         logoutLabel={logoutMutation.isPending ? '登出中' : '登出'}
         onLogout={handleLogout}

@@ -294,13 +294,6 @@ export function AttachmentBatchImportPanel({
           <span className="h-6 w-px bg-line" aria-hidden="true" />
           <div className="flex items-center gap-2">
             <Button
-              variant="secondary"
-              disabled={submitting || submitted}
-              onClick={triggerFileSelect}
-            >
-              選擇檔案
-            </Button>
-            <Button
               disabled={!canSave}
               loading={submitting}
               loadingText="建立並上傳中"
@@ -319,7 +312,7 @@ export function AttachmentBatchImportPanel({
         role="button"
         tabIndex={0}
         aria-label="拖曳或點擊選擇表單及附件檔案"
-        className={`grid min-h-32 cursor-pointer place-items-center rounded-sm border-2 border-dashed px-6 py-6 text-center transition-colors ${
+        className={`grid min-h-72 cursor-pointer place-items-center rounded-sm border-2 border-dashed px-6 py-6 text-center transition-colors ${
           isDragging
             ? "border-primary bg-primary-subtle"
             : "border-line-strong bg-canvas hover:border-primary hover:bg-primary-subtle"

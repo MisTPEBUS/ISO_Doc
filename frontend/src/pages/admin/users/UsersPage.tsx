@@ -37,6 +37,7 @@ import {
   type ManagedUserRole,
   type UserResponse,
 } from "@/features/users/types";
+import { formatRocDateTime } from "@/lib/date";
 
 const UserBatchImportPanel = lazy(() =>
   import("@/features/users/components/UserBatchImportPanel").then((module) => ({
@@ -71,16 +72,6 @@ type FieldErrors = Partial<Record<keyof UserFormValues, string>>;
 
 function firstMessage(messages: string[] | undefined): string | undefined {
   return messages?.[0];
-}
-
-function formatDateTime(value: string | null): string {
-  if (value === null) return "尚未登入";
-
-  return new Intl.DateTimeFormat("zh-TW", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: "Asia/Taipei",
-  }).format(new Date(value));
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -413,7 +404,7 @@ export function UsersPage() {
       key: "lastLoginAt",
       header: "最後登入",
       cellClassName: "text-meta text-ink-muted tabular whitespace-nowrap",
-      render: (user) => formatDateTime(user.lastLoginAt),
+      render: (user) => formatRocDateTime(user.lastLoginAt, "尚未登入"),
     },
     {
       key: "actions",

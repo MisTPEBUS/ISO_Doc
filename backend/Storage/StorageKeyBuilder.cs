@@ -22,7 +22,7 @@ public sealed partial class StorageKeyBuilder
         Guid fileId,
         string originalFileName)
     {
-        ValidateIdentifier(companyCode, nameof(companyCode));
+        ValidateCompanyCode(companyCode);
         ValidateIdentifier(documentNo, nameof(documentNo));
         ValidateVersion(version);
 
@@ -38,7 +38,7 @@ public sealed partial class StorageKeyBuilder
         Guid fileId,
         string originalFileName)
     {
-        ValidateIdentifier(companyCode, nameof(companyCode));
+        ValidateCompanyCode(companyCode);
         ValidateIdentifier(documentNo, nameof(documentNo));
         ValidateVersion(version);
 
@@ -58,22 +58,23 @@ public sealed partial class StorageKeyBuilder
 
     public string BuildGcpMainKey(
         string prefix,
-        Guid companyId,
+        string companyCode,
         string? categoryName,
         string documentNo,
         string version,
         Guid fileId,
         string originalFileName)
     {
+        ValidateCompanyCode(companyCode);
         ValidateIdentifier(documentNo, nameof(documentNo));
         ValidateVersion(version);
-        return $"{ValidatePrefix(prefix)}/{companyId:D}/{CategorySegment(categoryName)}/{documentNo}" +
+        return $"{ValidatePrefix(prefix)}/{companyCode}/{CategorySegment(categoryName)}/{documentNo}" +
             $"/main/v{version}/{CloudFileName(fileId, originalFileName)}";
     }
 
     public string BuildGcpAttachmentKey(
         string prefix,
-        Guid companyId,
+        string companyCode,
         string? categoryName,
         string documentNo,
         string? attachmentNo,
@@ -82,12 +83,13 @@ public sealed partial class StorageKeyBuilder
         Guid fileId,
         string originalFileName)
     {
+        ValidateCompanyCode(companyCode);
         ValidateIdentifier(documentNo, nameof(documentNo));
         ValidateVersion(version);
         var attachmentSegment = string.IsNullOrWhiteSpace(attachmentNo)
             ? $"_{attachmentId:N}"
             : EncodeSegment(attachmentNo);
-        return $"{ValidatePrefix(prefix)}/{companyId:D}/{CategorySegment(categoryName)}/{documentNo}" +
+        return $"{ValidatePrefix(prefix)}/{companyCode}/{CategorySegment(categoryName)}/{documentNo}" +
             $"/att/{attachmentSegment}/v{version}/{CloudFileName(fileId, originalFileName)}";
     }
 
@@ -202,6 +204,16 @@ public sealed partial class StorageKeyBuilder
         }
     }
 
+    private static void ValidateCompanyCode(string companyCode)
+    {
+        if (companyCode is null || !CompanyCodePattern().IsMatch(companyCode))
+        {
+            throw new ArgumentException(
+                "Company code must be 2–30 ASCII letters, digits, or internal spaces.",
+                nameof(companyCode));
+        }
+    }
+
     private static void ValidateVersion(string version)
     {
         if (string.IsNullOrWhiteSpace(version) || !VersionPattern().IsMatch(version))
@@ -214,4 +226,7 @@ public sealed partial class StorageKeyBuilder
 
     [GeneratedRegex("^[0-9]+\\.[0-9]+$", RegexOptions.CultureInvariant)]
     private static partial Regex VersionPattern();
+
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9 ]{0,28}[A-Za-z0-9]$", RegexOptions.CultureInvariant)]
+    private static partial Regex CompanyCodePattern();
 }

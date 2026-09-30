@@ -1,4 +1,3 @@
-
 const STATUS = {
   active: { label: "有效", className: "status-active" },
   review: { label: "待生效", className: "status-review" },
@@ -172,9 +171,11 @@ class IsoTopbar extends HTMLElement {
           <span class="meta">首都客運 / 資訊部</span>
           <span class="divider">/</span>
           <strong>Lobinda</strong>
-          ${mode === "admin"
-            ? '<a class="topbar-link" href="./index.html">前台查閱</a>'
-            : '<a class="topbar-link" href="./admin.html">管理</a>'}
+          ${
+            mode === "admin"
+              ? '<a class="topbar-link" href="./index.html">ISO文件列表</a>'
+              : '<a class="topbar-link" href="./admin.html">管理</a>'
+          }
           <a class="topbar-link" href="#">修改密碼</a>
         </div>
       </header>
@@ -185,33 +186,45 @@ class IsoTopbar extends HTMLElement {
 class AdminSidebar extends HTMLElement {
   connectedCallback() {
     const items = [
-      ["基礎設定", [
-        ["⌂", "部門維護", "#"],
-        ["人", "使用者維護", "#"],
-      ]],
-      ["文件管理", [
-        ["文", "ISO 文件維護", "./admin.html", true],
-        ["權", "權限維護", "#"],
-        ["備", "ISO 文件備份", "#"],
-      ]],
-      ["系統", [
-        ["i", "關於", "#"],
-      ]],
+      [
+        "基礎設定",
+        [
+          ["⌂", "部門維護", "#"],
+          ["人", "使用者維護", "#"],
+        ],
+      ],
+      [
+        "文件管理",
+        [
+          ["文", "ISO 文件維護", "./admin.html", true],
+          ["權", "權限維護", "#"],
+          ["備", "ISO 文件備份", "#"],
+        ],
+      ],
+      ["系統", [["i", "關於", "#"]]],
     ];
 
     this.innerHTML = `
       <aside class="sidebar" aria-label="管理導覽">
-        ${items.map(([label, navs]) => `
+        ${items
+          .map(
+            ([label, navs]) => `
           <div class="nav-group">
             <div class="nav-label">${label}</div>
-            ${navs.map(([icon, text, href, active]) => `
+            ${navs
+              .map(
+                ([icon, text, href, active]) => `
               <a class="nav-link${active ? " active" : ""}" href="${href}">
                 <span class="nav-icon">${icon}</span>
                 <span>${text}</span>
               </a>
-            `).join("")}
+            `,
+              )
+              .join("")}
           </div>
-        `).join("")}
+        `,
+          )
+          .join("")}
       </aside>
     `;
   }
@@ -316,10 +329,11 @@ class DocumentTable extends HTMLElement {
             </tr>
           </thead>
           <tbody>
-            ${this.rows.map(doc => {
-              const state = STATUS[doc.status];
-              const obsolete = doc.status === "obsolete";
-              return `
+            ${this.rows
+              .map((doc) => {
+                const state = STATUS[doc.status];
+                const obsolete = doc.status === "obsolete";
+                return `
                 <tr class="${doc.status === "expiring" ? "expiring" : ""}">
                   <td class="status-cell">
                     <span class="status ${state.className}">
@@ -336,15 +350,18 @@ class DocumentTable extends HTMLElement {
                   <td class="company" data-mobile-hide="true">${doc.company}</td>
                   <td class="note" data-mobile-hide="true">${doc.note || "－"}</td>
                   <td class="action-cell">
-                    ${admin
-                      ? `<button class="row-action" data-action="edit" data-id="${doc.id}" type="button">編輯</button>`
-                      : doc.canDownload
-                        ? `<button class="download-link" data-action="download" data-id="${doc.id}" type="button">下載</button>`
-                        : `<span class="unavailable">－</span>`}
+                    ${
+                      admin
+                        ? `<button class="row-action" data-action="edit" data-id="${doc.id}" type="button">編輯</button>`
+                        : doc.canDownload
+                          ? `<button class="download-link" data-action="download" data-id="${doc.id}" type="button">下載</button>`
+                          : `<span class="unavailable">－</span>`
+                    }
                   </td>
                 </tr>
               `;
-            }).join("")}
+              })
+              .join("")}
           </tbody>
         </table>
       </div>

@@ -18,12 +18,9 @@ import {
   type MockDocumentAttachment,
 } from "@/features/documents/mockData";
 import type { AvailableDocumentResponse } from "@/features/documents/types";
+import { formatRocDate } from "@/lib/date";
 
 const PAGE_SIZE = 6;
-
-function formatDate(value: string | null): string {
-  return value?.replaceAll("-", "/") ?? "－";
-}
 
 export function UiKitPage() {
   const navigate = useNavigate();
@@ -243,7 +240,7 @@ export function UiKitPage() {
         header: "生效日期",
         headerClassName: "w-36",
         cellClassName: "text-meta text-ink-muted tabular",
-        render: (document) => formatDate(document.currentVersion.effectiveDate),
+        render: (document) => formatRocDate(document.currentVersion.effectiveDate),
       },
       {
         key: "companyName",

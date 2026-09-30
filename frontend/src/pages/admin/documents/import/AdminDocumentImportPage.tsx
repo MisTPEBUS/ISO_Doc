@@ -616,7 +616,7 @@ export function AdminDocumentImportPage() {
           )}
         </div>
         <Table
-          className="border-0"
+          className="max-h-[60vh] overflow-y-auto border-0 [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-surface-header"
           columns={columns}
           data={rows}
           getRowKey={(row) => row.id}

@@ -85,16 +85,15 @@ public sealed class StorageKeyBuilderTests
     }
 
     [Fact]
-    public void BuildGcpMainKey_UsesCompanyIdCategoryAndImmutableFileId()
+    public void BuildGcpMainKey_UsesCompanyCodeCategoryAndImmutableFileId()
     {
         var builder = new StorageKeyBuilder();
-        var companyId = Guid.Parse("aabbccdd-1122-3344-5566-77889900aabb");
 
         var result = builder.BuildGcpMainKey(
-            "documents/iso", companyId, "ISO 9001", "HR-I-01", "2.1", FileId, "程序.PDF");
+            "documents/iso", "ACME", "ISO 9001", "HR-I-01", "2.1", FileId, "程序.PDF");
 
         Assert.Equal(
-            "documents/iso/aabbccdd-1122-3344-5566-77889900aabb/ISO 9001/HR-I-01/main/v2.1/00112233445566778899aabbccddeeff.pdf",
+            "documents/iso/ACME/ISO 9001/HR-I-01/main/v2.1/00112233445566778899aabbccddeeff.pdf",
             result);
     }
 
@@ -102,16 +101,33 @@ public sealed class StorageKeyBuilderTests
     public void BuildGcpAttachmentKey_WithoutNumberUsesAttachmentId()
     {
         var builder = new StorageKeyBuilder();
-        var companyId = Guid.Parse("aabbccdd-1122-3344-5566-77889900aabb");
         var attachmentId = Guid.Parse("12345678-1234-1234-1234-123456789abc");
 
         var result = builder.BuildGcpAttachmentKey(
-            "documents/iso", companyId, null, "HR-I-01", null,
+            "documents/iso", "ACME", null, "HR-I-01", null,
             attachmentId, "1.0", FileId, "表單.xlsx");
 
         Assert.Equal(
-            "documents/iso/aabbccdd-1122-3344-5566-77889900aabb/_uncategorized/HR-I-01/att/_12345678123412341234123456789abc/v1.0/00112233445566778899aabbccddeeff.xlsx",
+            "documents/iso/ACME/_uncategorized/HR-I-01/att/_12345678123412341234123456789abc/v1.0/00112233445566778899aabbccddeeff.xlsx",
             result);
+    }
+
+    [Fact]
+    public void BuildKeys_PreserveCompanyCodeCaseAndRepeatedSpaces()
+    {
+        var builder = new StorageKeyBuilder();
+
+        var mainKey = builder.BuildGcpMainKey(
+            "documents/iso", "Capital  Bus", "ISO9001", "GA-I-02", "1.6", FileId, "main.pdf");
+        var attachmentKey = builder.BuildGcpAttachmentKey(
+            "documents/iso", "Capital  Bus", "ISO9001", "GA-I-02", "ATT-1",
+            Guid.Empty, "1.0", FileId, "attachment.pdf");
+        var localKey = builder.BuildMainKey(
+            "Capital  Bus", "GA-I-02", "1.6", FileId, "main.pdf");
+
+        Assert.StartsWith("documents/iso/Capital  Bus/ISO9001/GA-I-02/main/", mainKey);
+        Assert.StartsWith("documents/iso/Capital  Bus/ISO9001/GA-I-02/att/", attachmentKey);
+        Assert.StartsWith("store/Capital  Bus/GA-I-02/main/", localKey);
     }
 
     [Theory]
@@ -123,8 +139,26 @@ public sealed class StorageKeyBuilderTests
         var builder = new StorageKeyBuilder();
 
         var result = builder.BuildGcpMainKey(
-            "documents/iso", Guid.Empty, category, "DOC-1", "1.0", FileId, "original.pdf");
+            "documents/iso", "ACME", category, "DOC-1", "1.0", FileId, "original.pdf");
 
         Assert.Contains($"/{expectedSegment}/DOC-1/main/", result);
+    }
+
+    [Theory]
+    [InlineData("../ACME")]
+    [InlineData("ACME/OTHER")]
+    [InlineData("ACME:OTHER")]
+    [InlineData(" Capital  Bus")]
+    [InlineData("Capital  Bus ")]
+    [InlineData("Capital\tBus")]
+    public void BuildGcpKeys_WhenCompanyCodeIsInvalid_Throw(string companyCode)
+    {
+        var builder = new StorageKeyBuilder();
+
+        Assert.Throws<ArgumentException>(() => builder.BuildGcpMainKey(
+            "documents/iso", companyCode, null, "DOC-1", "1.0", FileId, "document.pdf"));
+        Assert.Throws<ArgumentException>(() => builder.BuildGcpAttachmentKey(
+            "documents/iso", companyCode, null, "DOC-1", "ATT-1", Guid.Empty,
+            "1.0", FileId, "attachment.pdf"));
     }
 }

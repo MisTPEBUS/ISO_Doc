@@ -1,0 +1,64 @@
+# 使用方式（在此目錄下執行）：
+#   docker compose -f docker-compose-deploy.yml --env-file .env.deploy up -d --build
+services:
+  iso-backend:
+    image: iso-backend:latest
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+      cache_from:
+        - iso-backend:latest
+    container_name: iso-backend
+    pull_policy: if_not_present
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: ${ISO_DB_CONNECTION}
+      # 啟動時自動套用 migration；新資料庫會一併建立初始公司、品質系統與 admin 帳號
+      Database__AutoMigrate: "true"
+      Storage__Provider: GoogleCloud
+      Storage__BucketName: ${GCP_STORAGE_BUCKET}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp-service-account.json
+      OpenAI__ApiKey: ${OPENAI_API_KEY:-}
+      TZ: Asia/Taipei
+    volumes:
+      - ${GCP_SERVICE_ACCOUNT_PATH}:/run/secrets/gcp-service-account.json:ro
+    networks:
+      iso_internal:
+        # frontend/nginx.conf 以 http://backend:8080 轉發 /api/；
+        # 這個別名只存在於 iso_internal，不會和 backend_network 上其他專案的服務撞名。
+        aliases:
+          - backend
+    restart: unless-stopped
+    # 不開 port、不接 backend_network：Program.cs 的 ForwardedHeaders 信任所有來源，
+    # 只有在 backend 只有 iso-frontend 連得到時才安全。
+
+  iso-frontend:
+    image: iso-frontend:latest
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+        VITE_API_BASE_URL: /api
+      cache_from:
+        - iso-frontend:latest
+    container_name: iso-frontend
+    pull_policy: if_not_present
+    depends_on:
+      iso-backend:
+        condition: service_healthy
+    ports:
+      # 只綁 loopback：nginx.conf 固定送出 X-Forwarded-Proto https，
+      # 前面必須有終止 TLS 的 reverse proxy，不可讓外部直接以 HTTP 連進來。
+      - "127.0.0.1:${ISO_FRONTEND_PORT:-8081}:80"
+    networks:
+      - iso_internal
+      - backend_network # 使用現有的網路，給雲端的 reverse proxy 轉發
+    restart: unless-stopped
+
+networks:
+  iso_internal:
+  backend_network:
+    external: true # 使用現有的網路

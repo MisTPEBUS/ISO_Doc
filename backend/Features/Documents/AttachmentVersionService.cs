@@ -77,7 +77,7 @@ public sealed class AttachmentVersionService(
             var publishDate = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
             var effectiveDate = request.EffectiveDate ?? publishDate;
             var objectKey = await storageKeyBuilder.BuildAttachmentKeyAsync(
-                context.CompanyId, context.IsoCategoryId,
+                context.IsoCategoryId,
                 context.CompanyCode, context.DocumentNo,
                 context.AttachmentNo, context.AttachmentId,
                 versionText, Guid.NewGuid(), request.File!.FileName,

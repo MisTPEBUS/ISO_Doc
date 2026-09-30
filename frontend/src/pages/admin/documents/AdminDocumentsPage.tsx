@@ -31,6 +31,7 @@ import { USER_ROLE } from "@/features/auth/types";
 import { useCompanies } from "@/features/companies/queries";
 import { useDepts } from "@/features/departments/queries";
 import { useIsoCategories } from "@/features/iso-categories/queries";
+import { formatRocDateTime } from "@/lib/date";
 
 const DEFAULT_PAGE_SIZE = 10;
 const EMPTY_FORM: AdminDocumentFormValues = {
@@ -44,14 +45,6 @@ type FieldErrors = Partial<Record<keyof AdminDocumentFormValues, string>>;
 
 function firstMessage(messages: string[] | undefined): string | undefined {
   return messages?.[0];
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("zh-TW", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Taipei",
-  }).format(new Date(value));
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -322,7 +315,7 @@ export function AdminDocumentsPage() {
       header: "最後更新",
       headerClassName: "w-52",
       cellClassName: "text-meta text-ink-muted tabular whitespace-nowrap",
-      render: (document) => formatDateTime(document.updatedAt),
+      render: (document) => formatRocDateTime(document.updatedAt),
     },
     {
       key: "actions",
@@ -538,11 +531,6 @@ export function AdminDocumentsPage() {
         open={formOpen}
         onClose={closeForm}
         title={editingDocument ? "編輯ISO文件" : "新增ISO管理程序"}
-        description={
-          editingDocument
-            ? "文件編號建立後不可修改。"
-            : "先建立 ISO 文件主檔；版本與檔案將於後續步驟新增。"
-        }
         footer={
           <>
             <Button

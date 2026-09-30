@@ -24,14 +24,22 @@ public sealed class PdfWatermarkService : IPdfWatermarkService
     private static readonly XColor SideWatermarkColor =
         XColor.FromArgb(120, 120, 120, 120);
 
-    public Task<Stream> ApplyWatermarkAsync(
+    public async Task<Stream> ApplyWatermarkAsync(
         Stream source,
         PdfWatermarkContent content,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var document = PdfReader.Open(source, PdfDocumentOpenMode.Modify);
+        // GCP download streams are forward-only; PDFsharp requires a seekable input.
+        using var bufferedSource = source.CanSeek ? null : new MemoryStream();
+        if (bufferedSource is not null)
+        {
+            await source.CopyToAsync(bufferedSource, cancellationToken);
+            bufferedSource.Position = 0;
+        }
+
+        using var document = PdfReader.Open(bufferedSource ?? source, PdfDocumentOpenMode.Modify);
 
         // PDF transparency（透明度）需要 PDF 1.4 以上。
         // 若來源是舊版 PDF 而沒有升級版本，部分 Viewer 可能把 Alpha 當成不透明處理，
@@ -124,6 +132,6 @@ public sealed class PdfWatermarkService : IPdfWatermarkService
 
         output.Position = 0;
 
-        return Task.FromResult<Stream>(output);
+        return output;
     }
 }

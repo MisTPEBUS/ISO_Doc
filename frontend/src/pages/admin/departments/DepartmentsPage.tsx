@@ -26,6 +26,7 @@ import {
   type DeptFormValues,
 } from '@/features/departments/schemas'
 import type { DeptResponse } from '@/features/departments/types'
+import { formatRocDateTime } from '@/lib/date'
 
 const DEFAULT_PAGE_SIZE = 10
 const EMPTY_FORM: DeptFormValues = { name: '', seq: '' }
@@ -34,14 +35,6 @@ type FieldErrors = Partial<Record<keyof DeptFormValues, string>>
 
 function firstMessage(messages: string[] | undefined): string | undefined {
   return messages?.[0]
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('zh-TW', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'Asia/Taipei',
-  }).format(new Date(value))
 }
 
 export function DepartmentsPage() {
@@ -214,7 +207,7 @@ export function DepartmentsPage() {
       header: '最後更新',
       headerClassName: 'w-52',
       cellClassName: 'text-meta text-ink-muted tabular',
-      render: (department) => formatDateTime(department.updatedAt),
+      render: (department) => formatRocDateTime(department.updatedAt),
     },
     {
       key: 'actions',

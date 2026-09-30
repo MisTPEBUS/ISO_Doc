@@ -27,6 +27,7 @@ import {
   type IsoCategoryFormValues,
 } from "@/features/iso-categories/schemas";
 import type { IsoCategoryResponse } from "@/features/iso-categories/types";
+import { formatRocDateTime } from "@/lib/date";
 
 const DEFAULT_PAGE_SIZE = 10;
 const EMPTY_FORM: IsoCategoryFormValues = { name: "", isActive: true };
@@ -35,14 +36,6 @@ type FieldErrors = Partial<Record<keyof IsoCategoryFormValues, string>>;
 
 function firstMessage(messages: string[] | undefined): string | undefined {
   return messages?.[0];
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("zh-TW", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Taipei",
-  }).format(new Date(value));
 }
 
 export function IsoCategoriesPage() {
@@ -227,7 +220,7 @@ export function IsoCategoriesPage() {
       header: "最後更新",
       headerClassName: "w-52",
       cellClassName: "text-meta text-ink-muted tabular",
-      render: (category) => formatDateTime(category.updatedAt),
+      render: (category) => formatRocDateTime(category.updatedAt),
     },
     {
       key: "actions",

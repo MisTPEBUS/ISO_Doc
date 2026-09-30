@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 !deploy/nas/.env.nas.example
+!deploy/cloud/.env.deploy.example
 *.pem
 *.key
 secrets.json

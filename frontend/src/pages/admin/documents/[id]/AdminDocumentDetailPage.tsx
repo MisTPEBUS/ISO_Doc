@@ -41,6 +41,7 @@ import { useCurrentUser } from "@/features/auth/queries";
 import { USER_ROLE } from "@/features/auth/types";
 import { useCompanies } from "@/features/companies/queries";
 import { useDownloadAttachment } from "@/features/documents/queries";
+import { formatRocDate, formatRocDateTime } from "@/lib/date";
 
 type VersionStatusPresentation = {
   label: string;
@@ -129,14 +130,6 @@ function apiFieldMessage<TField extends string>(
     ([key]) => key.toLowerCase() === field.toLowerCase(),
   );
   return firstMessage(entry?.[1]);
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("zh-TW", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Taipei",
-  }).format(new Date(value));
 }
 
 function versionErrorMessage(error: unknown): string {
@@ -604,13 +597,13 @@ export function AdminDocumentDetailPage() {
         <div className="border-b border-line p-4 md:border-r md:border-b-0">
           <p className="text-label text-ink-muted">建立時間</p>
           <p className="mt-1 text-meta text-ink tabular">
-            {formatDateTime(detail.createdAt)}
+            {formatRocDateTime(detail.createdAt)}
           </p>
         </div>
         <div className="p-4">
           <p className="text-label text-ink-muted">最後更新</p>
           <p className="mt-1 text-meta text-ink tabular">
-            {formatDateTime(detail.updatedAt)}
+            {formatRocDateTime(detail.updatedAt)}
           </p>
         </div>
       </div>
@@ -800,13 +793,13 @@ export function AdminDocumentDetailPage() {
                     <div>
                       <p className="text-label text-ink-muted">生效日期</p>
                       <p className="text-meta text-ink tabular">
-                        {version.effectiveDate ?? "－"}
+                        {formatRocDate(version.effectiveDate)}
                       </p>
                     </div>
                     <div>
                       <p className="text-label text-ink-muted">失效日期</p>
                       <p className="text-meta text-ink tabular">
-                        {version.expiredDate ?? "－"}
+                        {formatRocDate(version.expiredDate)}
                       </p>
                     </div>
                   </div>
@@ -1059,8 +1052,10 @@ export function AdminDocumentDetailPage() {
                       </span>
                     </div>
                     <span className="text-meta text-ink-muted tabular">
-                      {version.effectiveDate ?? "－"}
-                      {version.expiredDate ? ` ～ ${version.expiredDate}` : ""}
+                      {formatRocDate(version.effectiveDate)}
+                      {version.expiredDate
+                        ? ` ～ ${formatRocDate(version.expiredDate)}`
+                        : ""}
                     </span>
                   </li>
                 );

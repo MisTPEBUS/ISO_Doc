@@ -815,7 +815,7 @@ public sealed class AiImportService(
         {
             await using var transaction = await attachmentVersionStore.BeginTransactionAsync(cancellationToken);
             var objectKey = await storageKeyBuilder.BuildAttachmentKeyAsync(
-                context.CompanyId, context.IsoCategoryId,
+                context.IsoCategoryId,
                 context.CompanyCode, context.DocumentNo,
                 attachmentNo, attachment.Id, versionText,
                 Guid.NewGuid(), item.File.FileName, cancellationToken);

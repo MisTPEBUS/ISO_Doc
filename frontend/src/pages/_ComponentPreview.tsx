@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from "react";
 import {
   Alert,
   AppHeader,
@@ -15,135 +15,137 @@ import {
   Textarea,
   type TableColumn,
   type SidebarNavGroup,
-} from '../components/common'
-import { IsoDocumentPermissionMatrix } from '../components/uikit/IsoDocumentPermissionMatrix'
-import { IsoDocumentInlineEntryPreview } from '../components/uikit/IsoDocumentInlineEntryPreview'
+} from "../components/common";
+import { IsoDocumentPermissionMatrix } from "../components/uikit/IsoDocumentPermissionMatrix";
+import { IsoDocumentInlineEntryPreview } from "../components/uikit/IsoDocumentInlineEntryPreview";
 
 interface PreviewSectionProps {
-  title: string
-  description?: string
-  children: ReactNode
+  title: string;
+  description?: string;
+  children: ReactNode;
 }
 
-function PreviewSection({
-  title,
-  description,
-  children,
-}: PreviewSectionProps) {
+function PreviewSection({ title, description, children }: PreviewSectionProps) {
   return (
     <section className="rounded-md border border-slate-200 bg-white p-5">
       <div className="mb-4 border-b border-slate-200 pb-3">
         <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-        {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+        {description && (
+          <p className="mt-1 text-sm text-slate-500">{description}</p>
+        )}
       </div>
       {children}
     </section>
-  )
+  );
 }
 
 interface DocumentRow {
-  id: string
-  documentNo: string
-  name: string
-  version: string
-  status: 'DRAFT' | 'PUBLISHED' | 'OBSOLETE'
-  effectiveDate: string | null
+  id: string;
+  documentNo: string;
+  name: string;
+  version: string;
+  status: "DRAFT" | "PUBLISHED" | "OBSOLETE";
+  effectiveDate: string | null;
 }
 
 interface AttachmentRow {
-  id: string
-  attachmentNo: string
-  name: string
-  hasFile: boolean
+  id: string;
+  attachmentNo: string;
+  name: string;
+  hasFile: boolean;
 }
 
 const documents: ReadonlyArray<DocumentRow> = [
   {
-    id: 'document-1',
-    documentNo: 'HR-GN-01',
-    name: '人事管理辦法',
-    version: '2.1',
-    status: 'PUBLISHED',
-    effectiveDate: '2026-08-01',
+    id: "document-1",
+    documentNo: "HR-GN-01",
+    name: "人事管理辦法",
+    version: "2.1",
+    status: "PUBLISHED",
+    effectiveDate: "2026-08-01",
   },
   {
-    id: 'document-2',
-    documentNo: 'QA-PD-03',
-    name: '文件管制作業程序',
-    version: '3.0',
-    status: 'DRAFT',
+    id: "document-2",
+    documentNo: "QA-PD-03",
+    name: "文件管制作業程序",
+    version: "3.0",
+    status: "DRAFT",
     effectiveDate: null,
   },
   {
-    id: 'document-3',
-    documentNo: 'IT-IS-02',
-    name: '資訊安全管理規範',
-    version: '1.4',
-    status: 'OBSOLETE',
-    effectiveDate: '2025-01-15',
+    id: "document-3",
+    documentNo: "IT-IS-02",
+    name: "資訊安全管理規範",
+    version: "1.4",
+    status: "OBSOLETE",
+    effectiveDate: "2025-01-15",
   },
-]
+];
 
 const statusBadge: Record<
-  DocumentRow['status'],
-  { label: string; variant: 'warning' | 'success' | 'neutral' }
+  DocumentRow["status"],
+  { label: string; variant: "warning" | "success" | "neutral" }
 > = {
-  DRAFT: { label: '草稿', variant: 'warning' },
-  PUBLISHED: { label: '已發布', variant: 'success' },
-  OBSOLETE: { label: '已作廢', variant: 'neutral' },
-}
+  DRAFT: { label: "草稿", variant: "warning" },
+  PUBLISHED: { label: "已發布", variant: "success" },
+  OBSOLETE: { label: "已作廢", variant: "neutral" },
+};
 
-const attachmentsByDocumentId: Readonly<Record<string, ReadonlyArray<AttachmentRow>>> = {
-  'document-1': [
+const attachmentsByDocumentId: Readonly<
+  Record<string, ReadonlyArray<AttachmentRow>>
+> = {
+  "document-1": [
     {
-      id: 'attachment-1',
-      attachmentNo: 'HR-GN-01-01',
-      name: '請假申請表',
+      id: "attachment-1",
+      attachmentNo: "HR-GN-01-01",
+      name: "請假申請表",
       hasFile: true,
     },
     {
-      id: 'attachment-2',
-      attachmentNo: 'HR-GN-01-02',
-      name: '加班申請表',
+      id: "attachment-2",
+      attachmentNo: "HR-GN-01-02",
+      name: "加班申請表",
       hasFile: true,
     },
   ],
-  'document-2': [
+  "document-2": [
     {
-      id: 'attachment-3',
-      attachmentNo: 'QA-PD-03-01',
-      name: '文件發行申請單',
+      id: "attachment-3",
+      attachmentNo: "QA-PD-03-01",
+      name: "文件發行申請單",
       hasFile: false,
     },
   ],
-}
+};
 
 const attachmentColumns: ReadonlyArray<TableColumn<AttachmentRow>> = [
   {
-    key: 'status',
-    header: '檔案狀態',
+    key: "status",
+    header: "檔案狀態",
     render: (row) => (
-      <Badge variant={row.hasFile ? 'success' : 'warning'}>
-        {row.hasFile ? '可下載' : '待補檔'}
+      <Badge variant={row.hasFile ? "success" : "warning"}>
+        {row.hasFile ? "可下載" : "待補檔"}
       </Badge>
     ),
   },
   {
-    key: 'attachmentNo',
-    header: '表單及附件編號',
-    render: (row) => <span className="font-mono text-slate-900">{row.attachmentNo}</span>,
+    key: "attachmentNo",
+    header: "表單及附件編號",
+    render: (row) => (
+      <span className="font-mono text-slate-900">{row.attachmentNo}</span>
+    ),
   },
   {
-    key: 'name',
-    header: '表單及附件名稱',
+    key: "name",
+    header: "表單及附件名稱",
     render: (row) => row.name,
   },
-]
+];
 
 const columns: ReadonlyArray<TableColumn<DocumentRow>> = [
   {
-    key: 'status',
-    header: '狀態',
+    key: "status",
+    header: "狀態",
     render: (row) => (
       <Badge variant={statusBadge[row.status].variant}>
         {statusBadge[row.status].label}
@@ -151,14 +153,14 @@ const columns: ReadonlyArray<TableColumn<DocumentRow>> = [
     ),
   },
   {
-    key: 'documentNo',
-    header: '文件編號',
+    key: "documentNo",
+    header: "文件編號",
     render: (row, _rowIndex, context) => (
       <button
         type="button"
         className="inline-flex items-center gap-2 rounded-xs font-mono font-medium text-blue-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
         aria-expanded={context.expanded}
-        aria-label={`${context.expanded ? '收合' : '展開'} ${row.documentNo} 表單及附件清單`}
+        aria-label={`${context.expanded ? "收合" : "展開"} ${row.documentNo} 表單及附件清單`}
         onClick={context.toggleExpansion}
       >
         <svg
@@ -166,7 +168,7 @@ const columns: ReadonlyArray<TableColumn<DocumentRow>> = [
           fill="none"
           stroke="currentColor"
           strokeWidth="1.75"
-          className={`size-4 transition-transform ${context.expanded ? 'rotate-90' : ''}`}
+          className={`size-4 transition-transform ${context.expanded ? "rotate-90" : ""}`}
           aria-hidden="true"
         >
           <path d="m8 6 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
@@ -176,8 +178,8 @@ const columns: ReadonlyArray<TableColumn<DocumentRow>> = [
     ),
   },
   {
-    key: 'name',
-    header: '文件名稱',
+    key: "name",
+    header: "文件名稱",
     render: (row) => (
       <button
         type="button"
@@ -188,60 +190,75 @@ const columns: ReadonlyArray<TableColumn<DocumentRow>> = [
     ),
   },
   {
-    key: 'version',
-    header: '版本',
+    key: "version",
+    header: "版本",
     render: (row) => row.version,
   },
   {
-    key: 'effectiveDate',
-    header: '生效日期',
-    render: (row) => row.effectiveDate ?? '—',
+    key: "effectiveDate",
+    header: "生效日期",
+    render: (row) => row.effectiveDate ?? "—",
   },
-]
+];
 
 const sidebarGroups: ReadonlyArray<SidebarNavGroup> = [
   {
-    key: 'settings',
-    label: '基礎設定',
+    key: "settings",
+    label: "基礎設定",
     items: [
-      { key: 'departments', label: '部門維護', href: '#departments', icon: '部' },
-      { key: 'users', label: '使用者維護', href: '#users', icon: '人' },
+      {
+        key: "departments",
+        label: "部門維護",
+        href: "#departments",
+        icon: "部",
+      },
+      { key: "users", label: "使用者維護", href: "#users", icon: "人" },
     ],
   },
   {
-    key: 'documents',
-    label: '文件管理',
+    key: "documents",
+    label: "文件管理",
     items: [
-      { key: 'documents', label: 'ISO 文件維護', href: '#documents', icon: '文' },
-      { key: 'permissions', label: '權限維護', href: '#permissions', icon: '權' },
-      { key: 'backup', label: 'ISO 文件備份', href: '#backup', icon: '備' },
+      {
+        key: "documents",
+        label: "ISO 文件維護",
+        href: "#documents",
+        icon: "文",
+      },
+      {
+        key: "permissions",
+        label: "權限維護",
+        href: "#permissions",
+        icon: "權",
+      },
+      { key: "backup", label: "ISO 文件備份", href: "#backup", icon: "備" },
     ],
   },
   {
-    key: 'system',
-    label: '系統',
-    items: [{ key: 'about', label: '關於', href: '#about', icon: 'i' }],
+    key: "system",
+    label: "系統",
+    items: [{ key: "about", label: "關於", href: "#about", icon: "i" }],
   },
-]
+];
 
 export default function ComponentPreview() {
-  const [page, setPage] = useState(3)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [expandedDocumentIds, setExpandedDocumentIds] = useState<ReadonlySet<string>>(
-    () => new Set(['document-1']),
-  )
+  const [page, setPage] = useState(3);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [expandedDocumentIds, setExpandedDocumentIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set(["document-1"]));
 
   const toggleDocument = (document: DocumentRow) => {
     setExpandedDocumentIds((current) => {
-      const next = new Set(current)
+      const next = new Set(current);
       if (next.has(document.id)) {
-        next.delete(document.id)
+        next.delete(document.id);
       } else {
-        next.add(document.id)
+        next.add(document.id);
       }
-      return next
-    })
-  }
+      return next;
+    });
+  };
 
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-8 text-left text-slate-900">
@@ -265,7 +282,7 @@ export default function ComponentPreview() {
               companyName="首都客運"
               departmentName="資訊部"
               userName="王小明"
-              modeLink={{ label: '前台查閱', href: '#' }}
+              modeLink={{ label: "ISO文件列表", href: "#" }}
               changePasswordHref="#"
               onLogout={() => undefined}
               sticky={false}
@@ -273,7 +290,10 @@ export default function ComponentPreview() {
           </div>
         </PreviewSection>
 
-        <PreviewSection title="Button" description="四種語意 variant、兩種尺寸與處理中狀態。">
+        <PreviewSection
+          title="Button"
+          description="四種語意 variant、兩種尺寸與處理中狀態。"
+        >
           <div className="flex flex-wrap items-center gap-2">
             <Button>主要操作</Button>
             <Button variant="secondary">次要操作</Button>
@@ -287,7 +307,10 @@ export default function ComponentPreview() {
           </div>
         </PreviewSection>
 
-        <PreviewSection title="Form controls" description="控制項共用高度、圓角、focus ring 與錯誤邊框。">
+        <PreviewSection
+          title="Form controls"
+          description="控制項共用高度、圓角、focus ring 與錯誤邊框。"
+        >
           <div className="grid gap-4 md:grid-cols-2">
             <FormField
               label="文件名稱"
@@ -327,7 +350,11 @@ export default function ComponentPreview() {
             <FormField label="停用控制項" htmlFor="preview-disabled">
               <Input id="preview-disabled" defaultValue="不可編輯" disabled />
             </FormField>
-            <FormField label="錯誤 Select" htmlFor="preview-select-error" error="請選擇公司。">
+            <FormField
+              label="錯誤 Select"
+              htmlFor="preview-select-error"
+              error="請選擇公司。"
+            >
               <Select
                 id="preview-select-error"
                 defaultValue=""
@@ -341,11 +368,19 @@ export default function ComponentPreview() {
               </Select>
             </FormField>
             <FormField label="停用 Select" htmlFor="preview-select-disabled">
-              <Select id="preview-select-disabled" defaultValue="company-a" disabled>
+              <Select
+                id="preview-select-disabled"
+                defaultValue="company-a"
+                disabled
+              >
                 <option value="company-a">公司 A</option>
               </Select>
             </FormField>
-            <FormField label="錯誤 Textarea" htmlFor="preview-textarea-error" error="備註不可超過限制長度。">
+            <FormField
+              label="錯誤 Textarea"
+              htmlFor="preview-textarea-error"
+              error="備註不可超過限制長度。"
+            >
               <Textarea
                 id="preview-textarea-error"
                 defaultValue="需要修正的備註內容"
@@ -356,7 +391,10 @@ export default function ComponentPreview() {
           </div>
         </PreviewSection>
 
-        <PreviewSection title="Select" description="原生選單語意搭配一致的 chevron、focus、error 與 disabled 外觀。">
+        <PreviewSection
+          title="Select"
+          description="原生選單語意搭配一致的 chevron、focus、error 與 disabled 外觀。"
+        >
           <div className="grid max-w-2xl gap-4 md:grid-cols-3">
             <Select defaultValue="all" aria-label="一般選單">
               <option value="all">全部狀態</option>
@@ -382,7 +420,10 @@ export default function ComponentPreview() {
           </div>
         </PreviewSection>
 
-        <PreviewSection title="Badge" description="狀態以文字與顏色雙重表達，不單獨依賴顏色。">
+        <PreviewSection
+          title="Badge"
+          description="狀態以文字與顏色雙重表達，不單獨依賴顏色。"
+        >
           <div className="flex flex-wrap gap-2">
             <Badge>一般</Badge>
             <Badge variant="info">資訊</Badge>
@@ -393,7 +434,10 @@ export default function ComponentPreview() {
           </div>
         </PreviewSection>
 
-        <PreviewSection title="Alert" description="ProblemDetailsAlert 可在後續直接包裝此元件。">
+        <PreviewSection
+          title="Alert"
+          description="ProblemDetailsAlert 可在後續直接包裝此元件。"
+        >
           <div className="space-y-2">
             <Alert title="提示">變更會在儲存後生效。</Alert>
             <Alert variant="success" title="儲存成功">
@@ -408,7 +452,10 @@ export default function ComponentPreview() {
           </div>
         </PreviewSection>
 
-        <PreviewSection title="Spinner" description="可獨立使用，也由 Button loading 狀態共用。">
+        <PreviewSection
+          title="Spinner"
+          description="可獨立使用，也由 Button loading 狀態共用。"
+        >
           <div className="flex items-center gap-5 text-blue-600">
             <Spinner size="sm" label="載入小型內容" />
             <Spinner label="載入內容" />
@@ -475,7 +522,13 @@ export default function ComponentPreview() {
 
         <div className="grid gap-5 lg:grid-cols-2">
           <PreviewSection title="Table — loading">
-            <Table columns={columns} data={[]} loading skeletonRows={3} caption="載入文件" />
+            <Table
+              columns={columns}
+              data={[]}
+              loading
+              skeletonRows={3}
+              caption="載入文件"
+            />
           </PreviewSection>
           <PreviewSection title="Table — empty">
             <Table
@@ -487,8 +540,13 @@ export default function ComponentPreview() {
           </PreviewSection>
         </div>
 
-        <PreviewSection title="Modal / Dialog" description="支援遮罩、ESC、原生 focus trap 與受控開關。">
-          <Button onClick={() => setModalOpen(true)}>開啟重設密碼 Dialog</Button>
+        <PreviewSection
+          title="Modal / Dialog"
+          description="支援遮罩、ESC、原生 focus trap 與受控開關。"
+        >
+          <Button onClick={() => setModalOpen(true)}>
+            開啟重設密碼 Dialog
+          </Button>
           <Modal
             open={modalOpen}
             onClose={() => setModalOpen(false)}
@@ -503,12 +561,10 @@ export default function ComponentPreview() {
               </>
             }
           >
-            <Alert variant="warning">
-              使用者下次登入時必須變更暫時密碼。
-            </Alert>
+            <Alert variant="warning">使用者下次登入時必須變更暫時密碼。</Alert>
           </Modal>
         </PreviewSection>
       </div>
     </main>
-  )
+  );
 }
