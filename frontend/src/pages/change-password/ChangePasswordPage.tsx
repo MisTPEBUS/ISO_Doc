@@ -1,10 +1,17 @@
 import axios from "axios";
-import { Eye, EyeOff, LockKeyhole, TriangleAlert } from "lucide-react";
+import {
+  ArrowRight,
+  Eye,
+  EyeOff,
+  LockKeyhole,
+  TriangleAlert,
+} from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { ApiError } from "@/api/httpClient";
 import { Alert, Button, FormField, Input } from "@/components/common";
+import { env } from "@/config/env";
 import {
   useChangePassword,
   useCurrentUser,
@@ -15,6 +22,9 @@ import {
   type ChangePasswordFormValues,
 } from "@/features/auth/schemas";
 import { AUTH_FORM_TYPOGRAPHY } from "@/features/auth/ui";
+import { SecurityNotice } from "@/pages/login/components/SecurityNotice";
+import { SystemVersion } from "@/pages/login/components/SystemVersion";
+import { LoginHeroArt } from "@/pages/login_1/components/LoginHeroArt";
 
 type FieldName = keyof ChangePasswordFormValues;
 type FieldErrors = Partial<Record<FieldName, string>>;
@@ -83,7 +93,6 @@ function PasswordField({
         ) : undefined
       }
       required
-      className="min-h-24"
     >
       <div className="relative">
         <LockKeyhole
@@ -142,7 +151,9 @@ export function ChangePasswordPage() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string>();
   const [succeeded, setSucceeded] = useState(false);
-  const [visibleFields, setVisibleFields] = useState<Record<FieldName, boolean>>({
+  const [visibleFields, setVisibleFields] = useState<
+    Record<FieldName, boolean>
+  >({
     currentPassword: false,
     newPassword: false,
     newPasswordConfirmation: false,
@@ -179,7 +190,9 @@ export function ChangePasswordPage() {
       setFieldErrors({
         currentPassword: firstMessage(flattened.currentPassword),
         newPassword: firstMessage(flattened.newPassword),
-        newPasswordConfirmation: firstMessage(flattened.newPasswordConfirmation),
+        newPasswordConfirmation: firstMessage(
+          flattened.newPasswordConfirmation,
+        ),
       });
       return;
     }
@@ -225,154 +238,222 @@ export function ChangePasswordPage() {
 
   return (
     <main
-      className={`${AUTH_FORM_TYPOGRAPHY} flex min-h-screen items-center justify-center bg-canvas px-4 py-8 sm:px-8`}
+      className={`login-1 ${AUTH_FORM_TYPOGRAPHY} flex min-h-dvh flex-col bg-login-page`}
     >
-      <div className="w-full max-w-[480px]">
-        <div className="mb-8 flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-sm bg-primary font-mono text-section-label font-semibold text-on-primary">
-            ISO
-          </span>
-          <div>
-            <p className="text-section-label font-semibold text-ink">
-              首都客運集團
-            </p>
-            <p className="mt-0.5 text-fine tracking-wide text-ink-muted">
-              ISO DOCUMENT CONTROL SYSTEM
-            </p>
+      <header className="border-b-4 border-login-brand-deep bg-login-brand text-login-brand-text">
+        <div className="mx-auto flex h-16 w-full max-w-[1120px] items-center justify-between gap-4 px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary font-mono text-section-label font-semibold text-on-primary">
+              ISO
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-section-label font-semibold">
+                首都集團 ISO 文件管理系統
+              </p>
+              <p
+                className="mt-0.5 hidden text-fine tracking-wide text-login-brand-muted md:block"
+                lang="en"
+              >
+                ISO DOCUMENT CONTROL SYSTEM
+              </p>
+            </div>
           </div>
+          <p className="hidden shrink-0 text-fine text-login-brand-muted md:block">
+            僅供首都集團內部授權人員使用
+          </p>
         </div>
+      </header>
 
-        <div className="border border-line-strong bg-surface p-6 sm:p-8">
-          <header className="mb-8">
-            <p className="mb-2 text-label font-medium text-primary">帳號安全</p>
-            <h1 className="text-page-title text-ink">修改密碼</h1>
-            <p className="mt-2 text-meta text-ink-muted">
-              新密碼不可與目前密碼相同，變更後需以新密碼重新登入。
-            </p>
-          </header>
+      <div className="flex flex-1 items-center py-4 sm:py-5">
+        <div className="mx-auto w-full max-w-[1120px] px-4 sm:px-6">
+          <div className="grid grid-cols-1 overflow-hidden rounded-lg border border-login-card-border bg-surface shadow-float md:grid-cols-[36%_64%] xl:grid-cols-[42%_58%]">
+            <div
+              className="relative aspect-[16/7] max-h-[180px] overflow-hidden md:aspect-auto md:h-auto md:max-h-none"
+              aria-hidden="true"
+            >
+              <LoginHeroArt />
+            </div>
 
-          {mustChangePassword && !succeeded && (
-            <Alert variant="warning" title="請先變更密碼" className="mb-5">
-              你目前使用的是系統配發的臨時密碼，請設定新密碼後再繼續使用系統。
-            </Alert>
-          )}
+            <section className="flex flex-col justify-center bg-login-help px-6 py-7 md:px-8 md:py-8 lg:px-10">
+              <div className="mx-auto w-full max-w-[440px]">
+                <header>
+                  <h1 className="mt-4 text-[22px] leading-tight font-bold text-ink md:text-2xl">
+                    修改密碼
+                  </h1>
+                </header>
 
-          {succeeded ? (
-            <>
-              <Alert variant="success" title="密碼已更新">
-                請使用新密碼重新登入。
-              </Alert>
-              <Button className="mt-5 w-full" onClick={returnToLogin}>
-                重新登入
-              </Button>
-            </>
-          ) : (
-            <>
-              {formError && (
-                <div
-                  className="mb-5 border-l-2 border-state-danger bg-state-danger-subtle px-3 py-3 text-meta text-state-danger"
-                  role="alert"
-                >
-                  {formError}
-                </div>
-              )}
-
-              <form className="space-y-2" noValidate onSubmit={handleSubmit}>
-                <PasswordField
-                  id="currentPassword"
-                  label="目前密碼"
-                  autoComplete="current-password"
-                  placeholder="請輸入目前密碼"
-                  autoFocus
-                  value={values.currentPassword}
-                  error={fieldErrors.currentPassword}
-                  visible={visibleFields.currentPassword}
-                  capsLockOn={capsLockField === "currentPassword"}
-                  disabled={changePassword.isPending}
-                  onToggleVisible={() =>
-                    setVisibleFields((current) => ({
-                      ...current,
-                      currentPassword: !current.currentPassword,
-                    }))
-                  }
-                  onCapsLockChange={(enabled) =>
-                    setCapsLockField(enabled ? "currentPassword" : undefined)
-                  }
-                  onChange={(value) => updateField("currentPassword", value)}
-                />
-
-                <PasswordField
-                  id="newPassword"
-                  label="新密碼"
-                  autoComplete="new-password"
-                  placeholder="請輸入新密碼"
-                  value={values.newPassword}
-                  error={fieldErrors.newPassword}
-                  visible={visibleFields.newPassword}
-                  capsLockOn={capsLockField === "newPassword"}
-                  disabled={changePassword.isPending}
-                  onToggleVisible={() =>
-                    setVisibleFields((current) => ({
-                      ...current,
-                      newPassword: !current.newPassword,
-                    }))
-                  }
-                  onCapsLockChange={(enabled) =>
-                    setCapsLockField(enabled ? "newPassword" : undefined)
-                  }
-                  onChange={(value) => updateField("newPassword", value)}
-                />
-
-                <PasswordField
-                  id="newPasswordConfirmation"
-                  label="確認新密碼"
-                  autoComplete="new-password"
-                  placeholder="請再次輸入新密碼"
-                  value={values.newPasswordConfirmation}
-                  error={fieldErrors.newPasswordConfirmation}
-                  visible={visibleFields.newPasswordConfirmation}
-                  capsLockOn={capsLockField === "newPasswordConfirmation"}
-                  disabled={changePassword.isPending}
-                  onToggleVisible={() =>
-                    setVisibleFields((current) => ({
-                      ...current,
-                      newPasswordConfirmation:
-                        !current.newPasswordConfirmation,
-                    }))
-                  }
-                  onCapsLockChange={(enabled) =>
-                    setCapsLockField(
-                      enabled ? "newPasswordConfirmation" : undefined,
-                    )
-                  }
-                  onChange={(value) =>
-                    updateField("newPasswordConfirmation", value)
-                  }
-                />
-
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    className="flex-1"
-                    type="submit"
-                    loading={changePassword.isPending}
-                    loadingText="更新中..."
+                {mustChangePassword && !succeeded && (
+                  <Alert
+                    variant="warning"
+                    title="請先變更密碼"
+                    className="mt-5"
                   >
-                    更新密碼
-                  </Button>
-                  {!mustChangePassword && (
+                    你目前使用的是系統配發的臨時密碼，請設定新密碼後再繼續使用系統。
+                  </Alert>
+                )}
+
+                {succeeded ? (
+                  <div className="mt-5">
+                    <Alert variant="success" title="密碼已更新">
+                      請使用新密碼重新登入。
+                    </Alert>
                     <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={changePassword.isPending}
-                      onClick={() => navigate(-1)}
+                      className="mt-6 w-full text-base! font-semibold!"
+                      size="md"
+                      onClick={returnToLogin}
                     >
-                      取消
+                      <span>重新登入</span>
+                      <ArrowRight
+                        aria-hidden="true"
+                        size={17}
+                        strokeWidth={1.75}
+                      />
                     </Button>
-                  )}
-                </div>
-              </form>
-            </>
-          )}
+                  </div>
+                ) : (
+                  <>
+                    {formError && (
+                      <div
+                        className="mt-5 border-l-2 border-state-danger bg-state-danger-subtle px-3 py-3 text-meta text-state-danger"
+                        role="alert"
+                      >
+                        {formError}
+                      </div>
+                    )}
+
+                    <form
+                      className="mt-6 flex flex-col gap-[18px] md:gap-5"
+                      noValidate
+                      onSubmit={handleSubmit}
+                    >
+                      <PasswordField
+                        id="currentPassword"
+                        label="目前密碼"
+                        autoComplete="current-password"
+                        placeholder="請輸入目前密碼"
+                        autoFocus
+                        value={values.currentPassword}
+                        error={fieldErrors.currentPassword}
+                        visible={visibleFields.currentPassword}
+                        capsLockOn={capsLockField === "currentPassword"}
+                        disabled={changePassword.isPending}
+                        onToggleVisible={() =>
+                          setVisibleFields((current) => ({
+                            ...current,
+                            currentPassword: !current.currentPassword,
+                          }))
+                        }
+                        onCapsLockChange={(enabled) =>
+                          setCapsLockField(
+                            enabled ? "currentPassword" : undefined,
+                          )
+                        }
+                        onChange={(value) =>
+                          updateField("currentPassword", value)
+                        }
+                      />
+
+                      <PasswordField
+                        id="newPassword"
+                        label="新密碼"
+                        autoComplete="new-password"
+                        placeholder="請輸入新密碼"
+                        value={values.newPassword}
+                        error={fieldErrors.newPassword}
+                        visible={visibleFields.newPassword}
+                        capsLockOn={capsLockField === "newPassword"}
+                        disabled={changePassword.isPending}
+                        onToggleVisible={() =>
+                          setVisibleFields((current) => ({
+                            ...current,
+                            newPassword: !current.newPassword,
+                          }))
+                        }
+                        onCapsLockChange={(enabled) =>
+                          setCapsLockField(enabled ? "newPassword" : undefined)
+                        }
+                        onChange={(value) => updateField("newPassword", value)}
+                      />
+
+                      <PasswordField
+                        id="newPasswordConfirmation"
+                        label="確認新密碼"
+                        autoComplete="new-password"
+                        placeholder="請再次輸入新密碼"
+                        value={values.newPasswordConfirmation}
+                        error={fieldErrors.newPasswordConfirmation}
+                        visible={visibleFields.newPasswordConfirmation}
+                        capsLockOn={capsLockField === "newPasswordConfirmation"}
+                        disabled={changePassword.isPending}
+                        onToggleVisible={() =>
+                          setVisibleFields((current) => ({
+                            ...current,
+                            newPasswordConfirmation:
+                              !current.newPasswordConfirmation,
+                          }))
+                        }
+                        onCapsLockChange={(enabled) =>
+                          setCapsLockField(
+                            enabled ? "newPasswordConfirmation" : undefined,
+                          )
+                        }
+                        onChange={(value) =>
+                          updateField("newPasswordConfirmation", value)
+                        }
+                      />
+
+                      <div className="space-y-2">
+                        <Button
+                          className="mt-0.5 w-full text-base! font-semibold! md:mt-1"
+                          type="submit"
+                          size="md"
+                          loading={changePassword.isPending}
+                          loadingText="更新中..."
+                        >
+                          <span>更新密碼</span>
+                          <ArrowRight
+                            aria-hidden="true"
+                            size={17}
+                            strokeWidth={1.75}
+                          />
+                        </Button>
+                        {!mustChangePassword && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="w-full"
+                            disabled={changePassword.isPending}
+                            onClick={() => navigate(-1)}
+                          >
+                            取消
+                          </Button>
+                        )}
+                      </div>
+                    </form>
+                  </>
+                )}
+                {!succeeded && (
+                  <div className="mt-5 rounded-sm border-l-[3px] border-line-strong bg-canvas px-3.5 py-3 text-meta leading-6">
+                    <p className="font-medium text-ink">無法更新密碼？</p>
+                    <p className="text-ink-muted">請洽資訊中心協助處理。</p>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+
+          <footer className="mt-4">
+            <div className="text-center text-fine leading-5 text-ink-muted md:hidden">
+              <p className="font-medium text-ink">公司內部資訊系統</p>
+              <p className="tabular mt-0.5">Version {env.appVersion}</p>
+            </div>
+            <div className="hidden md:flex md:items-start md:justify-between md:gap-6">
+              <SecurityNotice />
+              <div className="shrink-0">
+                <SystemVersion />
+              </div>
+            </div>
+          </footer>
         </div>
       </div>
     </main>

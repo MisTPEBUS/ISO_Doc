@@ -1,3 +1,4 @@
+using IsoDocument.Api.Common;
 using IsoDocument.Api.Data;
 using IsoDocument.Api.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -29,12 +30,11 @@ public sealed class EfIsoCategoryStore(IsoDbContext dbContext) : IIsoCategorySto
     public async Task<IReadOnlyList<IsoCategory>> ListAsync(
         Guid? companyId,
         bool includeInactive,
+        ListSort? sort,
         int skip,
         int take,
         CancellationToken cancellationToken) =>
-        await Query(companyId, includeInactive)
-            .OrderBy(category => category.Name)
-            .ThenBy(category => category.Id)
+        await ApplySort(Query(companyId, includeInactive), sort)
             .Skip(skip)
             .Take(take)
             .ToListAsync(cancellationToken);
@@ -61,5 +61,23 @@ public sealed class EfIsoCategoryStore(IsoDbContext dbContext) : IIsoCategorySto
         }
 
         return query;
+    }
+
+    private static IOrderedQueryable<IsoCategory> ApplySort(
+        IQueryable<IsoCategory> query,
+        ListSort? sort)
+    {
+        var descending = sort?.Descending ?? false;
+        var ordered = sort?.Field switch
+        {
+            IsoCategorySortFields.IsActive => query.OrderByDirection(
+                category => category.IsActive, descending),
+            IsoCategorySortFields.UpdatedAt => query.OrderByDirection(
+                category => category.UpdatedAt, descending),
+            _ => query.OrderByDirection(category => category.Name, descending)
+        };
+
+        // 同值時依名稱、id 排列，確保分頁結果穩定。
+        return ordered.ThenBy(category => category.Name).ThenBy(category => category.Id);
     }
 }

@@ -10,7 +10,9 @@ import {
   Pagination,
   Select,
   Table,
+  toSortParams,
   type TableColumn,
+  type TableSort,
 } from '@/components/common'
 import { useCurrentUser } from '@/features/auth/queries'
 import { USER_ROLE } from '@/features/auth/types'
@@ -25,7 +27,11 @@ import {
   deptFormSchema,
   type DeptFormValues,
 } from '@/features/departments/schemas'
-import type { DeptResponse } from '@/features/departments/types'
+import {
+  DEPT_SORT_FIELD,
+  type DeptResponse,
+  type DeptSortField,
+} from '@/features/departments/types'
 import { formatRocDateTime } from '@/lib/date'
 
 const DEFAULT_PAGE_SIZE = 10
@@ -45,6 +51,7 @@ export function DepartmentsPage() {
   )
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [sort, setSort] = useState<TableSort<DeptSortField> | null>(null)
   const [editingDepartment, setEditingDepartment] = useState<DeptResponse>()
   const [formOpen, setFormOpen] = useState(false)
   const [formValues, setFormValues] = useState<DeptFormValues>(EMPTY_FORM)
@@ -58,10 +65,15 @@ export function DepartmentsPage() {
   const companyId = isSystemAdmin
     ? (selectedCompanyId || undefined)
     : currentUser.data?.companyId
-  const departments = useDepts({ companyId, page, pageSize })
+  const departments = useDepts({ companyId, page, pageSize, ...toSortParams(sort) })
 
   function handlePageSizeChange(nextPageSize: number) {
     setPageSize(nextPageSize)
+    setPage(1)
+  }
+
+  function handleSortChange(nextSort: TableSort<DeptSortField> | null) {
+    setSort(nextSort)
     setPage(1)
   }
   const createDepartment = useCreateDept()
@@ -188,11 +200,12 @@ export function DepartmentsPage() {
     })
   }
 
-  const columns: ReadonlyArray<TableColumn<DeptResponse>> = [
+  const columns: ReadonlyArray<TableColumn<DeptResponse, DeptSortField>> = [
     {
       key: 'name',
       header: '部門名稱',
       cellClassName: 'font-medium',
+      sortKey: DEPT_SORT_FIELD.Name,
       render: (department) => department.name,
     },
     {
@@ -200,6 +213,7 @@ export function DepartmentsPage() {
       header: '排序',
       headerClassName: 'w-28 text-right',
       cellClassName: 'text-right tabular text-ink-muted',
+      sortKey: DEPT_SORT_FIELD.Seq,
       render: (department) => department.seq ?? '－',
     },
     {
@@ -207,6 +221,7 @@ export function DepartmentsPage() {
       header: '最後更新',
       headerClassName: 'w-52',
       cellClassName: 'text-meta text-ink-muted tabular',
+      sortKey: DEPT_SORT_FIELD.UpdatedAt,
       render: (department) => formatRocDateTime(department.updatedAt),
     },
     {
@@ -310,6 +325,8 @@ export function DepartmentsPage() {
         <Table
           className="border-0"
           columns={columns}
+          sort={sort}
+          onSortChange={handleSortChange}
           data={departments.data?.items ?? []}
           loading={departments.isPending}
           skeletonRows={6}

@@ -1,3 +1,4 @@
+using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
 
 namespace IsoDocument.Api.Features.Documents;
@@ -5,11 +6,12 @@ namespace IsoDocument.Api.Features.Documents;
 public interface IDocumentStore
 {
     Task<bool> CompanyExistsAsync(Guid companyId, CancellationToken cancellationToken);
+    Task<string?> FindCompanyCodeAsync(Guid companyId, CancellationToken cancellationToken);
     Task<bool> DocumentNoExistsAsync(
         Guid companyId, string documentNo, CancellationToken cancellationToken);
     Task<int> CountAsync(Guid? companyId, string? keyword, CancellationToken cancellationToken);
     Task<IReadOnlyList<Document>> ListAsync(
-        Guid? companyId, string? keyword, int skip, int take,
+        Guid? companyId, string? keyword, ListSort? sort, int skip, int take,
         CancellationToken cancellationToken);
     Task<Document?> FindByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<DocumentVersion>> ListVersionsAsync(

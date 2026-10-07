@@ -2,9 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
   buildAttachmentVersionFormData,
+  buildDocumentWithVersionFormData,
   buildUploadDraftVersionFileFormData,
   buildVersionFormData,
   type AttachmentVersionFormDataInput,
+  type DocumentWithVersionFormDataInput,
   type UploadDraftVersionFileFormDataInput,
   type VersionFormDataInput,
 } from '@/api/formData'
@@ -15,6 +17,7 @@ import type {
   CreateAttachmentRequest,
   ListAdminDocumentsParams,
   UpdateAdminDocumentRequest,
+  UpdateAttachmentRequest,
 } from './types'
 import * as versionsApi from './versionsApi'
 
@@ -49,6 +52,17 @@ export function useCreateAdminDocument() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: adminDocumentsApi.create,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: adminDocumentKeys.lists() })
+    },
+  })
+}
+
+export function useCreateAdminDocumentWithVersion() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: DocumentWithVersionFormDataInput) =>
+      adminDocumentsApi.createWithVersion(buildDocumentWithVersionFormData(input)),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: adminDocumentKeys.lists() })
     },
@@ -169,6 +183,30 @@ export function useCreateAttachment() {
   return useMutation({
     mutationFn: ({ documentId, request }: CreateAttachmentVariables) =>
       attachmentsApi.createAttachment(documentId, request),
+    onSuccess: async (_attachment, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: adminDocumentKeys.attachments(variables.documentId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: adminDocumentKeys.detail(variables.documentId),
+        }),
+      ])
+    },
+  })
+}
+
+interface UpdateAttachmentVariables {
+  documentId: string
+  attachmentId: string
+  request: UpdateAttachmentRequest
+}
+
+export function useUpdateAttachment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ documentId, attachmentId, request }: UpdateAttachmentVariables) =>
+      attachmentsApi.updateAttachment(documentId, attachmentId, request),
     onSuccess: async (_attachment, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({

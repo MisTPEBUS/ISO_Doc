@@ -10,7 +10,9 @@ import {
   Pagination,
   Select,
   Table,
+  toSortParams,
   type TableColumn,
+  type TableSort,
 } from "@/components/common";
 import { useCurrentUser, useLogout } from "@/features/auth/queries";
 import { USER_ROLE, USER_ROLE_LABEL } from "@/features/auth/types";
@@ -19,10 +21,12 @@ import {
   useDownloadAttachment,
   useDownloadDocument,
 } from "@/features/documents/queries";
-import type {
-  AvailableDocumentAttachment,
-  AvailableDocumentResponse,
-  ListAvailableDocumentsParams,
+import {
+  AVAILABLE_DOCUMENT_SORT_FIELD,
+  type AvailableDocumentAttachment,
+  type AvailableDocumentResponse,
+  type AvailableDocumentSortField,
+  type ListAvailableDocumentsParams,
 } from "@/features/documents/types";
 import { useIsoCategories } from "@/features/iso-categories/queries";
 import { formatRocDate } from "@/lib/date";
@@ -53,6 +57,8 @@ export function HomePage() {
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
   const [isoCategoryId, setIsoCategoryId] = useState("");
   const [page, setPage] = useState(1);
+  const [sort, setSort] =
+    useState<TableSort<AvailableDocumentSortField> | null>(null);
   const [notice, setNotice] = useState<string>();
   const [expandedDocumentIds, setExpandedDocumentIds] = useState<
     ReadonlySet<string>
@@ -72,8 +78,9 @@ export function HomePage() {
       pageSize: PAGE_SIZE,
       keyword: debouncedKeyword || undefined,
       isoCategoryId: isoCategoryId || undefined,
+      ...toSortParams(sort),
     }),
-    [debouncedKeyword, isoCategoryId, page],
+    [debouncedKeyword, isoCategoryId, page, sort],
   );
   const documentsQuery = useAvailableDocuments(queryParams);
   const documents = documentsQuery.data?.items ?? [];
@@ -103,6 +110,12 @@ export function HomePage() {
     setIsoCategoryId(value);
     setPage(1);
     setNotice(undefined);
+    setExpandedDocumentIds(new Set());
+  }
+
+  function updateSort(nextSort: TableSort<AvailableDocumentSortField> | null) {
+    setSort(nextSort);
+    setPage(1);
     setExpandedDocumentIds(new Set());
   }
 
@@ -223,98 +236,106 @@ export function HomePage() {
     },
   ];
 
-  const documentColumns: ReadonlyArray<TableColumn<AvailableDocumentResponse>> =
-    [
-      {
-        key: "expand",
-        header: <span className="sr-only">展開表單及附件</span>,
-        headerClassName: "w-12 px-2",
-        cellClassName: "w-12 px-2",
-        render: (document, _rowIndex, context) =>
-          context.expandable ? (
-            <button
-              type="button"
-              className="grid size-8 cursor-pointer place-items-center rounded-sm text-ink-muted hover:bg-primary-subtle hover:text-primary focus-visible:outline-primary"
-              aria-expanded={context.expanded}
-              aria-label={`${context.expanded ? "收合" : "展開"} ${document.documentNo} 表單及附件清單`}
-              onClick={context.toggleExpansion}
-            >
-              <ChevronRight
-                className={`size-4 transition-transform ${context.expanded ? "rotate-90" : ""}`}
-                aria-hidden="true"
-              />
-            </button>
-          ) : null,
-      },
-      {
-        key: "documentNo",
-        header: "文件編號",
-        headerClassName: "w-44",
-        cellClassName: "font-mono text-code tabular text-ink-muted whitespace-nowrap",
-        render: (document) => document.documentNo,
-      },
-      {
-        key: "name",
-        header: "名稱",
-        headerClassName: "min-w-72",
-        render: (document) => {
-          const isDownloading =
-            downloadDocumentMutation.isPending &&
-            downloadDocumentMutation.variables?.documentId ===
-              document.documentId;
+  const documentColumns: ReadonlyArray<
+    TableColumn<AvailableDocumentResponse, AvailableDocumentSortField>
+  > = [
+    {
+      key: "expand",
+      header: <span className="sr-only">展開表單及附件</span>,
+      headerClassName: "w-12 px-2",
+      cellClassName: "w-12 px-2",
+      render: (document, _rowIndex, context) =>
+        context.expandable ? (
+          <button
+            type="button"
+            className="grid size-8 cursor-pointer place-items-center rounded-sm text-ink-muted hover:bg-primary-subtle hover:text-primary focus-visible:outline-primary"
+            aria-expanded={context.expanded}
+            aria-label={`${context.expanded ? "收合" : "展開"} ${document.documentNo} 表單及附件清單`}
+            onClick={context.toggleExpansion}
+          >
+            <ChevronRight
+              className={`size-4 transition-transform ${context.expanded ? "rotate-90" : ""}`}
+              aria-hidden="true"
+            />
+          </button>
+        ) : null,
+    },
+    {
+      key: "documentNo",
+      header: "文件編號",
+      headerClassName: "w-44",
+      sortKey: AVAILABLE_DOCUMENT_SORT_FIELD.DocumentNo,
+      cellClassName:
+        "font-mono text-code tabular text-ink-muted whitespace-nowrap",
+      render: (document) => document.documentNo,
+    },
+    {
+      key: "name",
+      header: "名稱",
+      headerClassName: "min-w-72",
+      sortKey: AVAILABLE_DOCUMENT_SORT_FIELD.Name,
+      render: (document) => {
+        const isDownloading =
+          downloadDocumentMutation.isPending &&
+          downloadDocumentMutation.variables?.documentId ===
+            document.documentId;
 
-          return document.currentVersion.hasFile ? (
-            <button
-              type="button"
-              className="min-h-control-sm cursor-pointer rounded-sm px-1 text-left font-medium text-primary hover:text-primary-hover hover:underline disabled:cursor-wait disabled:text-ink-disabled"
-              disabled={isDownloading}
-              onClick={() => handleDocumentDownload(document)}
-            >
-              {isDownloading ? "下載中…" : document.name}
-            </button>
-          ) : (
-            <span className="font-medium text-ink-disabled">
-              {document.name}
-            </span>
-          );
-        },
+        return document.currentVersion.hasFile ? (
+          <button
+            type="button"
+            className="min-h-control-sm cursor-pointer rounded-sm px-1 text-left font-medium text-primary hover:text-primary-hover hover:underline disabled:cursor-wait disabled:text-ink-disabled"
+            disabled={isDownloading}
+            onClick={() => handleDocumentDownload(document)}
+          >
+            {isDownloading ? "下載中…" : document.name}
+          </button>
+        ) : (
+          <span className="font-medium text-ink-disabled">{document.name}</span>
+        );
       },
-      {
-        key: "isoCategoryName",
-        header: "品質系統",
-        headerClassName: "w-40",
-        cellClassName: "text-meta text-ink-muted",
-        render: (document) => document.isoCategoryName ?? "－",
-      },
-      {
-        key: "deptName",
-        header: "發行單位",
-        headerClassName: "w-40",
-        cellClassName: "text-meta text-ink-muted",
-        render: (document) => document.deptName ?? "",
-      },
-      {
-        key: "companyName",
-        header: "公司別",
-        headerClassName: "w-56",
-        cellClassName: "text-meta text-ink-muted",
-        render: (document) => document.companyName,
-      },
-      {
-        key: "version",
-        header: "版本",
-        headerClassName: "w-20",
-        cellClassName: "font-mono text-revision tabular",
-        render: (document) => `V${document.currentVersion.version}`,
-      },
-      {
-        key: "effectiveDate",
-        header: "生效日期",
-        headerClassName: "w-36",
-        cellClassName: "text-meta text-ink-muted tabular",
-        render: (document) => formatRocDate(document.currentVersion.effectiveDate),
-      },
-    ];
+    },
+    {
+      key: "isoCategoryName",
+      header: "品質系統",
+      headerClassName: "w-40",
+      sortKey: AVAILABLE_DOCUMENT_SORT_FIELD.IsoCategoryName,
+      cellClassName: "text-meta text-ink-muted",
+      render: (document) => document.isoCategoryName ?? "－",
+    },
+    {
+      key: "deptName",
+      header: "發行單位",
+      headerClassName: "w-40",
+      sortKey: AVAILABLE_DOCUMENT_SORT_FIELD.DeptName,
+      cellClassName: "text-meta text-ink-muted",
+      render: (document) => document.deptName ?? "",
+    },
+    {
+      key: "companyName",
+      header: "公司別",
+      headerClassName: "w-56",
+      sortKey: AVAILABLE_DOCUMENT_SORT_FIELD.CompanyName,
+      cellClassName: "text-meta text-ink-muted",
+      render: (document) => document.companyName,
+    },
+    {
+      key: "version",
+      header: "版本",
+      headerClassName: "w-20",
+      cellClassName: "font-mono text-revision tabular",
+      sortKey: AVAILABLE_DOCUMENT_SORT_FIELD.Version,
+      render: (document) => `V${document.currentVersion.version}`,
+    },
+    {
+      key: "effectiveDate",
+      header: "生效日期",
+      headerClassName: "w-36",
+      sortKey: AVAILABLE_DOCUMENT_SORT_FIELD.EffectiveDate,
+      cellClassName: "text-meta text-ink-muted tabular",
+      render: (document) =>
+        formatRocDate(document.currentVersion.effectiveDate),
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-canvas">
@@ -440,6 +461,8 @@ export function HomePage() {
           <Table
             className="border-0 [&>table]:min-w-[1120px]"
             columns={documentColumns}
+            sort={sort}
+            onSortChange={updateSort}
             data={documents}
             loading={documentsQuery.isPending}
             skeletonRows={PAGE_SIZE}
@@ -474,9 +497,11 @@ export function HomePage() {
               onToggle: toggleDocument,
               toggleOnRowClick: true,
               render: (document) => (
-                <div className="border-l-2 border-line-strong bg-surface-zebra px-3 py-3 sm:px-5">
+                <div className="border-l-2 border-line-strong bg-surface-zebra px-10 py-3">
                   <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <h2 className="text-label font-semibold text-ink">表單及附件</h2>
+                    <h2 className="text-label font-semibold text-ink">
+                      表單及附件
+                    </h2>
                     <span className="rounded-sm border border-line-strong bg-surface px-2 py-0.5 text-fine tabular text-ink-muted">
                       {document.attachments.length} 筆
                     </span>

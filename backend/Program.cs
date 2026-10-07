@@ -139,6 +139,7 @@ builder.Services.AddScoped<IValidator<UpdateDocumentRequest>, UpdateDocumentRequ
 builder.Services.AddScoped<IValidator<CreateDocumentVersionRequest>, CreateDocumentVersionRequestValidator>();
 builder.Services.AddScoped<IValidator<UploadDocumentVersionFileRequest>, UploadDocumentVersionFileRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateAttachmentRequest>, CreateAttachmentRequestValidator>();
+builder.Services.AddScoped<IValidator<UpdateAttachmentRequest>, UpdateAttachmentRequestValidator>();
 builder.Services.AddScoped<IValidator<CreateAttachmentVersionRequest>, CreateAttachmentVersionRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateDocumentDeptPermissionsRequest>, UpdateDocumentDeptPermissionsRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateDocumentPermissionMatrixRequest>, UpdateDocumentPermissionMatrixRequestValidator>();
@@ -146,7 +147,7 @@ builder.Services.AddScoped<IValidator<CreateUserRequest>, CreateUserRequestValid
 builder.Services.AddScoped<IValidator<UpdateUserRequest>, UpdateUserRequestValidator>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
-    // NAS 部署：唯一能連到這個 container 的是同一個 compose network 裡的 frontend(nginx)，
+    // 部署時唯一能連到這個 container 的是同一個 compose network 裡的 frontend(nginx)，
     // 其 IP 由 Docker 動態配發，因此清空 KnownProxies/KnownNetworks（不限制來源）。
     // 只有在 backend 不對外露 port 時，這個設定才是安全的。
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -229,6 +230,10 @@ builder.Services.AddScoped<IDocumentPermissionStore, EfDocumentPermissionStore>(
 builder.Services.AddScoped<IDocumentPermissionService, DocumentPermissionService>();
 builder.Services.AddScoped<IDocumentPermissionMatrixService, DocumentPermissionMatrixService>();
 builder.Services.AddScoped<IAuditLogStore, EfAuditLogStore>();
+builder.Services.AddScoped<IClientIpAddressProvider>(services =>
+    new ClientIpAddressProvider(
+        services.GetRequiredService<IHttpContextAccessor>(),
+        services.GetRequiredService<IHostEnvironment>().IsDevelopment()));
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IUserStore, EfUserStore>();
 builder.Services.AddScoped<IUserService, UserService>();

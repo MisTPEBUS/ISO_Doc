@@ -7,6 +7,7 @@ public interface IUserService
 {
     Task<Result<PagedResult<UserResponse>>> ListAsync(
         Guid? companyId, Guid? deptId, string? keyword, bool includeInactive,
+        string? sortBy, string? sortDirection,
         int page, int pageSize, CancellationToken cancellationToken);
     Task<Result<UserResponse>> CreateAsync(CreateUserRequest request, CancellationToken cancellationToken);
     Task<Result<BatchCreateUsersResponse>> BatchCreateAsync(

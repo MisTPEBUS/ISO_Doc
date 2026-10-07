@@ -1,3 +1,5 @@
+import type { SortParams } from '@/types/sort'
+
 export const DOCUMENT_VERSION_STATUS = {
   Draft: 'DRAFT',
   Published: 'PUBLISHED',
@@ -44,7 +46,24 @@ export interface CreateDocumentVersionResponse {
   status: DocumentVersionStatus
 }
 
-export interface ListAdminDocumentsParams {
+export interface CreateDocumentWithVersionResponse {
+  document: AdminDocument
+  version: CreateDocumentVersionResponse
+}
+
+export const ADMIN_DOCUMENT_SORT_FIELD = {
+  IsActive: 'isActive',
+  DocumentNo: 'documentNo',
+  Name: 'name',
+  IsoCategoryName: 'isoCategoryName',
+  DeptName: 'deptName',
+  UpdatedAt: 'updatedAt',
+} as const
+
+export type AdminDocumentSortField =
+  (typeof ADMIN_DOCUMENT_SORT_FIELD)[keyof typeof ADMIN_DOCUMENT_SORT_FIELD]
+
+export interface ListAdminDocumentsParams extends SortParams<AdminDocumentSortField> {
   companyId?: string
   keyword?: string
   page?: number
@@ -66,6 +85,7 @@ export interface UpdateAdminDocumentRequest {
 }
 
 export interface BulkImportDocumentItem {
+  isoCategoryId?: string | null
   deptId?: string | null
   documentNo: string
   name: string
@@ -84,6 +104,7 @@ export interface BulkImportedDocument {
   documentVersionId: string
   documentNo: string
   name: string
+  isoCategoryId: string | null
   pageCount: number | null
   effectiveDate: string | null
   version: string
@@ -136,6 +157,10 @@ export interface AttachmentDetail extends Attachment {
 
 export interface CreateAttachmentRequest {
   attachmentNo: string
+  name: string
+}
+
+export interface UpdateAttachmentRequest {
   name: string
 }
 

@@ -1,3 +1,4 @@
+using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
 
 namespace IsoDocument.Api.Features.Users;
@@ -18,6 +19,7 @@ public interface IUserStore
         Guid? deptId,
         string? keyword,
         bool includeInactive,
+        ListSort? sort,
         int skip,
         int take,
         CancellationToken cancellationToken);

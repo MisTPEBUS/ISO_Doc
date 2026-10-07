@@ -12,7 +12,9 @@ import {
   Select,
   Spinner,
   Table,
+  toSortParams,
   type TableColumn,
+  type TableSort,
 } from "@/components/common";
 import { useCurrentUser } from "@/features/auth/queries";
 import { USER_ROLE } from "@/features/auth/types";
@@ -33,9 +35,11 @@ import {
 import {
   MANAGED_USER_ROLE,
   MANAGED_USER_ROLE_LABEL,
+  USER_SORT_FIELD,
   isManagedUserRole,
   type ManagedUserRole,
   type UserResponse,
+  type UserSortField,
 } from "@/features/users/types";
 import { formatRocDateTime } from "@/lib/date";
 
@@ -99,6 +103,7 @@ export function UsersPage() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [sort, setSort] = useState<TableSort<UserSortField> | null>(null);
   const [batchMode, setBatchMode] = useState(false);
   const [editingUser, setEditingUser] = useState<UserResponse>();
   const [formOpen, setFormOpen] = useState(false);
@@ -128,7 +133,13 @@ export function UsersPage() {
     includeInactive,
     page,
     pageSize,
+    ...toSortParams(sort),
   });
+
+  function handleSortChange(nextSort: TableSort<UserSortField> | null) {
+    setSort(nextSort);
+    setPage(1);
+  }
 
   function handlePageSizeChange(nextPageSize: number) {
     setPageSize(nextPageSize);
@@ -358,33 +369,38 @@ export function UsersPage() {
     setPage(1);
   }
 
-  const columns: ReadonlyArray<TableColumn<UserResponse>> = [
+  const columns: ReadonlyArray<TableColumn<UserResponse, UserSortField>> = [
     {
       key: "empno",
       header: "帳號",
       cellClassName: "tabular",
+      sortKey: USER_SORT_FIELD.Empno,
       render: (user) => user.empno,
     },
     {
       key: "name",
       header: "姓名",
       cellClassName: "font-medium",
+      sortKey: USER_SORT_FIELD.Name,
       render: (user) => user.name,
     },
     {
       key: "department",
       header: "部門",
+      sortKey: USER_SORT_FIELD.DeptName,
       render: (user) => departmentNames.get(user.deptId) ?? "－",
     },
     {
       key: "email",
       header: "電子郵件",
       cellClassName: "text-meta text-ink-muted",
+      sortKey: USER_SORT_FIELD.Email,
       render: (user) => user.email ?? "－",
     },
     {
       key: "role",
       header: "角色",
+      sortKey: USER_SORT_FIELD.Role,
       render: (user) => (
         <Badge variant={ROLE_BADGE_VARIANT[user.role]}>
           {MANAGED_USER_ROLE_LABEL[user.role]}
@@ -394,6 +410,7 @@ export function UsersPage() {
     {
       key: "status",
       header: "狀態",
+      sortKey: USER_SORT_FIELD.IsActive,
       render: (user) => (
         <Badge variant={user.isActive ? "success" : "danger"}>
           {user.isActive ? "啟用" : "停用"}
@@ -404,6 +421,7 @@ export function UsersPage() {
       key: "lastLoginAt",
       header: "最後登入",
       cellClassName: "text-meta text-ink-muted tabular whitespace-nowrap",
+      sortKey: USER_SORT_FIELD.LastLoginAt,
       render: (user) => formatRocDateTime(user.lastLoginAt, "尚未登入"),
     },
     {
@@ -603,6 +621,8 @@ export function UsersPage() {
             <Table
               className="border-0"
               columns={columns}
+              sort={sort}
+              onSortChange={handleSortChange}
               data={users.data?.items ?? []}
               loading={users.isPending}
               skeletonRows={6}

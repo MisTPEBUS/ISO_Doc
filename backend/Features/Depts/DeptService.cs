@@ -24,6 +24,8 @@ public sealed class DeptService(
 
     public async Task<Result<PagedResult<DeptResponse>>> ListAsync(
         Guid? companyId,
+        string? sortBy,
+        string? sortDirection,
         int page,
         int pageSize,
         CancellationToken cancellationToken)
@@ -38,11 +40,18 @@ public sealed class DeptService(
                 "您沒有檢視這間公司部門資料的權限。");
         }
 
+        if (!ListSort.TryParse(
+                sortBy, sortDirection, DeptSortFields.All, out var sort, out var sortErrors))
+        {
+            return Result<PagedResult<DeptResponse>>.ValidationFailed(sortErrors);
+        }
+
         page = page > 0 ? page : DefaultPage;
         pageSize = pageSize > 0 ? Math.Min(pageSize, MaximumPageSize) : DefaultPageSize;
         var totalCount = await deptStore.CountAsync(companyFilter.CompanyId, cancellationToken);
         var depts = await deptStore.ListAsync(
             companyFilter.CompanyId,
+            sort,
             (page - 1) * pageSize,
             pageSize,
             cancellationToken);

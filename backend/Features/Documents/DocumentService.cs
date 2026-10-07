@@ -5,6 +5,7 @@ using IsoDocument.Api.Data.Entities;
 using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Documents.Dtos;
 using IsoDocument.Api.Security;
+using IsoDocument.Api.Storage;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -15,8 +16,12 @@ public sealed class DocumentService(
     ICurrentUser currentUser,
     IValidator<CreateDocumentRequest> createValidator,
     IValidator<UpdateDocumentRequest> updateValidator,
+    IValidator<CreateDocumentVersionRequest> versionValidator,
+    IDocumentStorage documentStorage,
+    StorageObjectKeyService storageKeyBuilder,
     IOperationAuditLogService auditLogService,
-    TimeProvider timeProvider) : IDocumentService
+    TimeProvider timeProvider,
+    ILogger<DocumentService> logger) : IDocumentService
 {
     private const int DefaultPage = 1;
     private const int DefaultPageSize = 20;
@@ -26,6 +31,8 @@ public sealed class DocumentService(
     public async Task<Result<PagedResult<DocumentResponse>>> ListAsync(
         Guid? companyId,
         string? keyword,
+        string? sortBy,
+        string? sortDirection,
         int page,
         int pageSize,
         CancellationToken cancellationToken)
@@ -38,12 +45,18 @@ public sealed class DocumentService(
                 "您沒有檢視這間公司文件的權限。");
         }
 
+        if (!ListSort.TryParse(
+                sortBy, sortDirection, DocumentSortFields.All, out var sort, out var sortErrors))
+        {
+            return Result<PagedResult<DocumentResponse>>.ValidationFailed(sortErrors);
+        }
+
         page = page > 0 ? page : DefaultPage;
         pageSize = pageSize > 0 ? Math.Min(pageSize, MaximumPageSize) : DefaultPageSize;
         var totalCount = await documentStore.CountAsync(
             companyFilter.CompanyId, keyword, cancellationToken);
         var documents = await documentStore.ListAsync(
-            companyFilter.CompanyId, keyword, (page - 1) * pageSize,
+            companyFilter.CompanyId, keyword, sort, (page - 1) * pageSize,
             pageSize, cancellationToken);
 
         return Result<PagedResult<DocumentResponse>>.Success(new(
@@ -72,47 +85,15 @@ public sealed class DocumentService(
         }
 
         var documentNo = request.DocumentNo!.Trim();
-        if (await documentStore.DocumentNoExistsAsync(
-            request.CompanyId, documentNo, cancellationToken))
+        var (dept, referenceErrors) = await CheckNewDocumentReferencesAsync(
+            request, documentNo, cancellationToken);
+        if (referenceErrors is not null)
         {
-            return DuplicateDocumentNo<DocumentResponse>();
-        }
-
-        if (request.IsoCategoryId is { } createIsoCategoryId
-            && !await documentStore.IsoCategoryBelongsToCompanyAsync(
-                request.CompanyId, createIsoCategoryId, cancellationToken))
-        {
-            return Result<DocumentResponse>.ValidationFailed(
-                FieldError("isoCategoryId", "指定的品質系統不存在，或不屬於此公司。"));
-        }
-
-        Dept? dept = null;
-        if (request.DeptId is { } createDeptId)
-        {
-            dept = await documentStore.FindCompanyDeptAsync(
-                request.CompanyId, createDeptId, cancellationToken);
-            if (dept is null)
-            {
-                return Result<DocumentResponse>.ValidationFailed(
-                    FieldError("deptId", "指定的發行單位不存在，或不屬於此公司。"));
-            }
+            return Result<DocumentResponse>.ValidationFailed(referenceErrors);
         }
 
         var now = timeProvider.GetUtcNow();
-        var document = new Document
-        {
-            Id = Guid.NewGuid(),
-            CompanyId = request.CompanyId,
-            DocumentNo = documentNo,
-            Name = request.Name!.Trim(),
-            IsActive = true,
-            IsoCategoryId = request.IsoCategoryId,
-            DeptId = request.DeptId,
-            Dept = dept,
-            CreatedBy = userId,
-            CreatedAt = now,
-            UpdatedAt = now
-        };
+        var document = NewDocument(request, documentNo, dept, userId, now);
 
         // 文件建立與「預設全開」部門權限必須在同一個 transaction 內完成，
         // 避免文件建立成功但權限沒建立（或相反）的不一致狀態。
@@ -121,16 +102,7 @@ public sealed class DocumentService(
 
         var deptIds = await documentStore.ListCompanyDeptIdsAsync(
             request.CompanyId, cancellationToken);
-        var permissions = deptIds
-            .Select(deptId => new DocumentDeptPermission
-            {
-                Id = Guid.NewGuid(),
-                DocumentId = document.Id,
-                DeptId = deptId,
-                GrantedBy = userId,
-                CreatedAt = now
-            })
-            .ToArray();
+        var permissions = DefaultDocumentPermissions.Create(document.Id, deptIds, userId, now);
         if (permissions.Length > 0)
         {
             documentStore.AddRange(permissions);
@@ -145,34 +117,165 @@ public sealed class DocumentService(
             return DuplicateDocumentNo<DocumentResponse>();
         }
 
-        await auditLogService.WriteAsync(
-            new AuditLogWriteRequest(
-                document.CompanyId,
-                AuditActions.CreateDocument,
-                AuditResourceTypes.Document,
-                document.Id,
-                new { new_value = ToAuditValue(document) }),
-            cancellationToken);
-
-        if (permissions.Length > 0)
-        {
-            await auditLogService.WriteAsync(
-                new AuditLogWriteRequest(
-                    document.CompanyId,
-                    AuditActions.UpdateDocumentDeptPermissions,
-                    AuditResourceTypes.Document,
-                    document.Id,
-                    new
-                    {
-                        old_value = Array.Empty<Guid>(),
-                        new_value = deptIds
-                    }),
-                cancellationToken);
-        }
-
+        await WriteCreateDocumentAuditsAsync(document, deptIds, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         return Result<DocumentResponse>.Success(ToResponse(document));
+    }
+
+    public async Task<Result<CreateDocumentWithVersionResponse>> CreateWithVersionAsync(
+        CreateDocumentWithVersionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var documentRequest = new CreateDocumentRequest(
+            request.CompanyId, request.DocumentNo, request.Name,
+            request.IsoCategoryId, request.DeptId);
+        var versionRequest = new CreateDocumentVersionRequest
+        {
+            Version = request.Version,
+            // 生效日期空白時以 UTC 今日立即生效（SPEC 第 5 節）。
+            EffectiveDate = request.EffectiveDate ?? DateOnly.FromDateTime(
+                timeProvider.GetUtcNow().UtcDateTime),
+            PageCount = request.PageCount,
+            Memo = request.Memo,
+            File = request.File
+        };
+
+        var errors = ToErrors(await createValidator.ValidateAsync(
+            documentRequest, cancellationToken));
+        foreach (var (field, messages) in ToErrors(await versionValidator.ValidateAsync(
+                     versionRequest, cancellationToken)))
+        {
+            errors[field] = messages;
+        }
+
+        if (errors.Count == 0
+            && !await DocumentFileRules.HasPdfMagicBytesAsync(request.File!, cancellationToken))
+        {
+            AddError(errors, "file", "文件內容不是有效的 PDF 檔案。");
+        }
+
+        if (errors.Count > 0)
+        {
+            return Result<CreateDocumentWithVersionResponse>.ValidationFailed(errors);
+        }
+
+        if (!currentUser.CanAccessCompany(request.CompanyId))
+        {
+            return Result<CreateDocumentWithVersionResponse>.Forbidden(
+                "您沒有為這間公司建立文件的權限。");
+        }
+
+        if (currentUser.UserId is not { } userId)
+        {
+            return Result<CreateDocumentWithVersionResponse>.Unauthorized("請先登入後再操作。");
+        }
+
+        var documentNo = request.DocumentNo!.Trim();
+        var (dept, referenceErrors) = await CheckNewDocumentReferencesAsync(
+            documentRequest, documentNo, cancellationToken);
+        if (referenceErrors is not null)
+        {
+            return Result<CreateDocumentWithVersionResponse>.ValidationFailed(referenceErrors);
+        }
+
+        var companyCode = await documentStore.FindCompanyCodeAsync(
+            request.CompanyId, cancellationToken);
+        if (companyCode is null)
+        {
+            return Result<CreateDocumentWithVersionResponse>.NotFound("找不到文件所屬的公司。");
+        }
+
+        DocumentVersionNumber.TryParse(
+            versionRequest.Version, out var versionText, out var major, out var minor);
+        var now = timeProvider.GetUtcNow();
+        var document = NewDocument(documentRequest, documentNo, dept, userId, now);
+        var deptIds = await documentStore.ListCompanyDeptIdsAsync(
+            request.CompanyId, cancellationToken);
+        var permissions = DefaultDocumentPermissions.Create(document.Id, deptIds, userId, now);
+        var file = request.File!;
+        var objectKey = await storageKeyBuilder.BuildMainKeyAsync(
+            document, companyCode, versionText, Guid.NewGuid(), file.FileName, cancellationToken);
+
+        // 儲存體不在 DB transaction 內：先寫檔（失敗時 DB 完全未動），
+        // 之後 transaction 任一步失敗就 rollback 並把已寫入的檔案搬到 trash 補償。
+        StorageWriteResult writeResult;
+        await using (var fileStream = file.OpenReadStream())
+        {
+            writeResult = await documentStorage.WriteAsync(
+                objectKey, fileStream, cancellationToken);
+        }
+
+        var version = new DocumentVersion
+        {
+            Id = Guid.NewGuid(),
+            DocumentId = document.Id,
+            Version = versionText,
+            VersionMajor = major,
+            VersionMinor = minor,
+            Status = "PUBLISHED",
+            PublishDate = DateOnly.FromDateTime(now.UtcDateTime),
+            EffectiveDate = versionRequest.EffectiveDate,
+            PageCount = request.PageCount,
+            Memo = string.IsNullOrWhiteSpace(request.Memo) ? null : request.Memo.Trim(),
+            FileKey = objectKey,
+            OriginalFileName = file.FileName,
+            ContentType = "application/pdf",
+            FileSize = writeResult.FileSize,
+            Checksum = writeResult.Checksum,
+            CreatedBy = userId,
+            CreatedAt = now
+        };
+
+        // 文件、預設部門權限、第一個版本與 audit 全部在同一個 transaction：一起成功或一起 rollback。
+        try
+        {
+            await using var transaction = await documentStore.BeginTransactionAsync(
+                cancellationToken);
+            documentStore.Add(document);
+            if (permissions.Length > 0)
+            {
+                documentStore.AddRange(permissions);
+            }
+            documentStore.Add(version);
+            await documentStore.SaveChangesAsync(cancellationToken);
+
+            await WriteCreateDocumentAuditsAsync(document, deptIds, cancellationToken);
+            await auditLogService.WriteAsync(
+                new AuditLogWriteRequest(
+                    document.CompanyId,
+                    AuditActions.PublishDocumentVersion,
+                    AuditResourceTypes.DocumentVersion,
+                    version.Id,
+                    new
+                    {
+                        document_id = document.Id,
+                        version = version.Version,
+                        effective_date = version.EffectiveDate,
+                        previous_published_version_ids = Array.Empty<Guid>()
+                    }),
+                cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            documentStore.Detach(document);
+            documentStore.DetachRange(permissions);
+            documentStore.Detach(version);
+            await StorageCleanup.TryMoveToTrashAsync(documentStorage, objectKey, logger);
+
+            if (exception is DbUpdateException dbUpdateException
+                && IsDuplicateDocumentNoViolation(dbUpdateException))
+            {
+                return DuplicateDocumentNo<CreateDocumentWithVersionResponse>();
+            }
+
+            throw;
+        }
+
+        return Result<CreateDocumentWithVersionResponse>.Success(new(
+            ToResponse(document),
+            new DocumentVersionResponse(version.Id, version.Version, version.Status)));
     }
 
     public async Task<Result<BulkImportDocumentsResponse>> BulkImportAsync(
@@ -216,9 +319,16 @@ public sealed class DocumentService(
             var item = items[i];
             var index = i + 1;
             var createRequest = new CreateDocumentRequest(
-                request.CompanyId, item.DocumentNo, item.Name, DeptId: item.DeptId);
+                request.CompanyId, item.DocumentNo, item.Name,
+                IsoCategoryId: item.IsoCategoryId, DeptId: item.DeptId);
             var validation = await createValidator.ValidateAsync(createRequest, cancellationToken);
             var errors = ToErrors(validation);
+            if (item.IsoCategoryId is { } isoCategoryId
+                && !await documentStore.IsoCategoryBelongsToCompanyAsync(
+                    request.CompanyId, isoCategoryId, cancellationToken))
+            {
+                AddError(errors, "isoCategoryId", "指定的品質系統不存在，或不屬於此公司。");
+            }
             if (item.DeptId is { } issuingDeptId && !companyDeptIds.Contains(issuingDeptId))
             {
                 AddError(errors, "deptId", "指定的發行單位不存在，或不屬於此公司。");
@@ -261,6 +371,7 @@ public sealed class DocumentService(
                 CompanyId = request.CompanyId,
                 DocumentNo = documentNo,
                 Name = item.Name!.Trim(),
+                IsoCategoryId = item.IsoCategoryId,
                 DeptId = item.DeptId,
                 IsActive = true,
                 CreatedBy = userId,
@@ -284,16 +395,8 @@ public sealed class DocumentService(
                 CreatedAt = now
             };
 
-            var permissions = companyDeptIds
-                .Select(deptId => new DocumentDeptPermission
-                {
-                    Id = Guid.NewGuid(),
-                    DocumentId = document.Id,
-                    DeptId = deptId,
-                    GrantedBy = userId,
-                    CreatedAt = now
-                })
-                .ToArray();
+            var permissions = DefaultDocumentPermissions.Create(
+                document.Id, companyDeptIds, userId, now);
 
             try
             {
@@ -369,6 +472,7 @@ public sealed class DocumentService(
                     documentVersion.Id,
                     document.DocumentNo,
                     document.Name,
+                    document.IsoCategoryId,
                     documentVersion.PageCount,
                     documentVersion.EffectiveDate,
                     documentVersion.Version,
@@ -512,6 +616,92 @@ public sealed class DocumentService(
                 }),
             cancellationToken);
         return Result.Success();
+    }
+
+    /// <summary>
+    /// 新增文件前的關聯檢查：同公司文件編號不可重複，品質系統與發行單位須屬於該公司。
+    /// 通過時回傳發行單位（讓回應可直接帶出 deptName），失敗時回傳欄位錯誤。
+    /// </summary>
+    private async Task<(Dept? Dept, Dictionary<string, string[]>? Errors)>
+        CheckNewDocumentReferencesAsync(
+            CreateDocumentRequest request,
+            string documentNo,
+            CancellationToken cancellationToken)
+    {
+        if (await documentStore.DocumentNoExistsAsync(
+            request.CompanyId, documentNo, cancellationToken))
+        {
+            return (null, DuplicateDocumentNoError());
+        }
+
+        if (request.IsoCategoryId is { } isoCategoryId
+            && !await documentStore.IsoCategoryBelongsToCompanyAsync(
+                request.CompanyId, isoCategoryId, cancellationToken))
+        {
+            return (null, FieldError("isoCategoryId", "指定的品質系統不存在，或不屬於此公司。"));
+        }
+
+        if (request.DeptId is not { } deptId)
+        {
+            return (null, null);
+        }
+
+        var dept = await documentStore.FindCompanyDeptAsync(
+            request.CompanyId, deptId, cancellationToken);
+        return dept is null
+            ? (null, FieldError("deptId", "指定的發行單位不存在，或不屬於此公司。"))
+            : (dept, null);
+    }
+
+    private static Document NewDocument(
+        CreateDocumentRequest request,
+        string documentNo,
+        Dept? dept,
+        Guid userId,
+        DateTimeOffset now) => new()
+    {
+        Id = Guid.NewGuid(),
+        CompanyId = request.CompanyId,
+        DocumentNo = documentNo,
+        Name = request.Name!.Trim(),
+        IsActive = true,
+        IsoCategoryId = request.IsoCategoryId,
+        DeptId = request.DeptId,
+        Dept = dept,
+        CreatedBy = userId,
+        CreatedAt = now,
+        UpdatedAt = now
+    };
+
+    private async Task WriteCreateDocumentAuditsAsync(
+        Document document,
+        IReadOnlyList<Guid> deptIds,
+        CancellationToken cancellationToken)
+    {
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                document.CompanyId,
+                AuditActions.CreateDocument,
+                AuditResourceTypes.Document,
+                document.Id,
+                new { new_value = ToAuditValue(document) }),
+            cancellationToken);
+
+        if (deptIds.Count > 0)
+        {
+            await auditLogService.WriteAsync(
+                new AuditLogWriteRequest(
+                    document.CompanyId,
+                    AuditActions.UpdateDocumentDeptPermissions,
+                    AuditResourceTypes.Document,
+                    document.Id,
+                    new
+                    {
+                        old_value = Array.Empty<Guid>(),
+                        new_value = deptIds
+                    }),
+                cancellationToken);
+        }
     }
 
     private static Result<T> DuplicateDocumentNo<T>() => Result<T>.ValidationFailed(

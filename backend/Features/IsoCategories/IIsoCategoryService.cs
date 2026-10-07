@@ -8,6 +8,8 @@ public interface IIsoCategoryService
     Task<Result<PagedResult<IsoCategoryResponse>>> ListAsync(
         Guid? companyId,
         bool includeInactive,
+        string? sortBy,
+        string? sortDirection,
         int page,
         int pageSize,
         CancellationToken cancellationToken);

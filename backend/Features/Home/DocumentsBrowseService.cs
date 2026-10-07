@@ -22,6 +22,8 @@ public sealed class DocumentsBrowseService(
         int pageSize,
         string? keyword,
         Guid? isoCategoryId,
+        string? sortBy,
+        string? sortDirection,
         CancellationToken cancellationToken)
     {
         if (currentUser.DeptId is not { } deptId)
@@ -30,12 +32,20 @@ public sealed class DocumentsBrowseService(
                 "請先登入後再操作。");
         }
 
+        if (!ListSort.TryParse(
+                sortBy, sortDirection, AvailableDocumentSortFields.All,
+                out var sort, out var sortErrors))
+        {
+            return Result<PagedResult<AvailableDocumentResponse>>.ValidationFailed(sortErrors);
+        }
+
         page = page > 0 ? page : DefaultPage;
         pageSize = pageSize > 0 ? Math.Min(pageSize, MaximumPageSize) : DefaultPageSize;
         var totalCount = await browseStore.CountAvailableAsync(
             deptId, keyword, isoCategoryId, cancellationToken);
         var documents = await browseStore.ListAvailableAsync(
-            deptId, keyword, isoCategoryId, (page - 1) * pageSize, pageSize, cancellationToken);
+            deptId, keyword, isoCategoryId, sort, (page - 1) * pageSize, pageSize,
+            cancellationToken);
         return Result<PagedResult<AvailableDocumentResponse>>.Success(new(
             documents, page, pageSize, totalCount));
     }
@@ -59,12 +69,13 @@ public sealed class DocumentsBrowseService(
         }
 
         await using var stream = await documentStorage.OpenReadAsync(record.FileKey, cancellationToken);
+        var downloadId = Guid.NewGuid();
         var watermarked = await pdfWatermarkService.ApplyWatermarkAsync(
             stream,
-            new PdfWatermarkContent(record.CompanyCode, documentId.ToString()),
+            new PdfWatermarkContent(record.CompanyCode, downloadId.ToString()),
             cancellationToken);
         await auditLogService.WriteDocumentDownloadedAsync(
-            record.CompanyId, record.VersionId, cancellationToken);
+            record.CompanyId, documentId, record.VersionId, downloadId, cancellationToken);
         return Result<DownloadFileResponse>.Success(new(
             watermarked,
             record.ContentType ?? "application/pdf",

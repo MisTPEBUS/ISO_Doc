@@ -6,6 +6,7 @@
 export const MAX_BULK_IMPORT_ROWS = 200
 
 export type MappingTargetKey =
+  | 'isoCategoryId'
   | 'deptId'
   | 'documentNo'
   | 'name'
@@ -19,6 +20,12 @@ export interface MappingTarget {
 }
 
 export const MAPPING_TARGETS: readonly MappingTarget[] = [
+  {
+    key: 'isoCategoryId',
+    label: '品質系統（選填）',
+    // 不加 'ISO'：比對會用包含關係，「ISO文件編號」這類表頭會被誤判為品質系統。
+    aliases: ['品質系統', '品質管理', '品質管理系統', '品管分類', 'isoCategoryId', '品質系統id', '分類id'],
+  },
   {
     key: 'deptId',
     label: '發行部門（選填）',
@@ -130,7 +137,9 @@ function normalize(value: string): string {
 }
 
 function scoreHeaderRow(row: string[]): number {
-  const cells = row.map(normalize)
+  // 空白儲存格必須排除：任何 alias 都「包含」空字串，若不排除，只要某列有空格
+  // （例如標題列、漏填欄位的資料列）就會拿到滿分而被誤判為表頭列。
+  const cells = row.map(normalize).filter((cell) => cell !== '')
   let score = 0
 
   for (const target of MAPPING_TARGETS) {
@@ -172,6 +181,7 @@ export function autoMapColumns(headers: string[]): ColumnMapping {
     if (index === -1) {
       index = headers.findIndex((header) => {
         const normalizedHeader = normalize(header)
+        if (normalizedHeader === '') return false
         return aliases.some((alias) => normalizedHeader.includes(alias) || alias.includes(normalizedHeader))
       })
     }
@@ -238,6 +248,7 @@ export async function parseDocumentsWorkbook(file: File): Promise<ParsedWorkbook
 }
 
 export interface DraftDocumentRow {
+  isoCategoryId: string
   deptId: string
   documentNo: string
   name: string
@@ -246,7 +257,7 @@ export interface DraftDocumentRow {
 }
 
 export function blankDraftRow(): DraftDocumentRow {
-  return { documentNo: '', name: '', effectiveDate: '', version: '', deptId: '' }
+  return { documentNo: '', name: '', effectiveDate: '', version: '', isoCategoryId: '', deptId: '' }
 }
 
 export function buildRowsFromMapping(

@@ -15,6 +15,7 @@ using PdfSharp.Pdf;
 using PdfSharp.Pdf.IO;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -61,6 +62,37 @@ public sealed class DocumentsBrowseApiTests
         Assert.Equal("FM-HR-001", attachment.AttachmentNo);
         Assert.Equal("請假申請表", attachment.Name);
         Assert.True(attachment.CurrentVersion?.HasFile);
+    }
+
+    [Fact]
+    public async Task Available_WithSortParameters_PassesNormalizedSortToStore()
+    {
+        await using var factory = new BrowseWebApplicationFactory(UserRole.USER);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+
+        var response = await client.GetAsync(
+            "/api/documents/available?sortBy=effectiveDate&sortDirection=desc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(new ListSort(AvailableDocumentSortFields.EffectiveDate, Descending: true),
+            factory.BrowseStore.LastSort);
+    }
+
+    [Fact]
+    public async Task Available_WithUnsupportedSortField_ReturnsValidationError()
+    {
+        await using var factory = new BrowseWebApplicationFactory(UserRole.USER);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+
+        var response = await client.GetAsync("/api/documents/available?sortBy=fileKey");
+        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Contains("sortBy", body.Errors.Keys);
+        Assert.Null(factory.BrowseStore.LastSort);
     }
 
     [Fact]
@@ -162,6 +194,10 @@ public sealed class DocumentsBrowseApiTests
         var audit = Assert.Single(factory.Audit.Entries);
         Assert.Equal("DOWNLOAD_DOCUMENT", audit.Action);
         Assert.Equal(factory.VersionId, audit.ResourceId);
+        Assert.Equal(factory.DocumentId, audit.DocumentId);
+        Assert.NotNull(audit.DownloadId);
+        Assert.Equal(audit.DownloadId.ToString(),
+            Assert.Single(factory.Watermark.Contents).DownloadId);
 
         // 主文下載浮水印：回傳的內容是被改過、但仍然是合法、頁數不變的 PDF；
         // 來源檔案本身（sourceBytes）不受影響，浮水印只發生在回應內容。
@@ -171,6 +207,35 @@ public sealed class DocumentsBrowseApiTests
         using var watermarked = PdfReader.Open(
             new MemoryStream(responseBytes), PdfDocumentOpenMode.Import);
         Assert.Equal(2, watermarked.PageCount);
+    }
+
+    [Fact]
+    public async Task DownloadDocument_Twice_UsesDistinctDownloadIdsForWatermarkAndAudit()
+    {
+        await using var factory = new BrowseWebApplicationFactory(UserRole.USER);
+        factory.AllowUserDocumentAccess();
+        const string fileKey = "store/COMPANYA/ISO-001/v1.0/main/file.pdf";
+        factory.BrowseStore.AddDocumentDownload(
+            factory.DocumentId, factory.VersionId, factory.CompanyId, "PUBLISHED", fileKey);
+        factory.Storage.SeedContent(fileKey, CreateMinimalPdfBytes());
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+
+        for (var i = 0; i < 2; i++)
+        {
+            using var response = await client.GetAsync(
+                $"/api/documents/{factory.DocumentId}/versions/{factory.VersionId}/download");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+
+        Assert.Equal(2, factory.Audit.Entries.Count);
+        Assert.Equal(2, factory.Watermark.Contents.Count);
+        Assert.NotEqual(factory.Audit.Entries[0].DownloadId, factory.Audit.Entries[1].DownloadId);
+        for (var i = 0; i < 2; i++)
+        {
+            Assert.Equal(factory.Audit.Entries[i].DownloadId.ToString(),
+                factory.Watermark.Contents[i].DownloadId);
+        }
     }
 
     [Fact]
@@ -293,6 +358,7 @@ internal sealed class BrowseWebApplicationFactory : WebApplicationFactory<Progra
         BrowseStore = new FakeDocumentsBrowseStore();
         Storage = new FakeDocumentStorage();
         Audit = new FakeDownloadAuditLogService();
+        Watermark = new RecordingPdfWatermarkService();
     }
 
     public FakeAuthUserStore AuthStore { get; }
@@ -305,6 +371,7 @@ internal sealed class BrowseWebApplicationFactory : WebApplicationFactory<Progra
     public FakeDocumentsBrowseStore BrowseStore { get; }
     public FakeDocumentStorage Storage { get; }
     public FakeDownloadAuditLogService Audit { get; }
+    public RecordingPdfWatermarkService Watermark { get; }
 
     public void AllowUserDocumentAccess()
     {
@@ -337,6 +404,8 @@ internal sealed class BrowseWebApplicationFactory : WebApplicationFactory<Progra
             services.AddSingleton<IDocumentStorage>(Storage);
             services.RemoveAll<IDownloadAuditLogService>();
             services.AddSingleton<IDownloadAuditLogService>(Audit);
+            services.RemoveAll<IPdfWatermarkService>();
+            services.AddSingleton<IPdfWatermarkService>(Watermark);
         });
     }
 }
@@ -482,15 +551,19 @@ internal sealed class FakeDocumentsBrowseStore : IDocumentsBrowseStore
         return Task.FromResult(Query(deptId, keyword, isoCategoryId).Count());
     }
 
+    public ListSort? LastSort { get; private set; }
+
     public Task<IReadOnlyList<AvailableDocumentResponse>> ListAvailableAsync(
         Guid deptId,
         string? keyword,
         Guid? isoCategoryId,
+        ListSort? sort,
         int skip,
         int take,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        LastSort = sort;
         IReadOnlyList<AvailableDocumentResponse> result = Query(deptId, keyword, isoCategoryId)
             .Skip(skip)
             .Take(take)
@@ -544,11 +617,13 @@ internal sealed class FakeDownloadAuditLogService : IDownloadAuditLogService
 
     public Task WriteDocumentDownloadedAsync(
         Guid companyId,
+        Guid documentId,
         Guid versionId,
+        Guid downloadId,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        Entries.Add(new("DOWNLOAD_DOCUMENT", versionId));
+        Entries.Add(new("DOWNLOAD_DOCUMENT", versionId, documentId, downloadId));
         return Task.CompletedTask;
     }
 
@@ -562,5 +637,21 @@ internal sealed class FakeDownloadAuditLogService : IDownloadAuditLogService
         return Task.CompletedTask;
     }
 
-    public sealed record DownloadAuditEntry(string Action, Guid ResourceId);
+    public sealed record DownloadAuditEntry(
+        string Action, Guid ResourceId, Guid? DocumentId = null, Guid? DownloadId = null);
+}
+
+internal sealed class RecordingPdfWatermarkService : IPdfWatermarkService
+{
+    private readonly PdfWatermarkService _inner = new();
+    public List<PdfWatermarkContent> Contents { get; } = [];
+
+    public Task<Stream> ApplyWatermarkAsync(
+        Stream source,
+        PdfWatermarkContent content,
+        CancellationToken cancellationToken)
+    {
+        Contents.Add(content);
+        return _inner.ApplyWatermarkAsync(source, content, cancellationToken);
+    }
 }

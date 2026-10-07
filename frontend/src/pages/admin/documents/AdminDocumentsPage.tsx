@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "@/api/httpClient";
 import {
@@ -12,20 +12,28 @@ import {
   Pagination,
   Select,
   Table,
+  Textarea,
+  toSortParams,
   type TableColumn,
+  type TableSort,
 } from "@/components/common";
 import {
   useAdminDocuments,
-  useCreateAdminDocument,
+  useCreateAdminDocumentWithVersion,
   useDeleteAdminDocument,
   useUpdateAdminDocument,
 } from "@/features/admin-documents/queries";
 import {
-  createAdminDocumentFormSchema,
+  createAdminDocumentWithVersionFormSchema,
   updateAdminDocumentFormSchema,
-  type AdminDocumentFormValues,
+  type AdminDocumentWithVersionFormValues,
 } from "@/features/admin-documents/schemas";
-import type { AdminDocument } from "@/features/admin-documents/types";
+import {
+  ADMIN_DOCUMENT_SORT_FIELD,
+  type AdminDocument,
+  type AdminDocumentSortField,
+} from "@/features/admin-documents/types";
+import { todayUtc } from "@/features/admin-documents/versionSchemas";
 import { useCurrentUser } from "@/features/auth/queries";
 import { USER_ROLE } from "@/features/auth/types";
 import { useCompanies } from "@/features/companies/queries";
@@ -34,14 +42,37 @@ import { useIsoCategories } from "@/features/iso-categories/queries";
 import { formatRocDateTime } from "@/lib/date";
 
 const DEFAULT_PAGE_SIZE = 10;
-const EMPTY_FORM: AdminDocumentFormValues = {
+const SORT_FIELDS = Object.values(ADMIN_DOCUMENT_SORT_FIELD) as string[];
+
+function positiveInteger(value: string | null, fallback: number): number {
+  const number = Number(value);
+  return value !== null && Number.isSafeInteger(number) && number > 0
+    ? number
+    : fallback;
+}
+
+const EMPTY_FORM: AdminDocumentWithVersionFormValues = {
   documentNo: "",
   name: "",
   isoCategoryId: "",
   deptId: "",
+  version: "1.0",
+  effectiveDate: "",
+  pageCount: "",
+  memo: "",
+  file: null,
 };
 
-type FieldErrors = Partial<Record<keyof AdminDocumentFormValues, string>>;
+type FieldErrors = Partial<
+  Record<keyof AdminDocumentWithVersionFormValues, string>
+>;
+
+// 新增表單的品質系統預設值；比對時忽略空白與大小寫（例如「ISO 9001」也算）。
+const DEFAULT_ISO_CATEGORY_NAME = "ISO9001";
+
+function isDefaultIsoCategory(name: string): boolean {
+  return name.replace(/\s+/g, "").toUpperCase() === DEFAULT_ISO_CATEGORY_NAME;
+}
 
 function firstMessage(messages: string[] | undefined): string | undefined {
   return messages?.[0];
@@ -55,19 +86,31 @@ function errorMessage(error: unknown, fallback: string): string {
 
 export function AdminDocumentsPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const currentUser = useCurrentUser();
   const isSystemAdmin = currentUser.data?.role === USER_ROLE.SystemAdmin;
-  const [selectedCompanyId, setSelectedCompanyId] = useState(
-    currentUser.data?.companyId ?? "",
+  const companies = useCompanies({ page: 1, pageSize: 100 }, isSystemAdmin);
+  const selectedCompanyId =
+    searchParams.get("companyId") || companies.data?.items[0]?.id || "";
+  const keyword = searchParams.get("keyword") ?? "";
+  const [keywordInput, setKeywordInput] = useState(keyword);
+  const page = positiveInteger(searchParams.get("page"), 1);
+  const pageSize = positiveInteger(
+    searchParams.get("pageSize"),
+    DEFAULT_PAGE_SIZE,
   );
-  const [keywordInput, setKeywordInput] = useState("");
-  const [keyword, setKeyword] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const sortBy = searchParams.get("sortBy");
+  const sortDirection = searchParams.get("sortDirection");
+  const sort: TableSort<AdminDocumentSortField> | null =
+    sortBy && SORT_FIELDS.includes(sortBy) &&
+    (sortDirection === "asc" || sortDirection === "desc")
+      ? { key: sortBy as AdminDocumentSortField, direction: sortDirection }
+      : null;
   const [editingDocument, setEditingDocument] = useState<AdminDocument>();
   const [formOpen, setFormOpen] = useState(false);
+  const [formKey, setFormKey] = useState(0);
   const [formValues, setFormValues] =
-    useState<AdminDocumentFormValues>(EMPTY_FORM);
+    useState<AdminDocumentWithVersionFormValues>(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string>();
   const [deleteTarget, setDeleteTarget] = useState<AdminDocument>();
@@ -77,12 +120,12 @@ export function AdminDocumentsPage() {
   const companyId = isSystemAdmin
     ? selectedCompanyId || undefined
     : currentUser.data?.companyId;
-  const companies = useCompanies({ page: 1, pageSize: 100 }, isSystemAdmin);
   const documents = useAdminDocuments({
     companyId,
     keyword: keyword || undefined,
     page,
     pageSize,
+    ...toSortParams(sort),
   });
   const isoCategories = useIsoCategories(
     { companyId, page: 1, pageSize: 100 },
@@ -99,12 +142,34 @@ export function AdminDocumentsPage() {
     ]),
   );
 
-  function handlePageSizeChange(nextPageSize: number) {
-    setPageSize(nextPageSize);
-    setPage(1);
+  function updateListParams(changes: Record<string, string | null>) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      for (const [key, value] of Object.entries(changes)) {
+        if (value) next.set(key, value);
+        else next.delete(key);
+      }
+      return next;
+    });
   }
 
-  const createDocument = useCreateAdminDocument();
+  function setPage(nextPage: number) {
+    updateListParams({ page: nextPage === 1 ? null : String(nextPage) });
+  }
+
+  function handlePageSizeChange(nextPageSize: number) {
+    updateListParams({ pageSize: String(nextPageSize), page: null });
+  }
+
+  function handleSortChange(nextSort: TableSort<AdminDocumentSortField> | null) {
+    updateListParams({
+      sortBy: nextSort?.key ?? null,
+      sortDirection: nextSort?.direction ?? null,
+      page: null,
+    });
+  }
+
+  const createDocument = useCreateAdminDocumentWithVersion();
   const updateDocument = useUpdateAdminDocument();
   const deleteDocument = useDeleteAdminDocument();
   const formPending = createDocument.isPending || updateDocument.isPending;
@@ -113,8 +178,17 @@ export function AdminDocumentsPage() {
   );
 
   function openCreateForm() {
+    const defaultIsoCategoryId =
+      isoCategories.data?.items.find((category) =>
+        isDefaultIsoCategory(category.name),
+      )?.id ?? "";
     setEditingDocument(undefined);
-    setFormValues(EMPTY_FORM);
+    setFormValues({
+      ...EMPTY_FORM,
+      isoCategoryId: defaultIsoCategoryId,
+      effectiveDate: todayUtc(),
+    });
+    setFormKey((current) => current + 1);
     setFieldErrors({});
     setFormError(undefined);
     setSuccessMessage(undefined);
@@ -124,6 +198,7 @@ export function AdminDocumentsPage() {
   function openEditForm(document: AdminDocument) {
     setEditingDocument(document);
     setFormValues({
+      ...EMPTY_FORM,
       documentNo: document.documentNo,
       name: document.name,
       isoCategoryId: document.isoCategoryId ?? "",
@@ -139,9 +214,18 @@ export function AdminDocumentsPage() {
     if (!formPending) setFormOpen(false);
   }
 
-  function updateField(field: keyof AdminDocumentFormValues, value: string) {
+  function updateField(
+    field: Exclude<keyof AdminDocumentWithVersionFormValues, "file">,
+    value: string,
+  ) {
     setFormValues((current) => ({ ...current, [field]: value }));
     setFieldErrors((current) => ({ ...current, [field]: undefined }));
+    setFormError(undefined);
+  }
+
+  function updateFile(file: File | null) {
+    setFormValues((current) => ({ ...current, file }));
+    setFieldErrors((current) => ({ ...current, file: undefined }));
     setFormError(undefined);
   }
 
@@ -152,6 +236,10 @@ export function AdminDocumentsPage() {
       name: firstMessage(errors.name),
       isoCategoryId: firstMessage(errors.isoCategoryId),
       deptId: firstMessage(errors.deptId),
+      version: firstMessage(errors.version),
+      effectiveDate: firstMessage(errors.effectiveDate),
+      memo: firstMessage(errors.memo),
+      file: firstMessage(errors.file),
     });
     if (Object.keys(errors).length === 0) {
       setFormError(errorMessage(error, "無法儲存文件資料。"));
@@ -202,7 +290,8 @@ export function AdminDocumentsPage() {
       return;
     }
 
-    const parsed = createAdminDocumentFormSchema.safeParse(formValues);
+    const parsed =
+      createAdminDocumentWithVersionFormSchema.safeParse(formValues);
     if (!parsed.success) {
       const errors = parsed.error.flatten().fieldErrors;
       setFieldErrors({
@@ -210,22 +299,22 @@ export function AdminDocumentsPage() {
         name: firstMessage(errors.name),
         isoCategoryId: firstMessage(errors.isoCategoryId),
         deptId: firstMessage(errors.deptId),
+        version: firstMessage(errors.version),
+        effectiveDate: firstMessage(errors.effectiveDate),
+        memo: firstMessage(errors.memo),
+        file: firstMessage(errors.file),
       });
       return;
     }
 
     createDocument.mutate(
+      { companyId, ...parsed.data },
       {
-        companyId,
-        documentNo: parsed.data.documentNo,
-        name: parsed.data.name,
-        isoCategoryId: parsed.data.isoCategoryId || undefined,
-        deptId: parsed.data.deptId || undefined,
-      },
-      {
-        onSuccess: () => {
+        onSuccess: (created) => {
           setFormOpen(false);
-          setSuccessMessage("ISO 文件主檔已建立。");
+          setSuccessMessage(
+            `ISO管理程序 ${created.document.documentNo} 已建立，版本 ${created.version.version} 已發布。`,
+          );
         },
         onError: (error) => {
           if (error instanceof ApiError) applyServerError(error);
@@ -250,15 +339,17 @@ export function AdminDocumentsPage() {
 
   function clearKeyword() {
     setKeywordInput("");
-    setKeyword("");
-    setPage(1);
+    updateListParams({ keyword: null, page: null });
   }
 
-  const columns: ReadonlyArray<TableColumn<AdminDocument>> = [
+  const columns: ReadonlyArray<
+    TableColumn<AdminDocument, AdminDocumentSortField>
+  > = [
     {
       key: "status",
       header: "文件狀態",
       headerClassName: "w-24",
+      sortKey: ADMIN_DOCUMENT_SORT_FIELD.IsActive,
       render: (document) => (
         <Badge variant={document.isActive ? "success" : "danger"}>
           {document.isActive ? "啟用" : "停用"}
@@ -268,12 +359,13 @@ export function AdminDocumentsPage() {
     {
       key: "documentNo",
       header: "文件編號",
+      sortKey: ADMIN_DOCUMENT_SORT_FIELD.DocumentNo,
       cellClassName: "font-mono text-code tabular",
       render: (document) => (
         <button
           type="button"
           className="rounded-xs font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          onClick={() => navigate(`/admin/documents/${document.id}`)}
+          onClick={() => navigate(`/admin/documents/${document.id}?${searchParams}`)}
         >
           {document.documentNo}
         </button>
@@ -282,12 +374,13 @@ export function AdminDocumentsPage() {
     {
       key: "name",
       header: "文件名稱",
+      sortKey: ADMIN_DOCUMENT_SORT_FIELD.Name,
       cellClassName: "min-w-64 font-medium",
       render: (document) => (
         <button
           type="button"
           className="rounded-xs text-left text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          onClick={() => navigate(`/admin/documents/${document.id}`)}
+          onClick={() => navigate(`/admin/documents/${document.id}?${searchParams}`)}
         >
           {document.name}
         </button>
@@ -296,6 +389,7 @@ export function AdminDocumentsPage() {
     {
       key: "isoCategory",
       header: "品質系統",
+      sortKey: ADMIN_DOCUMENT_SORT_FIELD.IsoCategoryName,
       headerClassName: "w-40",
       cellClassName: "text-meta text-ink-muted",
       render: (document) =>
@@ -306,6 +400,7 @@ export function AdminDocumentsPage() {
     {
       key: "dept",
       header: "發行單位",
+      sortKey: ADMIN_DOCUMENT_SORT_FIELD.DeptName,
       headerClassName: "w-40",
       cellClassName: "text-meta text-ink-muted",
       render: (document) => document.deptName ?? "－",
@@ -313,6 +408,7 @@ export function AdminDocumentsPage() {
     {
       key: "updatedAt",
       header: "最後更新",
+      sortKey: ADMIN_DOCUMENT_SORT_FIELD.UpdatedAt,
       headerClassName: "w-52",
       cellClassName: "text-meta text-ink-muted tabular whitespace-nowrap",
       render: (document) => formatRocDateTime(document.updatedAt),
@@ -323,13 +419,6 @@ export function AdminDocumentsPage() {
       headerClassName: "w-60",
       render: (document) => (
         <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => navigate(`/admin/documents/${document.id}`)}
-          >
-            詳情
-          </Button>
           <Button
             size="sm"
             variant="ghost"
@@ -413,8 +502,7 @@ export function AdminDocumentsPage() {
         className="border border-line-strong bg-surface p-4"
         onSubmit={(event) => {
           event.preventDefault();
-          setKeyword(keywordInput.trim());
-          setPage(1);
+          updateListParams({ keyword: keywordInput.trim(), page: null });
         }}
       >
         <div className="flex flex-wrap items-end gap-3">
@@ -429,8 +517,7 @@ export function AdminDocumentsPage() {
                 value={selectedCompanyId}
                 disabled={companies.isPending || companies.isError}
                 onChange={(event) => {
-                  setSelectedCompanyId(event.target.value);
-                  setPage(1);
+                  updateListParams({ companyId: event.target.value, page: null });
                 }}
               >
                 {companies.isPending && <option value="">公司載入中</option>}
@@ -482,6 +569,8 @@ export function AdminDocumentsPage() {
         <Table
           className="border-0"
           columns={columns}
+          sort={sort}
+          onSortChange={handleSortChange}
           data={documents.data?.items ?? []}
           loading={documents.isPending}
           skeletonRows={6}
@@ -544,9 +633,9 @@ export function AdminDocumentsPage() {
               type="submit"
               form="admin-document-form"
               loading={formPending}
-              loadingText="儲存中"
+              loadingText={editingDocument ? "儲存中" : "上傳中"}
             >
-              儲存
+              {editingDocument ? "儲存" : "建立並發布"}
             </Button>
           </>
         }
@@ -557,6 +646,7 @@ export function AdminDocumentsPage() {
           </Alert>
         )}
         <form
+          key={formKey}
           id="admin-document-form"
           className="space-y-4"
           noValidate
@@ -656,6 +746,103 @@ export function AdminDocumentsPage() {
               ))}
             </Select>
           </FormField>
+
+          {!editingDocument && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  label="版本號"
+                  htmlFor="admin-document-version"
+                  error={fieldErrors.version}
+                  hint="例如 輸入 2 會儲存為 2.0。"
+                  required
+                >
+                  <Input
+                    id="admin-document-version"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={formValues.version}
+                    error={fieldErrors.version !== undefined}
+                    aria-describedby={
+                      fieldErrors.version
+                        ? "admin-document-version-error"
+                        : "admin-document-version-hint"
+                    }
+                    onChange={(event) =>
+                      updateField("version", event.target.value)
+                    }
+                  />
+                </FormField>
+
+                <FormField
+                  label="生效日期"
+                  htmlFor="admin-document-effective-date"
+                  error={fieldErrors.effectiveDate}
+                  required
+                >
+                  <Input
+                    id="admin-document-effective-date"
+                    type="date"
+                    min={todayUtc()}
+                    value={formValues.effectiveDate}
+                    error={fieldErrors.effectiveDate !== undefined}
+                    aria-describedby={
+                      fieldErrors.effectiveDate
+                        ? "admin-document-effective-date-error"
+                        : undefined
+                    }
+                    onChange={(event) =>
+                      updateField("effectiveDate", event.target.value)
+                    }
+                  />
+                </FormField>
+              </div>
+
+              <FormField
+                label="備註"
+                htmlFor="admin-document-memo"
+                error={fieldErrors.memo}
+                hint="選填。"
+              >
+                <Textarea
+                  id="admin-document-memo"
+                  value={formValues.memo}
+                  error={fieldErrors.memo !== undefined}
+                  aria-describedby={
+                    fieldErrors.memo
+                      ? "admin-document-memo-error"
+                      : "admin-document-memo-hint"
+                  }
+                  onChange={(event) => updateField("memo", event.target.value)}
+                />
+              </FormField>
+
+              <FormField
+                label="ISO管理程序 PDF"
+                htmlFor="admin-document-file"
+                error={fieldErrors.file}
+                required
+              >
+                <Input
+                  id="admin-document-file"
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  error={fieldErrors.file !== undefined}
+                  aria-describedby={
+                    fieldErrors.file ? "admin-document-file-error" : undefined
+                  }
+                  onChange={(event) =>
+                    updateFile(event.target.files?.[0] ?? null)
+                  }
+                />
+              </FormField>
+              <Alert variant="info" title="第一個版本">
+                建立時需一併上傳ISO管理程序
+                PDF，送出後此版本會立即發布；任一步驟失敗都不會留下文件。
+              </Alert>
+            </>
+          )}
         </form>
       </Modal>
 

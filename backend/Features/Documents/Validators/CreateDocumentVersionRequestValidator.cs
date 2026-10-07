@@ -14,9 +14,8 @@ public sealed class CreateDocumentVersionRequestValidator
             .Must(value => DocumentVersionNumber.TryParse(value, out _, out _, out _))
             .WithMessage("版本格式必須為正整數或「主版號.次版號」，例如 1、1.0、2.1。")
             .OverridePropertyName("version");
+        // 選填：空白時由 Service 正規化為 UTC 今日（SPEC 第 5 節）。
         RuleFor(request => request.EffectiveDate)
-            .NotNull()
-            .WithMessage("請輸入生效日期。")
             .Must(value => !value.HasValue || value.Value >= Today(timeProvider))
             .WithMessage("生效日期不可早於發佈日期。")
             .OverridePropertyName("effectiveDate");

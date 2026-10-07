@@ -1,3 +1,5 @@
+import type { SortParams } from '@/types/sort'
+
 export interface IsoCategoryResponse {
   id: string
   companyId: string
@@ -7,7 +9,16 @@ export interface IsoCategoryResponse {
   updatedAt: string
 }
 
-export interface ListIsoCategoriesParams {
+export const ISO_CATEGORY_SORT_FIELD = {
+  Name: 'name',
+  IsActive: 'isActive',
+  UpdatedAt: 'updatedAt',
+} as const
+
+export type IsoCategorySortField =
+  (typeof ISO_CATEGORY_SORT_FIELD)[keyof typeof ISO_CATEGORY_SORT_FIELD]
+
+export interface ListIsoCategoriesParams extends SortParams<IsoCategorySortField> {
   companyId?: string
   includeInactive?: boolean
   page?: number

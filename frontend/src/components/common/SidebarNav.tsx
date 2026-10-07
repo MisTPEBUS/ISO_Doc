@@ -50,7 +50,7 @@ export function SidebarNav({
   return (
     <aside
       className={classNames(
-        'min-h-full shrink-0 bg-shell-900 p-2 text-on-shell transition-[width] duration-200',
+        'shrink-0 bg-shell-900 p-2 text-on-shell transition-[width] duration-200',
         collapsed ? 'w-sidebar-collapsed' : 'w-sidebar',
         className,
       )}

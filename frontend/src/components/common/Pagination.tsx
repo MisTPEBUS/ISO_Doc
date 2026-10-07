@@ -1,58 +1,58 @@
-import { classNames } from './classNames'
+import { classNames } from "./classNames";
 
 export interface PaginationProps {
-  page?: number
-  pageSize?: number
-  totalCount?: number
-  siblingCount?: number
+  page?: number;
+  pageSize?: number;
+  totalCount?: number;
+  siblingCount?: number;
   /** 每頁筆數選單的選項，預設 10 / 15 / 20；只有提供 onPageSizeChange 時才顯示 */
-  pageSizeOptions?: ReadonlyArray<number>
-  onPageChange?: (page: number) => void
-  onPageSizeChange?: (pageSize: number) => void
-  className?: string
+  pageSizeOptions?: ReadonlyArray<number>;
+  onPageChange?: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
+  className?: string;
 }
 
-const DEFAULT_PAGE_SIZE_OPTIONS: ReadonlyArray<number> = [10, 15, 20]
+const DEFAULT_PAGE_SIZE_OPTIONS: ReadonlyArray<number> = [15, 20, 100];
 
-type PaginationItem = number | 'ellipsis-start' | 'ellipsis-end'
+type PaginationItem = number | "ellipsis-start" | "ellipsis-end";
 
 function getPaginationItems(
   currentPage: number,
   totalPages: number,
   siblingCount: number,
 ): PaginationItem[] {
-  const visibleCount = siblingCount * 2 + 5
+  const visibleCount = siblingCount * 2 + 5;
   if (totalPages <= visibleCount) {
-    return Array.from({ length: totalPages }, (_, index) => index + 1)
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
   }
 
-  const leftSibling = Math.max(currentPage - siblingCount, 1)
-  const rightSibling = Math.min(currentPage + siblingCount, totalPages)
-  const showLeftEllipsis = leftSibling > 2
-  const showRightEllipsis = rightSibling < totalPages - 1
+  const leftSibling = Math.max(currentPage - siblingCount, 1);
+  const rightSibling = Math.min(currentPage + siblingCount, totalPages);
+  const showLeftEllipsis = leftSibling > 2;
+  const showRightEllipsis = rightSibling < totalPages - 1;
 
   if (!showLeftEllipsis) {
     const leftItems = Array.from(
       { length: 3 + siblingCount * 2 },
       (_, index) => index + 1,
-    )
-    return [...leftItems, 'ellipsis-end', totalPages]
+    );
+    return [...leftItems, "ellipsis-end", totalPages];
   }
 
   if (!showRightEllipsis) {
-    const start = totalPages - (2 + siblingCount * 2)
+    const start = totalPages - (2 + siblingCount * 2);
     const rightItems = Array.from(
       { length: 3 + siblingCount * 2 },
       (_, index) => start + index,
-    )
-    return [1, 'ellipsis-start', ...rightItems]
+    );
+    return [1, "ellipsis-start", ...rightItems];
   }
 
   const middleItems = Array.from(
     { length: rightSibling - leftSibling + 1 },
     (_, index) => leftSibling + index,
-  )
-  return [1, 'ellipsis-start', ...middleItems, 'ellipsis-end', totalPages]
+  );
+  return [1, "ellipsis-start", ...middleItems, "ellipsis-end", totalPages];
 }
 
 export function Pagination({
@@ -65,27 +65,30 @@ export function Pagination({
   onPageSizeChange,
   className,
 }: PaginationProps) {
-  const safePageSize = Math.max(1, pageSize)
-  const totalPages = Math.max(1, Math.ceil(Math.max(0, totalCount) / safePageSize))
-  const currentPage = Math.min(Math.max(1, page), totalPages)
-  const safeSiblingCount = Math.max(0, Math.floor(siblingCount))
-  const startItem = totalCount === 0 ? 0 : (currentPage - 1) * safePageSize + 1
-  const endItem = Math.min(currentPage * safePageSize, totalCount)
-  const items = getPaginationItems(currentPage, totalPages, safeSiblingCount)
+  const safePageSize = Math.max(1, pageSize);
+  const totalPages = Math.max(
+    1,
+    Math.ceil(Math.max(0, totalCount) / safePageSize),
+  );
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  const safeSiblingCount = Math.max(0, Math.floor(siblingCount));
+  const startItem = totalCount === 0 ? 0 : (currentPage - 1) * safePageSize + 1;
+  const endItem = Math.min(currentPage * safePageSize, totalCount);
+  const items = getPaginationItems(currentPage, totalPages, safeSiblingCount);
 
   const goToPage = (nextPage: number) => {
     if (nextPage !== currentPage && nextPage >= 1 && nextPage <= totalPages) {
-      onPageChange?.(nextPage)
+      onPageChange?.(nextPage);
     }
-  }
+  };
 
   const buttonClasses =
-    'inline-flex size-8 items-center justify-center rounded-sm border text-meta font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:border-line disabled:bg-surface-header disabled:text-ink-disabled'
+    "inline-flex size-8 items-center justify-center rounded-sm border text-meta font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:border-line disabled:bg-surface-header disabled:text-ink-disabled";
 
   return (
     <nav
       className={classNames(
-        'flex min-h-pagination flex-wrap items-center justify-between gap-3 text-meta text-ink-muted',
+        "flex min-h-pagination flex-wrap items-center justify-between gap-3 text-meta text-ink-muted",
         className,
       )}
       aria-label="分頁"
@@ -118,7 +121,7 @@ export function Pagination({
           type="button"
           className={classNames(
             buttonClasses,
-            'w-auto border-line bg-surface px-2 hover:bg-surface-header',
+            "w-auto border-line bg-surface px-2 hover:bg-surface-header",
           )}
           disabled={currentPage === 1}
           onClick={() => goToPage(currentPage - 1)}
@@ -126,17 +129,17 @@ export function Pagination({
           上一頁
         </button>
         {items.map((item) =>
-          typeof item === 'number' ? (
+          typeof item === "number" ? (
             <button
               key={item}
               type="button"
               className={classNames(
                 buttonClasses,
                 item === currentPage
-                  ? 'border-primary bg-primary text-on-primary'
-                  : 'border-line bg-surface text-ink hover:bg-surface-header',
+                  ? "border-primary bg-primary text-on-primary"
+                  : "border-line bg-surface text-ink hover:bg-surface-header",
               )}
-              aria-current={item === currentPage ? 'page' : undefined}
+              aria-current={item === currentPage ? "page" : undefined}
               aria-label={`第 ${item} 頁`}
               onClick={() => goToPage(item)}
             >
@@ -156,7 +159,7 @@ export function Pagination({
           type="button"
           className={classNames(
             buttonClasses,
-            'w-auto border-line bg-surface px-2 hover:bg-surface-header',
+            "w-auto border-line bg-surface px-2 hover:bg-surface-header",
           )}
           disabled={currentPage === totalPages}
           onClick={() => goToPage(currentPage + 1)}
@@ -165,5 +168,5 @@ export function Pagination({
         </button>
       </div>
     </nav>
-  )
+  );
 }

@@ -1,3 +1,5 @@
+import type { SortParams } from '@/types/sort'
+
 export interface AvailableDocumentVersion {
   versionId: string
   version: string
@@ -31,7 +33,20 @@ export interface AvailableDocumentResponse {
   attachments: AvailableDocumentAttachment[]
 }
 
-export interface ListAvailableDocumentsParams {
+export const AVAILABLE_DOCUMENT_SORT_FIELD = {
+  DocumentNo: 'documentNo',
+  Name: 'name',
+  IsoCategoryName: 'isoCategoryName',
+  DeptName: 'deptName',
+  CompanyName: 'companyName',
+  Version: 'version',
+  EffectiveDate: 'effectiveDate',
+} as const
+
+export type AvailableDocumentSortField =
+  (typeof AVAILABLE_DOCUMENT_SORT_FIELD)[keyof typeof AVAILABLE_DOCUMENT_SORT_FIELD]
+
+export interface ListAvailableDocumentsParams extends SortParams<AvailableDocumentSortField> {
   page: number
   pageSize: number
   keyword?: string

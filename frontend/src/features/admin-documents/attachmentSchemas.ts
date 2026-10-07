@@ -7,6 +7,12 @@ export interface AttachmentFormValues {
   name: string
 }
 
+// 名稱規則比照後端 CreateAttachmentRequestValidator / UpdateAttachmentRequestValidator。
+const attachmentNameSchema = z.string()
+  .trim()
+  .min(1, '請輸入表單及附件名稱')
+  .max(255, '表單及附件名稱不可超過 255 個字元')
+
 export const createAttachmentFormSchema = z.object({
   // 表單及附件編號可留空：部分掃描進來的檔案本來就沒有編號規則，留空一律視為新增表單及附件
   // （比照後端 CreateAttachmentRequestValidator / CommitImportAttachmentItemValidator，前後端規則需一致）。
@@ -17,10 +23,11 @@ export const createAttachmentFormSchema = z.object({
       (value) => value.length === 0 || /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,98}[A-Za-z0-9])?$/.test(value),
       '表單及附件編號只能包含英文字母、數字與連字號，且開頭與結尾必須是字母或數字',
     ),
-  name: z.string()
-    .trim()
-    .min(1, '請輸入表單及附件名稱')
-    .max(255, '表單及附件名稱不可超過 255 個字元'),
+  name: attachmentNameSchema,
+})
+
+export const updateAttachmentFormSchema = z.object({
+  name: attachmentNameSchema,
 })
 
 export interface AttachmentVersionFormValues {

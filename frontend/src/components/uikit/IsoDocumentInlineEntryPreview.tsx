@@ -52,6 +52,7 @@ function createRow(source: RowSource, values: DraftDocumentRow): EditableDocumen
 
 function createBlankRow(): EditableDocumentRow {
   return createRow('manual', {
+    isoCategoryId: '',
     deptId: '',
     documentNo: '',
     name: '',
@@ -63,6 +64,7 @@ function createBlankRow(): EditableDocumentRow {
 function createSampleRows(): EditableDocumentRow[] {
   return [
     createRow('manual', {
+      isoCategoryId: '',
       documentNo: 'HR-I-01',
       deptId: '',
       name: '人力資源管理程序',
@@ -70,6 +72,7 @@ function createSampleRows(): EditableDocumentRow[] {
       version: '1.0',
     }),
     createRow('manual', {
+      isoCategoryId: '',
       documentNo: 'HR-I-02',
       deptId: '',
       name: '教育訓練管理程序',

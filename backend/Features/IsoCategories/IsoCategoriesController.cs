@@ -19,6 +19,8 @@ public sealed class IsoCategoriesController(
     public async Task<IActionResult> List(
         [FromQuery] Guid? companyId,
         [FromQuery] bool includeInactive = false,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
@@ -30,7 +32,8 @@ public sealed class IsoCategoriesController(
         }
 
         return (await isoCategoryService.ListAsync(
-                companyId, includeInactive, page, pageSize, cancellationToken))
+                companyId, includeInactive, sortBy, sortDirection, page, pageSize,
+                cancellationToken))
             .ToOkResult(this);
     }
 

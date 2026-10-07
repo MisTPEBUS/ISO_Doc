@@ -1,3 +1,5 @@
+import type { SortParams } from '@/types/sort'
+
 export interface DeptResponse {
   id: string
   companyId: string
@@ -7,7 +9,15 @@ export interface DeptResponse {
   updatedAt: string
 }
 
-export interface ListDeptsParams {
+export const DEPT_SORT_FIELD = {
+  Name: 'name',
+  Seq: 'seq',
+  UpdatedAt: 'updatedAt',
+} as const
+
+export type DeptSortField = (typeof DEPT_SORT_FIELD)[keyof typeof DEPT_SORT_FIELD]
+
+export interface ListDeptsParams extends SortParams<DeptSortField> {
   companyId?: string
   page?: number
   pageSize?: number

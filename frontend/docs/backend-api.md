@@ -538,6 +538,22 @@ type CreateDocumentRequest = {
   `errors.documentNo = ["The document number is already in use for this company."]`
 - `403`。
 
+### `POST /api/documents/with-version`
+
+- 管理端「新增ISO管理程序」表單使用：一次建立文件與第一個 `PUBLISHED` 版本（全有全無，詳見 `SPEC.md` 6.6）。
+- `multipart/form-data`：`companyId`、`documentNo`、`name`、`isoCategoryId?`、`deptId?`、`version`、`effectiveDate?`、`pageCount?`、`memo?`、`file`（PDF，必填）。
+
+```ts
+type CreateDocumentWithVersionResponse = {
+  document: DocumentResponse;
+  version: { versionId: string; version: string; status: "PUBLISHED" };
+};
+```
+
+- `201 Created`：`CreateDocumentWithVersionResponse`。`Location` header 指向該文件。
+- `400`：文件與版本欄位錯誤一次回傳（`documentNo`、`version`、`effectiveDate`、`file`…）。
+- `403` / `503`（GCP 儲存暫時無法使用）。
+
 ### `GET /api/documents/{id}`
 
 - `200 OK`：`DocumentDetailResponse`（含版本摘要）
@@ -672,6 +688,16 @@ type CreateAttachmentsResponse = {
   - `errors.attachmentNo`（請求內重複，或與現有版本表單及附件編號衝突）—
     例：`["Attachment number 'ATT-01' is already in use for this version."]`
 - `403` / `404`。
+
+### `PUT /api/documents/{documentId}/attachments/{attachmentId}`
+
+- Auth：`CompanyAdminScope`。需 `X-XSRF-TOKEN`。
+- 只修改表單及附件名稱；`attachmentNo` 不可修改。
+- Request：`{ name: string }`（必填，去除前後空白後不可為空，≤ 255 字元）。
+- `200 OK`：`{ attachmentId, attachmentNo, name, isActive }`。
+- `400`：`errors.name`。
+- `403` / `404`（不存在、不屬於該文件，或已停用）。
+- 前端使用處：後台文件詳情頁「表單及附件」列表的行內編輯（`useUpdateAttachment`）。
 
 ### `DELETE /api/attachments/{id}`
 
@@ -913,3 +939,4 @@ type CommitImportResponse = {
 | 32  | GET    | `/api/companies/{companyId}/backup`                                                    | CompanyAdminScope        | 200（zip）       |
 | 33  | POST   | `/api/documents/ai-import/analyze`                                                     | CompanyAdminScope + CSRF | 200              |
 | 34  | POST   | `/api/documents/ai-import/commit`                                                      | CompanyAdminScope + CSRF | 200（multipart） |
+| 35  | PUT    | `/api/documents/{documentId}/attachments/{attachmentId}`                               | CompanyAdminScope + CSRF | 200（僅改名稱）  |

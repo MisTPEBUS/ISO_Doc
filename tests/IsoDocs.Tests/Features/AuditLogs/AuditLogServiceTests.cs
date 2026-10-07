@@ -1,10 +1,12 @@
 using System.Reflection;
+using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using IsoDocument.Api.Data.Entities;
 using IsoDocument.Api.Data;
 using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Security;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -21,9 +23,14 @@ public sealed partial class AuditLogServiceTests
             UserId = Guid.NewGuid(),
             Empno = "EMP001"
         };
+        var httpContext = new DefaultHttpContext();
+        httpContext.Connection.RemoteIpAddress = IPAddress.Parse("172.18.0.3");
+        httpContext.Request.Headers["X-Verified-Client-IP"] = "203.0.113.42";
         var service = new AuditLogService(
             store,
             currentUser,
+            new ClientIpAddressProvider(
+                new HttpContextAccessor { HttpContext = httpContext }, false),
             new AuditFixedTimeProvider(
                 new DateTimeOffset(2026, 9, 9, 1, 2, 3, TimeSpan.Zero)));
         var companyId = Guid.NewGuid();
@@ -47,6 +54,7 @@ public sealed partial class AuditLogServiceTests
         Assert.Equal(companyId, entry.CompanyId);
         Assert.Equal(currentUser.UserId, entry.UserId);
         Assert.Equal("EMP001", entry.Empno);
+        Assert.Equal(IPAddress.Parse("203.0.113.42"), entry.Ip);
         Assert.Equal(AuditActions.UpdateDept, entry.Action);
         Assert.Equal(AuditResourceTypes.Dept, entry.ResourceType);
         Assert.Equal(resourceId, entry.ResourceId);
@@ -66,10 +74,12 @@ public sealed partial class AuditLogServiceTests
         var service = new AuditLogService(
             store,
             new AuditCurrentUser { UserId = Guid.NewGuid(), Empno = "EMP002" },
+            new ClientIpAddressProvider(new HttpContextAccessor(), false),
             TimeProvider.System);
         var companyId = Guid.NewGuid();
         var documentId = Guid.NewGuid();
         var versionId = Guid.NewGuid();
+        var downloadId = Guid.NewGuid();
         var attachmentId = Guid.NewGuid();
         var oldDeptId = Guid.NewGuid();
         var newDeptId = Guid.NewGuid();
@@ -78,7 +88,7 @@ public sealed partial class AuditLogServiceTests
             companyId, documentId, [oldDeptId], [newDeptId],
             CancellationToken.None);
         await service.WriteDocumentDownloadedAsync(
-            companyId, versionId, CancellationToken.None);
+            companyId, documentId, versionId, downloadId, CancellationToken.None);
         await service.WriteAttachmentDownloadedAsync(
             companyId, attachmentId, CancellationToken.None);
         await service.WriteCompanyBackupCreatedAsync(
@@ -102,7 +112,12 @@ public sealed partial class AuditLogServiceTests
             {
                 Assert.Equal(AuditActions.DownloadDocument, entry.Action);
                 Assert.Equal(AuditResourceTypes.DocumentVersion, entry.ResourceType);
-                Assert.Null(entry.Detail);
+                Assert.Equal("EMP002", entry.Empno);
+                Assert.NotNull(entry.UserId);
+                Assert.Equal(versionId, entry.ResourceId);
+                using var detail = JsonDocument.Parse(entry.Detail!);
+                Assert.Equal(downloadId, detail.RootElement.GetProperty("download_id").GetGuid());
+                Assert.Equal(documentId, detail.RootElement.GetProperty("document_id").GetGuid());
             },
             entry =>
             {
@@ -133,6 +148,41 @@ public sealed partial class AuditLogServiceTests
     }
 
     [Fact]
+    public void ClientIpAddressProvider_RequiresVerifiedClientHeader()
+    {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("172.18.0.3");
+        context.Request.Headers["X-Forwarded-For"] = "198.51.100.99";
+        var provider = new ClientIpAddressProvider(
+            new HttpContextAccessor { HttpContext = context }, false);
+
+        Assert.Null(provider.GetClientIpAddress());
+
+        context.Request.Headers["X-Verified-Client-IP"] = "::ffff:192.0.2.15";
+        Assert.Equal(IPAddress.Parse("192.0.2.15"), provider.GetClientIpAddress());
+
+        context.Request.Headers["X-Verified-Client-IP"] = "not-an-ip";
+        Assert.Null(provider.GetClientIpAddress());
+    }
+
+    [Fact]
+    public void ClientIpAddressProvider_InDevelopment_UsesDirectNonLoopbackPeer()
+    {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.1.25");
+        context.Request.Headers["X-Verified-Client-IP"] = "203.0.113.9";
+        var provider = new ClientIpAddressProvider(
+            new HttpContextAccessor { HttpContext = context }, true);
+
+        Assert.Equal(IPAddress.Parse("192.168.1.25"), provider.GetClientIpAddress());
+
+        context.Connection.RemoteIpAddress = IPAddress.Loopback;
+        Assert.Null(provider.GetClientIpAddress());
+        context.Connection.RemoteIpAddress = IPAddress.Parse("::ffff:127.0.0.1");
+        Assert.Null(provider.GetClientIpAddress());
+    }
+
+    [Fact]
     public void AuditLogModel_MapsDetailToJsonbAndEmpnoAsRequiredSnapshot()
     {
         var options = new DbContextOptionsBuilder<IsoDbContext>()
@@ -143,6 +193,7 @@ public sealed partial class AuditLogServiceTests
 
         Assert.NotNull(entity);
         Assert.Equal("jsonb", entity.FindProperty(nameof(AuditLog.Detail))!.GetColumnType());
+        Assert.Equal("inet", entity.FindProperty(nameof(AuditLog.Ip))!.GetColumnType());
         Assert.False(entity.FindProperty(nameof(AuditLog.Empno))!.IsNullable);
         Assert.Equal(30, entity.FindProperty(nameof(AuditLog.Empno))!.GetMaxLength());
     }

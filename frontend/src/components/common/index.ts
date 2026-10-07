@@ -22,4 +22,5 @@ export {
   type TableExpansion,
   type TableProps,
 } from './Table'
+export { nextTableSort, toSortParams, type TableSort } from './tableSort'
 export { Textarea, type TextareaProps } from './Textarea'

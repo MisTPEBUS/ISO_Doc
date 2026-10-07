@@ -24,6 +24,31 @@ export function buildVersionFormData(input: VersionFormDataInput): FormData {
   return formData
 }
 
+export interface DocumentWithVersionFormDataInput extends VersionFormDataInput {
+  companyId: string
+  documentNo: string
+  name: string
+  isoCategoryId?: string
+  deptId?: string
+}
+
+export function buildDocumentWithVersionFormData(
+  input: DocumentWithVersionFormDataInput,
+): FormData {
+  const formData = buildVersionFormData(input)
+
+  formData.append('companyId', input.companyId)
+  formData.append('documentNo', input.documentNo)
+  formData.append('name', input.name)
+  if (input.isoCategoryId !== undefined && input.isoCategoryId.length > 0) {
+    formData.append('isoCategoryId', input.isoCategoryId)
+  }
+  if (input.deptId !== undefined && input.deptId.length > 0) {
+    formData.append('deptId', input.deptId)
+  }
+  return formData
+}
+
 export interface UploadDraftVersionFileFormDataInput {
   effectiveDate: string
   file: File

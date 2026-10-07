@@ -1,3 +1,4 @@
+using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
 
 namespace IsoDocument.Api.Features.IsoCategories;
@@ -18,6 +19,7 @@ public interface IIsoCategoryStore
     Task<IReadOnlyList<IsoCategory>> ListAsync(
         Guid? companyId,
         bool includeInactive,
+        ListSort? sort,
         int skip,
         int take,
         CancellationToken cancellationToken);

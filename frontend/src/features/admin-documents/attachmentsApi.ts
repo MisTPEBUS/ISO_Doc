@@ -5,6 +5,7 @@ import type {
   AttachmentDetail,
   CreateAttachmentRequest,
   CreateAttachmentVersionResponse,
+  UpdateAttachmentRequest,
 } from './types'
 
 export function listAttachments(documentId: string): Promise<Attachment[]> {
@@ -26,6 +27,17 @@ export function createAttachment(
 ): Promise<Attachment> {
   return httpClient.post<Attachment, CreateAttachmentRequest>(
     `/documents/${documentId}/attachments`,
+    request,
+  )
+}
+
+export function updateAttachment(
+  documentId: string,
+  attachmentId: string,
+  request: UpdateAttachmentRequest,
+): Promise<Attachment> {
+  return httpClient.put<Attachment, UpdateAttachmentRequest>(
+    `/documents/${documentId}/attachments/${attachmentId}`,
     request,
   )
 }

@@ -41,6 +41,15 @@ public sealed class DocumentAttachmentsController(
         (await attachmentService.GetAsync(documentId, attachmentId, cancellationToken))
         .ToOkResult(this);
 
+    [HttpPut("{attachmentId:guid}")]
+    public async Task<IActionResult> Update(
+        Guid documentId,
+        Guid attachmentId,
+        UpdateAttachmentRequest request,
+        CancellationToken cancellationToken) =>
+        (await attachmentService.UpdateAsync(documentId, attachmentId, request, cancellationToken))
+        .ToOkResult(this);
+
     [HttpDelete("{attachmentId:guid}")]
     public async Task<IActionResult> Delete(
         Guid documentId,

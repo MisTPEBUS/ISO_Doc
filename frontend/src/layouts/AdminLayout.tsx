@@ -51,6 +51,7 @@ export function AdminLayout() {
       />
       <div className="flex min-h-[calc(100vh-var(--spacing-header))]">
         <SidebarNav
+          className="sticky top-header h-[calc(100dvh-var(--spacing-header))] self-start overflow-y-auto"
           groups={adminNavGroups}
           activeHref={activeHref}
           collapsed={sidebarCollapsed}

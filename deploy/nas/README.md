@@ -93,6 +93,8 @@ docker compose -f docker-compose.nas.yml --env-file .env.nas up -d --build front
 DSM 控制台 → 登入入口 → 進階 → 反向代理 → 新增規則：
 外部 HTTPS（你的網域）→ `127.0.0.1:<NAS_FRONTEND_PORT>`（`.env.nas` 裡設的值，預設 8081）
 
+在 `.env.nas` 將 `TRUSTED_UPSTREAM_PROXY` 設為 DSM 連到 frontend container 時的來源 IP／最小 CIDR（通常是該 Docker 網路的 host gateway）。DSM 必須在 `X-Forwarded-For` 附加實際使用者 IP。未設定時 Compose 不會啟動 frontend；設定後從外部網路下載主文，確認 `audit_logs.ip` 是使用者 IP，而不是 DSM／Docker gateway IP。
+
 ## 驗證
 
 1. `curl -s https://<你的網域>/api/health` → 200

@@ -6,6 +6,7 @@ import type {
   BulkImportDocumentsRequest,
   BulkImportDocumentsResponse,
   CreateAdminDocumentRequest,
+  CreateDocumentWithVersionResponse,
   DocumentDetail,
   ListAdminDocumentsParams,
   UpdateAdminDocumentRequest,
@@ -25,6 +26,15 @@ export function create(
   request: CreateAdminDocumentRequest,
 ): Promise<AdminDocument> {
   return httpClient.post<AdminDocument, CreateAdminDocumentRequest>('/documents', request)
+}
+
+export function createWithVersion(
+  formData: FormData,
+): Promise<CreateDocumentWithVersionResponse> {
+  return httpClient.post<CreateDocumentWithVersionResponse, FormData>(
+    '/documents/with-version',
+    formData,
+  )
 }
 
 export function update(

@@ -17,13 +17,13 @@ public sealed class PdfWatermarkServiceTests
     }
 
     [Fact]
-    public async Task ApplyWatermarkAsync_WithGuidDocumentId_ProducesValidSamePageCountPdf()
+    public async Task ApplyWatermarkAsync_WithGuidDownloadId_ProducesValidSamePageCountPdf()
     {
         var service = new PdfWatermarkService();
         var sourceBytes = CreatePdfBytes(pageCount: 2);
         var content = new PdfWatermarkContent(
             CompanyCode: "COA",
-            DocumentId: Guid.NewGuid().ToString());
+            DownloadId: Guid.NewGuid().ToString());
 
         await using var result = await service.ApplyWatermarkAsync(
             new MemoryStream(sourceBytes), content, CancellationToken.None);

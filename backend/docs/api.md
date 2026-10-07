@@ -191,6 +191,8 @@
 
 ### `GET /api/documents/{documentId}/versions/{versionId}/download`
 下載ISO管理程序 PDF。授權 `DocumentAccess`。
+每次產生下載 PDF 時建立新的 UUID，左側浮水印顯示「公司代碼＋下載 UUID」；`DOWNLOAD_DOCUMENT` 稽核紀錄保存下載帳號，`detail.download_id` 與浮水印相同，`detail.document_id` 為文件 ID。
+正式環境稽核紀錄的 `ip` 取自 Nginx 驗證上游代理後轉送的使用者 IP；上游未驗證或無法取得時為 `NULL`，不記成代理伺服器 IP。開發環境直連時記錄非 loopback 的直接來源 IP。
 
 - `200`：二進位串流，`Content-Type: application/pdf`，`Content-Disposition: attachment; filename=...`。
 - `403`：無權限；或角色 `USER` 但該版本非 `PUBLISHED`（管理者可下載 `PUBLISHED` / `OBSOLETE`）。
@@ -360,6 +362,15 @@ Query：`companyId?`、`keyword?`（documentNo / name）、`page`、`pageSize`�
 - `400`：欄位驗證；`errors.documentNo = ["The document number is already in use for this company."]`。
 - `403`。
 
+### `POST /api/documents/with-version`
+`multipart/form-data`，需 `X-XSRF-TOKEN`。單筆新增ISO管理程序：同一請求建立文件與第一個 `PUBLISHED` 版本。
+
+- 欄位：`companyId`、`documentNo`、`name`、`isoCategoryId?`、`deptId?`（規則同 `POST /api/documents`），
+  `version`、`effectiveDate?`、`pageCount?`、`memo?`、`file`（規則同帶檔的 `POST .../versions`；`effectiveDate` 空白 = UTC 今日）。
+- 文件、預設部門權限、版本與 audit 同一 transaction；失敗時 rollback 並將已寫入的檔案搬到 trash。
+- `201`：`{ "document": DocumentResponse, "version": { "versionId", "version", "status": "PUBLISHED" } }`（`Location` header）。
+- `400`（欄位錯誤一次回傳 / documentNo 重複 / 非 PDF）/ `403` / `503`（GCP 儲存暫時無法使用）。
+
 ### `GET /api/documents/{id}`
 → `200` `DocumentDetailResponse`：
 
@@ -444,6 +455,18 @@ Query：`companyId?`、`keyword?`（documentNo / name）、`page`、`pageSize`�
 
 ### `GET /api/documents/{documentId}/attachments/{attachmentId}`（`CompanyAdminScope`）
 → `200` 表單及附件身份與 `versions[]` 歷程。
+
+### `PUT /api/documents/{documentId}/attachments/{attachmentId}`（`CompanyAdminScope`）
+需 `X-XSRF-TOKEN`。只修改表單及附件名稱；`attachmentNo` 不可修改（會組進儲存路徑）。
+
+```jsonc
+{ "name": "請假申請表（新版）" }
+```
+
+- `200`：`{ "attachmentId", "attachmentNo", "name", "isActive" }`。
+- `400`：`errors.name`（空白或超過 255 字元）。
+- `403` / `404`（表單及附件不存在、不屬於該文件，或已停用）。
+- 寫入 audit `UPDATE_ATTACHMENT`（`old_value` / `new_value`）。
 
 ### `POST /api/attachments/{attachmentId}/versions`（`CompanyAdminScope`）
 `multipart/form-data`，需 `X-XSRF-TOKEN`。帶檔建立表單及附件版本並直接進入 `PUBLISHED`。
@@ -611,6 +634,7 @@ Query：`companyId?`、`companyCode?`（`companies.code`；僅在未帶 `company
 | POST | `/api/documents/{documentId}/versions` | CompanyAdminScope + CSRF | 201（multipart） |
 | DELETE | `/api/documents/{documentId}/versions/{versionId}` | CompanyAdminScope + CSRF | 204（僅 DRAFT） |
 | GET / POST | `/api/documents/{d}/versions/{v}/attachments` | CompanyAdminScope (+CSRF) | 200 / 201 |
+| PUT | `/api/documents/{d}/attachments/{a}` | CompanyAdminScope + CSRF | 200（僅改名稱） |
 | PUT | `/api/attachments/{id}/file` | CompanyAdminScope + CSRF | 200（multipart 補檔） |
 | DELETE | `/api/attachments/{id}` | CompanyAdminScope + CSRF | 204 |
 | GET / PUT | `/api/documents/{documentId}/dept-permissions` | CompanyAdminScope (+CSRF) | 200 |

@@ -7,6 +7,7 @@ namespace IsoDocument.Api.Features.AuditLogs;
 public sealed class AuditLogService(
     IAuditLogStore auditLogStore,
     ICurrentUser currentUser,
+    IClientIpAddressProvider clientIpAddressProvider,
     TimeProvider timeProvider) :
     IAuditLogService,
     IDownloadAuditLogService,
@@ -36,14 +37,17 @@ public sealed class AuditLogService(
 
     public Task WriteDocumentDownloadedAsync(
         Guid companyId,
+        Guid documentId,
         Guid versionId,
+        Guid downloadId,
         CancellationToken cancellationToken) =>
         WriteAsync(
             new AuditLogWriteRequest(
                 companyId,
                 AuditActions.DownloadDocument,
                 AuditResourceTypes.DocumentVersion,
-                versionId),
+                versionId,
+                new { download_id = downloadId, document_id = documentId }),
             cancellationToken);
 
     public Task WriteAttachmentDownloadedAsync(
@@ -91,6 +95,7 @@ public sealed class AuditLogService(
             Detail = request.Detail is null
                 ? null
                 : JsonSerializer.Serialize(request.Detail),
+            Ip = clientIpAddressProvider.GetClientIpAddress(),
             CreatedAt = timeProvider.GetUtcNow()
         });
         await auditLogStore.SaveChangesAsync(cancellationToken);

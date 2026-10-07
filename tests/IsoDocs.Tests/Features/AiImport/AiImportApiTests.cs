@@ -48,6 +48,36 @@ public sealed class AiImportApiTests
     }
 
     [Fact]
+    public async Task Commit_NewDocument_GrantsAllCompanyDepartmentsPermission()
+    {
+        await using var factory = new AiImportWebApplicationFactory();
+        var deptA = factory.DocumentStore.AddDeptSeed(factory.CompanyA);
+        var deptB = factory.DocumentStore.AddDeptSeed(factory.CompanyA);
+        factory.DocumentStore.AddDeptSeed(factory.CompanyB); // 不同公司，不應被授權
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateCommitRequest(factory.CompanyA, token,
+            [new("GA-P-01", null, null)]);
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var document = Assert.Single(factory.DocumentStore.Documents);
+        Assert.Equal(
+            new[] { deptA, deptB }.OrderBy(id => id),
+            factory.DocumentStore.DocumentDeptPermissions.Select(p => p.DeptId).OrderBy(id => id));
+        Assert.All(factory.DocumentStore.DocumentDeptPermissions, permission =>
+        {
+            Assert.Equal(document.Id, permission.DocumentId);
+            Assert.Equal(factory.AuthStore.User.Id, permission.GrantedBy);
+        });
+        var permissionAudit = Assert.Single(factory.Audit.Entries,
+            entry => entry.Action == AuditActions.UpdateDocumentDeptPermissions);
+        Assert.Equal(document.Id, permissionAudit.ResourceId);
+    }
+
+    [Fact]
     public async Task Commit_InvalidCompanyMetadata_FailsOnlyThatDocument()
     {
         await using var factory = new AiImportWebApplicationFactory();

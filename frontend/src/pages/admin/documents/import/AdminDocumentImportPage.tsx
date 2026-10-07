@@ -29,11 +29,13 @@ import { useCurrentUser } from '@/features/auth/queries'
 import { USER_ROLE } from '@/features/auth/types'
 import { useCompanies } from '@/features/companies/queries'
 import { useCompanyDeptOptions } from '@/features/departments/queries'
+import { useCompanyIsoCategoryOptions } from '@/features/iso-categories/queries'
 
 type RowSource = 'manual' | 'excel'
 type RowStatus = 'editing' | 'success' | 'failed'
 
 interface ImportRow {
+  isoCategoryId: string
   deptId: string
   departmentCleared: boolean
   id: string
@@ -74,6 +76,21 @@ function formatServerErrors(errors: Record<string, string[]>): string {
   return Object.values(errors).flat().join('；')
 }
 
+// 選填欄位未對應時也要讓使用者看得出來，不能只顯示固定說明。
+function mappingHint(key: MappingTargetKey, mapped: boolean): string {
+  if (key === 'isoCategoryId') {
+    return mapped
+      ? '已對應；內容可為品質系統名稱或 UUID。'
+      : '未對應，匯入時不指定品質系統；可手動指定對應欄位。'
+  }
+  if (key === 'deptId') {
+    return mapped
+      ? '已對應；內容可為部門名稱或 UUID。'
+      : '未對應，將依文件編號推定發行部門；可手動指定對應欄位。'
+  }
+  return mapped ? '已對應' : '請手動指定對應欄位'
+}
+
 function describeError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
     return error.detail ?? fallback
@@ -96,7 +113,17 @@ export function AdminDocumentImportPage() {
     ? selectedCompanyId || undefined
     : currentUser.data?.companyId
   const depts = useCompanyDeptOptions(companyId)
+  const isoCategories = useCompanyIsoCategoryOptions(companyId)
+  const categoryNameById = new Map((isoCategories.data ?? []).map((category) => [category.id.toLowerCase(), category.name]))
   const deptNameById = new Map((depts.data ?? []).map((dept) => [dept.id.toLowerCase(), dept.name]))
+  function resolveCategory(row: ImportRow) {
+    const value = row.isoCategoryId.trim()
+    if (!value) return { id: null, unknownExplicit: false }
+    const category = isoCategories.data?.find((item) =>
+      item.id.toLowerCase() === value.toLowerCase() || item.name.toLowerCase() === value.toLowerCase(),
+    )
+    return { id: category?.id ?? null, unknownExplicit: !category }
+  }
   function resolveDept(row: ImportRow) {
     if (row.departmentCleared) return { id: null, unknownExplicit: false }
     return resolveImportDept(row.deptId, row.documentNo, depts.data ?? [])
@@ -228,7 +255,12 @@ export function AdminDocumentImportPage() {
       setSubmitError('部分發行部門不屬於所選公司，請在表格重新選擇或清空後再送出。')
       return
     }
+    if (rows.some((row) => resolveCategory(row).unknownExplicit)) {
+      setSubmitError('部分品質系統不屬於所選公司，請在表格重新選擇或清空後再送出。')
+      return
+    }
     const items: BulkImportDocumentItem[] = rows.map((row) => ({
+      isoCategoryId: resolveCategory(row).id,
       deptId: resolveDept(row).id,
       documentNo: row.documentNo.trim(),
       name: row.name.trim(),
@@ -309,6 +341,33 @@ export function AdminDocumentImportPage() {
             onChange={(event) => updateRow(row.id, { name: event.target.value })}
           />
         ),
+    },
+    {
+      key: 'isoCategoryId',
+      header: '品質系統',
+      headerClassName: 'min-w-48',
+      render: (row) => {
+        const resolved = resolveCategory(row)
+        const selectedId = resolved.id?.toLowerCase() ?? ''
+        return submitted ? (
+          categoryNameById.get(selectedId) ?? (row.isoCategoryId || '－')
+        ) : (
+          <div>
+            <Select
+              aria-label={`品質系統 ${row.documentNo || '未編號文件'}`}
+              value={resolved.unknownExplicit ? row.isoCategoryId : selectedId}
+              disabled={companyId === undefined || isoCategories.isPending || isoCategories.isError || bulkImport.isPending}
+              error={resolved.unknownExplicit && isoCategories.isSuccess}
+              onChange={(event) => updateRow(row.id, { isoCategoryId: event.target.value })}
+            >
+              <option value="">不指定品質系統</option>
+              {resolved.unknownExplicit && <option value={row.isoCategoryId}>待確認：{row.isoCategoryId}</option>}
+              {isoCategories.data?.map((category) => <option key={category.id} value={category.id.toLowerCase()}>{category.name}</option>)}
+            </Select>
+            {resolved.unknownExplicit && isoCategories.isSuccess && <p className="mt-1 text-meta text-state-danger">請選擇此公司的品質系統或清空。</p>}
+          </div>
+        )
+      },
     },
     {
       key: 'deptId',
@@ -473,6 +532,12 @@ export function AdminDocumentImportPage() {
           <Button variant="secondary" size="sm" onClick={() => void depts.refetch()}>重新載入</Button>
         </Alert>
       )}
+      {isoCategories.isError && (
+        <Alert className="mb-4" variant="error" title="無法載入品質系統">
+          請重新載入品質系統清單後再送出。
+          <Button variant="secondary" size="sm" onClick={() => void isoCategories.refetch()}>重新載入</Button>
+        </Alert>
+      )}
       {submitError && (
         <Alert className="mb-4" variant="error">
           {submitError}
@@ -556,7 +621,7 @@ export function AdminDocumentImportPage() {
                   key={target.key}
                   label={target.label}
                   htmlFor={`mapping-${target.key}`}
-                  hint={target.key === 'deptId' ? '可用部門名稱或 UUID；未對應時依文件編號推定。' : columnIndex === null ? '請手動指定對應欄位' : '已對應'}
+                  hint={mappingHint(target.key, columnIndex !== null)}
                 >
                   <Select
                     id={`mapping-${target.key}`}
@@ -635,7 +700,7 @@ export function AdminDocumentImportPage() {
             <Button
               loading={bulkImport.isPending}
               loadingText="送出中"
-              disabled={companyId === undefined || rows.length === 0 || depts.isPending || depts.isError}
+              disabled={companyId === undefined || rows.length === 0 || depts.isPending || depts.isError || isoCategories.isPending || isoCategories.isError}
               onClick={handleSubmit}
             >
               送出並建立文件

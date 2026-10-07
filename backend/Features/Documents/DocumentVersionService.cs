@@ -22,8 +22,6 @@ public sealed class DocumentVersionService(
     TimeProvider timeProvider,
     ILogger<DocumentVersionService> logger) : IDocumentVersionService
 {
-    private static readonly byte[] PdfMagicBytes = "%PDF-"u8.ToArray();
-
     public async Task<Result<DocumentVersionResponse>> CreateAsync(
         Guid documentId,
         CreateDocumentVersionRequest request,
@@ -35,7 +33,7 @@ public sealed class DocumentVersionService(
             return Result<DocumentVersionResponse>.ValidationFailed(ToErrors(validation));
         }
 
-        if (!await HasPdfMagicBytesAsync(request.File!, cancellationToken))
+        if (!await DocumentFileRules.HasPdfMagicBytesAsync(request.File!, cancellationToken))
         {
             return Result<DocumentVersionResponse>.ValidationFailed(new(StringComparer.Ordinal)
             {
@@ -93,7 +91,7 @@ public sealed class DocumentVersionService(
         {
             await using var transaction = await versionStore.BeginTransactionAsync(cancellationToken);
             var publishDate = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
-            var effectiveDate = request.EffectiveDate!.Value;
+            var effectiveDate = request.EffectiveDate ?? publishDate;
             var objectKey = await storageKeyBuilder.BuildMainKeyAsync(
                 document, companyCode, versionText, Guid.NewGuid(),
                 request.File!.FileName, cancellationToken);
@@ -202,7 +200,7 @@ public sealed class DocumentVersionService(
             return Result<DocumentVersionResponse>.ValidationFailed(ToErrors(validation));
         }
 
-        if (!await HasPdfMagicBytesAsync(request.File!, cancellationToken))
+        if (!await DocumentFileRules.HasPdfMagicBytesAsync(request.File!, cancellationToken))
         {
             return Result<DocumentVersionResponse>.ValidationFailed(new(StringComparer.Ordinal)
             {
@@ -411,28 +409,6 @@ public sealed class DocumentVersionService(
     private async Task TryMoveToTrashAsync(string objectKey)
     {
         await StorageCleanup.TryMoveToTrashAsync(documentStorage, objectKey, logger);
-    }
-
-    private static async Task<bool> HasPdfMagicBytesAsync(
-        IFormFile file,
-        CancellationToken cancellationToken)
-    {
-        await using var stream = file.OpenReadStream();
-        var buffer = new byte[PdfMagicBytes.Length];
-        var totalRead = 0;
-        while (totalRead < buffer.Length)
-        {
-            var bytesRead = await stream.ReadAsync(
-                buffer.AsMemory(totalRead), cancellationToken);
-            if (bytesRead == 0)
-            {
-                return false;
-            }
-
-            totalRead += bytesRead;
-        }
-
-        return buffer.AsSpan().SequenceEqual(PdfMagicBytes);
     }
 
     private static bool IsPublishedVersionConflict(Exception exception) => exception switch

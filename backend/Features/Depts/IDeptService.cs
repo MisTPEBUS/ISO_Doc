@@ -7,6 +7,8 @@ public interface IDeptService
 {
     Task<Result<PagedResult<DeptResponse>>> ListAsync(
         Guid? companyId,
+        string? sortBy,
+        string? sortDirection,
         int page,
         int pageSize,
         CancellationToken cancellationToken);

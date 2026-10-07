@@ -14,6 +14,7 @@ public sealed class AttachmentService(
     IAttachmentStore attachmentStore,
     ICurrentUser currentUser,
     IValidator<CreateAttachmentRequest> validator,
+    IValidator<UpdateAttachmentRequest> updateValidator,
     IOperationAuditLogService auditLogService,
     TimeProvider timeProvider) : IAttachmentService
 {
@@ -267,6 +268,58 @@ public sealed class AttachmentService(
                 version.EffectiveDate,
                 version.ExpiredDate,
                 version.FileKey is not null)).ToArray()));
+    }
+
+    /// <summary>
+    /// 只允許修改名稱。attachment_no 會組進儲存路徑（objectKey 寫入後永不重算），
+    /// 不開放修改；name 不在路徑內，改名不影響既有檔案。
+    /// </summary>
+    public async Task<Result<AttachmentResponse>> UpdateAsync(
+        Guid documentId,
+        Guid attachmentId,
+        UpdateAttachmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await updateValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return Result<AttachmentResponse>.ValidationFailed(ToErrors(validation));
+        }
+
+        var attachment = await attachmentStore.FindByIdAsync(attachmentId, cancellationToken);
+        if (attachment is null || attachment.DocumentId != documentId || !attachment.IsActive)
+        {
+            return Result<AttachmentResponse>.NotFound("找不到指定的表單及附件。");
+        }
+
+        var document = await attachmentStore.FindDocumentAsync(documentId, cancellationToken);
+        if (document is null)
+        {
+            return Result<AttachmentResponse>.NotFound("找不到指定的文件。");
+        }
+
+        if (!currentUser.CanAccessCompany(document.CompanyId))
+        {
+            return Result<AttachmentResponse>.Forbidden("您沒有修改此表單及附件的權限。");
+        }
+
+        var oldValue = ToAuditValue(attachment);
+        attachment.Name = request.Name!.Trim();
+        attachment.UpdatedAt = timeProvider.GetUtcNow();
+        await attachmentStore.SaveChangesAsync(cancellationToken);
+        await auditLogService.WriteAsync(
+            new AuditLogWriteRequest(
+                document.CompanyId,
+                AuditActions.UpdateAttachment,
+                AuditResourceTypes.Attachment,
+                attachment.Id,
+                new
+                {
+                    old_value = oldValue,
+                    new_value = ToAuditValue(attachment)
+                }),
+            cancellationToken);
+        return Result<AttachmentResponse>.Success(ToResponse(attachment));
     }
 
     public async Task<Result> DeleteAsync(

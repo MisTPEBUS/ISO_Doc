@@ -1,0 +1,15 @@
+# This file is rendered by the official nginx Docker entrypoint.
+# Only this upstream proxy may supply the original client address.
+set_real_ip_from ${TRUSTED_UPSTREAM_PROXY};
+real_ip_header X-Forwarded-For;
+real_ip_recursive on;
+
+geo $realip_remote_addr $upstream_is_trusted {
+    default 0;
+    ${TRUSTED_UPSTREAM_PROXY} 1;
+}
+
+map "$upstream_is_trusted:$http_x_forwarded_for" $verified_client_ip {
+    default "";
+    ~^1:.+ $remote_addr;
+}

@@ -111,6 +111,35 @@ public sealed class IsoCategoryApiTests
     }
 
     [Fact]
+    public async Task List_WithSortParameters_PassesNormalizedSortToStore()
+    {
+        await using var factory = new IsoCategoryWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+
+        var response = await client.GetAsync("/api/iso-categories?sortBy=isActive&sortDirection=desc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(new ListSort(IsoCategorySortFields.IsActive, Descending: true),
+            factory.IsoCategoryStore.LastSort);
+    }
+
+    [Fact]
+    public async Task List_WithUnsupportedSortDirection_ReturnsValidationError()
+    {
+        await using var factory = new IsoCategoryWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+
+        var response = await client.GetAsync("/api/iso-categories?sortBy=name&sortDirection=random");
+        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Contains("sortDirection", body.Errors.Keys);
+    }
+
+    [Fact]
     public async Task List_WithIncludeInactive_ReturnsInactiveCategoriesToo()
     {
         await using var factory = new IsoCategoryWebApplicationFactory(UserRole.COMPANY_ADMIN);
@@ -352,14 +381,18 @@ internal sealed class FakeIsoCategoryStore(IEnumerable<Guid> companyIds) : IIsoC
         return Task.FromResult(Filter(companyId, includeInactive).Count());
     }
 
+    public ListSort? LastSort { get; private set; }
+
     public Task<IReadOnlyList<IsoCategory>> ListAsync(
         Guid? companyId,
         bool includeInactive,
+        ListSort? sort,
         int skip,
         int take,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        LastSort = sort;
         IReadOnlyList<IsoCategory> result = Filter(companyId, includeInactive)
             .OrderBy(category => category.Name)
             .ThenBy(category => category.Id)

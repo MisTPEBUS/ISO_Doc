@@ -1,3 +1,4 @@
+using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
 
 namespace IsoDocument.Api.Features.Depts;
@@ -16,6 +17,7 @@ public interface IDeptStore
 
     Task<IReadOnlyList<Dept>> ListAsync(
         Guid? companyId,
+        ListSort? sort,
         int skip,
         int take,
         CancellationToken cancellationToken);

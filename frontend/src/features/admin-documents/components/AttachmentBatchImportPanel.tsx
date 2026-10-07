@@ -26,6 +26,7 @@ import { useCreateAttachment, useCreateAttachmentVersion } from "../queries";
 type BatchRowStatus = "editing" | "success" | "failed";
 
 interface BatchRow extends DraftAttachmentFile {
+  attachmentId?: string;
   status: BatchRowStatus;
   resultMessage: string | null;
 }
@@ -65,15 +66,16 @@ export function AttachmentBatchImportPanel({
   const createAttachment = useCreateAttachment();
   const createAttachmentVersion = useCreateAttachmentVersion();
 
-  const canSave =
-    rows.length > 0 && !submitted && !submitting && effectiveDate >= todayUtc();
+  const canSave = rows.some((row) => row.status !== "success")
+    && !submitting && effectiveDate >= todayUtc();
 
   function triggerFileSelect() {
+    if (submitted || submitting) return;
     fileInputRef.current?.click();
   }
 
   function addFiles(selectedFiles: File[]) {
-    if (selectedFiles.length === 0) return;
+    if (submitted || submitting || selectedFiles.length === 0) return;
 
     const accepted = selectedFiles.filter((file) =>
       hasAllowedAttachmentExtension(file.name),
@@ -128,7 +130,7 @@ export function AttachmentBatchImportPanel({
     setFileError(undefined);
     setSubmitting(true);
 
-    const targets = rows;
+    const targets = rows.filter((row) => row.status !== "success");
     const nextRows = new Map<string, BatchRow>();
     let successCount = 0;
 
@@ -148,32 +150,38 @@ export function AttachmentBatchImportPanel({
         continue;
       }
 
+      let attachmentId = row.attachmentId;
       try {
-        const attachment = await createAttachment.mutateAsync({
-          documentId,
-          request: parsed.data,
-        });
+        if (!attachmentId) {
+          const attachment = await createAttachment.mutateAsync({
+            documentId,
+            request: parsed.data,
+          });
+          attachmentId = attachment.attachmentId;
+        }
         await createAttachmentVersion.mutateAsync({
           documentId,
-          attachmentId: attachment.attachmentId,
+          attachmentId,
           input: { version: "1.0", effectiveDate, file: row.file },
         });
         successCount += 1;
         nextRows.set(row.id, {
           ...row,
+          attachmentId,
           status: "success",
           resultMessage: null,
         });
       } catch (error) {
         nextRows.set(row.id, {
           ...row,
+          attachmentId,
           status: "failed",
           resultMessage: describeError(error, "建立或上傳失敗，請檢查後重試。"),
         });
       }
     }
 
-    setRows(targets.map((row) => nextRows.get(row.id) ?? row));
+    setRows((current) => current.map((row) => nextRows.get(row.id) ?? row));
     setSubmitting(false);
     setSubmitted(true);
     onImported(successCount);
@@ -197,7 +205,7 @@ export function AttachmentBatchImportPanel({
       header: "表單及附件編號",
       headerClassName: "w-48",
       render: (row) =>
-        submitted ? (
+        row.status === "success" || row.attachmentId ? (
           <span className="font-mono tabular">{row.attachmentNo || "－"}</span>
         ) : (
           <Input
@@ -216,7 +224,7 @@ export function AttachmentBatchImportPanel({
       header: "表單及附件名稱",
       headerClassName: "min-w-48",
       render: (row) =>
-        submitted ? (
+        row.status === "success" || row.attachmentId ? (
           row.name || "－"
         ) : (
           <Input
@@ -233,7 +241,7 @@ export function AttachmentBatchImportPanel({
       header: submitted ? "狀態" : "操作",
       headerClassName: "w-56",
       render: (row) => {
-        if (!submitted) {
+        if (row.status === "editing") {
           return (
             <Button
               variant="ghost"
@@ -254,6 +262,7 @@ export function AttachmentBatchImportPanel({
           <div className="space-y-0.5">
             <Badge variant="danger">失敗</Badge>
             <p className="text-meta text-state-danger">{row.resultMessage}</p>
+            {row.attachmentId && <p className="text-meta text-ink-muted">附件身份已建立，可重試上傳檔案。</p>}
           </div>
         );
       },
@@ -287,7 +296,7 @@ export function AttachmentBatchImportPanel({
               className="w-40"
               min={todayUtc()}
               value={effectiveDate}
-              disabled={submitting || submitted}
+              disabled={submitting || rows.every((row) => row.status === "success")}
               onChange={(event) => setEffectiveDate(event.target.value)}
             />
           </div>
@@ -299,7 +308,7 @@ export function AttachmentBatchImportPanel({
               loadingText="建立並上傳中"
               onClick={() => void handleSave()}
             >
-              建立並上傳
+              {submitted ? "重試失敗項目" : "建立並上傳"}
             </Button>
             <Button variant="ghost" onClick={onCancel}>
               返回
@@ -318,7 +327,9 @@ export function AttachmentBatchImportPanel({
             : "border-line-strong bg-canvas hover:border-primary hover:bg-primary-subtle"
         }`}
         onClick={triggerFileSelect}
+        aria-disabled={submitted || submitting}
         onKeyDown={(event) => {
+          if (submitted || submitting) return;
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             triggerFileSelect();

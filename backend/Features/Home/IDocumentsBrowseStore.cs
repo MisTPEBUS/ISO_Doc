@@ -1,3 +1,4 @@
+using IsoDocument.Api.Common;
 using IsoDocument.Api.Features.Home.Dtos;
 
 namespace IsoDocument.Api.Features.Home;
@@ -24,7 +25,7 @@ public interface IDocumentsBrowseStore
     Task<int> CountAvailableAsync(
         Guid deptId, string? keyword, Guid? isoCategoryId, CancellationToken cancellationToken);
     Task<IReadOnlyList<AvailableDocumentResponse>> ListAvailableAsync(
-        Guid deptId, string? keyword, Guid? isoCategoryId, int skip, int take,
+        Guid deptId, string? keyword, Guid? isoCategoryId, ListSort? sort, int skip, int take,
         CancellationToken cancellationToken);
     Task<DocumentDownloadRecord?> FindDocumentDownloadAsync(
         Guid documentId, Guid versionId, CancellationToken cancellationToken);

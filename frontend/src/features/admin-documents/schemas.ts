@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { createVersionFormSchema, type VersionFormValues } from './versionSchemas'
+
 const documentNameSchema = z.string()
   .trim()
   .min(1, '請輸入文件名稱')
@@ -19,6 +21,11 @@ export const createAdminDocumentFormSchema = z.object({
   deptId: z.string().trim(),
 })
 
+// 單筆新增ISO管理程序：文件欄位 + 第一個版本欄位一起驗證，規則分別沿用兩者既有 schema。
+export const createAdminDocumentWithVersionFormSchema = createAdminDocumentFormSchema.extend(
+  createVersionFormSchema.shape,
+)
+
 export const updateAdminDocumentFormSchema = z.object({
   name: documentNameSchema,
   isoCategoryId: z.string().trim(),
@@ -31,3 +38,5 @@ export interface AdminDocumentFormValues {
   isoCategoryId: string
   deptId: string
 }
+
+export type AdminDocumentWithVersionFormValues = AdminDocumentFormValues & VersionFormValues

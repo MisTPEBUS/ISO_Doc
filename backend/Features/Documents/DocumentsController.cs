@@ -17,6 +17,8 @@ public sealed class DocumentsController(
     public async Task<IActionResult> List(
         [FromQuery] Guid? companyId,
         [FromQuery] string? keyword,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortDirection,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
@@ -27,7 +29,8 @@ public sealed class DocumentsController(
         }
 
         return (await documentService.ListAsync(
-            companyId, keyword, page, pageSize, cancellationToken)).ToOkResult(this);
+            companyId, keyword, sortBy, sortDirection, page, pageSize, cancellationToken))
+            .ToOkResult(this);
     }
 
     [HttpPost]
@@ -43,6 +46,24 @@ public sealed class DocumentsController(
         var result = await documentService.CreateAsync(request, cancellationToken);
         var location = result.IsSuccess && result.Value is { } document
             ? Url.ActionLink(nameof(Get), values: new { id = document.Id })
+            : null;
+        return result.ToCreatedResult(this, location);
+    }
+
+    [HttpPost("with-version")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> CreateWithVersion(
+        [FromForm] CreateDocumentWithVersionRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!await CanAccessCompanyAsync(request.CompanyId))
+        {
+            return Forbid();
+        }
+
+        var result = await documentService.CreateWithVersionAsync(request, cancellationToken);
+        var location = result.IsSuccess && result.Value is { } created
+            ? Url.ActionLink(nameof(Get), values: new { id = created.Document.Id })
             : null;
         return result.ToCreatedResult(this, location);
     }

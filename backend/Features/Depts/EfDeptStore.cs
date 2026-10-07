@@ -1,3 +1,4 @@
+using IsoDocument.Api.Common;
 using IsoDocument.Api.Data;
 using IsoDocument.Api.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -25,14 +26,11 @@ public sealed class EfDeptStore(IsoDbContext dbContext) : IDeptStore
 
     public async Task<IReadOnlyList<Dept>> ListAsync(
         Guid? companyId,
+        ListSort? sort,
         int skip,
         int take,
         CancellationToken cancellationToken) =>
-        await Query(companyId)
-            .OrderBy(dept => dept.Seq == null)
-            .ThenBy(dept => dept.Seq)
-            .ThenBy(dept => dept.Name)
-            .ThenBy(dept => dept.Id)
+        await ApplySort(Query(companyId), sort)
             .Skip(skip)
             .Take(take)
             .ToListAsync(cancellationToken);
@@ -58,5 +56,19 @@ public sealed class EfDeptStore(IsoDbContext dbContext) : IDeptStore
         return companyId.HasValue
             ? query.Where(dept => dept.CompanyId == companyId.Value)
             : query;
+    }
+
+    private static IOrderedQueryable<Dept> ApplySort(IQueryable<Dept> query, ListSort? sort)
+    {
+        var descending = sort?.Descending ?? false;
+        var ordered = sort?.Field switch
+        {
+            DeptSortFields.Name => query.OrderByDirection(dept => dept.Name, descending),
+            DeptSortFields.UpdatedAt => query.OrderByDirection(dept => dept.UpdatedAt, descending),
+            _ => query.OrderByNullsLast(dept => dept.Seq, descending)
+        };
+
+        // 同值時依名稱、id 排列，確保分頁結果穩定。
+        return ordered.ThenBy(dept => dept.Name).ThenBy(dept => dept.Id);
     }
 }

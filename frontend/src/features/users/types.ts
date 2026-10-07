@@ -1,3 +1,5 @@
+import type { SortParams } from '@/types/sort'
+
 export const MANAGED_USER_ROLE = {
   User: 'USER',
   CompanyAdmin: 'COMPANY_ADMIN',
@@ -32,7 +34,19 @@ export interface UserResponse {
   updatedAt: string
 }
 
-export interface ListUsersParams {
+export const USER_SORT_FIELD = {
+  Empno: 'empno',
+  Name: 'name',
+  DeptName: 'deptName',
+  Email: 'email',
+  Role: 'role',
+  IsActive: 'isActive',
+  LastLoginAt: 'lastLoginAt',
+} as const
+
+export type UserSortField = (typeof USER_SORT_FIELD)[keyof typeof USER_SORT_FIELD]
+
+export interface ListUsersParams extends SortParams<UserSortField> {
   companyId?: string
   deptId?: string
   keyword?: string

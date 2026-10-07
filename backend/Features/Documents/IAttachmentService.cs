@@ -13,6 +13,9 @@ public interface IAttachmentService
         BulkImportAttachmentsRequest request, CancellationToken cancellationToken);
     Task<Result<AttachmentDetailResponse>> GetAsync(
         Guid documentId, Guid attachmentId, CancellationToken cancellationToken);
+    Task<Result<AttachmentResponse>> UpdateAsync(
+        Guid documentId, Guid attachmentId, UpdateAttachmentRequest request,
+        CancellationToken cancellationToken);
     Task<Result> DeleteAsync(
         Guid documentId, Guid attachmentId, CancellationToken cancellationToken);
 }

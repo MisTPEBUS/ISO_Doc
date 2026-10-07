@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "@/api/httpClient";
 import {
@@ -14,6 +14,7 @@ import {
 import { AttachmentBatchImportPanel } from "@/features/admin-documents/components/AttachmentBatchImportPanel";
 import {
   createAttachmentVersionFormSchema,
+  updateAttachmentFormSchema,
   type AttachmentVersionFormValues,
 } from "@/features/admin-documents/attachmentSchemas";
 import {
@@ -22,6 +23,7 @@ import {
   useCreateAttachmentVersion,
   useCreateVersion,
   useDeleteAttachment,
+  useUpdateAttachment,
   useUploadDraftVersionFile,
 } from "@/features/admin-documents/queries";
 import {
@@ -193,6 +195,8 @@ function displayAttachmentNo(value: string | null | undefined): string {
 
 export function AdminDocumentDetailPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const listPath = `/admin/documents${location.search}`;
   const { id } = useParams<{ id: string }>();
   const currentUser = useCurrentUser();
   const isSystemAdmin = currentUser.data?.role === USER_ROLE.SystemAdmin;
@@ -231,6 +235,11 @@ export function AdminDocumentDetailPage() {
   const [deleteAttachmentTarget, setDeleteAttachmentTarget] =
     useState<Attachment>();
   const [deleteAttachmentError, setDeleteAttachmentError] = useState<string>();
+
+  const updateAttachment = useUpdateAttachment();
+  const [editingAttachmentId, setEditingAttachmentId] = useState<string>();
+  const [editingAttachmentName, setEditingAttachmentName] = useState("");
+  const [editAttachmentError, setEditAttachmentError] = useState<string>();
 
   const [versionAttachment, setVersionAttachment] = useState<Attachment>();
   const attachmentDetail = useAttachmentDetail(
@@ -321,6 +330,60 @@ export function AdminDocumentDetailPage() {
         onError: (error) => {
           setDeleteAttachmentError(
             attachmentErrorMessage(error, "無法刪除表單及附件，請稍後再試。"),
+          );
+        },
+      },
+    );
+  }
+
+  function startEditAttachment(attachment: Attachment) {
+    setEditingAttachmentId(attachment.attachmentId);
+    setEditingAttachmentName(attachment.name);
+    setEditAttachmentError(undefined);
+  }
+
+  function cancelEditAttachment() {
+    if (updateAttachment.isPending) return;
+    setEditingAttachmentId(undefined);
+    setEditAttachmentError(undefined);
+  }
+
+  function saveAttachmentName() {
+    if (id === undefined || editingAttachmentId === undefined) return;
+
+    const parsed = updateAttachmentFormSchema.safeParse({
+      name: editingAttachmentName,
+    });
+    if (!parsed.success) {
+      setEditAttachmentError(
+        firstMessage(parsed.error.flatten().fieldErrors.name),
+      );
+      return;
+    }
+
+    setEditAttachmentError(undefined);
+    updateAttachment.mutate(
+      {
+        documentId: id,
+        attachmentId: editingAttachmentId,
+        request: parsed.data,
+      },
+      {
+        onSuccess: () => {
+          setEditingAttachmentId(undefined);
+        },
+        onError: (error) => {
+          if (error instanceof ApiError && error.status === 400) {
+            setEditAttachmentError(
+              apiFieldMessage(error.fieldErrors(), "name") ??
+                error.detail ??
+                "名稱格式不正確，請檢查後重試。",
+            );
+            return;
+          }
+
+          setEditAttachmentError(
+            attachmentErrorMessage(error, "無法更新表單及附件名稱，請稍後再試。"),
           );
         },
       },
@@ -532,7 +595,7 @@ export function AdminDocumentDetailPage() {
         <Button
           className="mt-4"
           variant="secondary"
-          onClick={() => navigate("/admin/documents")}
+          onClick={() => navigate(listPath)}
         >
           返回文件清單
         </Button>
@@ -561,7 +624,7 @@ export function AdminDocumentDetailPage() {
         <div className="flex items-center gap-2">
           <Button
             variant="secondary"
-            onClick={() => navigate("/admin/documents")}
+            onClick={() => navigate(listPath)}
           >
             返回 ISO 文件
           </Button>
@@ -672,6 +735,9 @@ export function AdminDocumentDetailPage() {
                     downloadAttachment.isPending &&
                     downloadAttachment.variables?.attachmentId ===
                       attachment.attachmentId;
+                  const isEditing =
+                    editingAttachmentId === attachment.attachmentId;
+                  const nameInputId = `attachment-name-${attachment.attachmentId}`;
 
                   return (
                     <li
@@ -685,42 +751,129 @@ export function AdminDocumentDetailPage() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-label text-ink-muted">名稱</p>
-                        {canDownload ? (
-                          <button
-                            type="button"
-                            className="rounded-xs text-left text-cell font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-60"
-                            disabled={isDownloading}
-                            title={`下載 ${attachment.name}`}
-                            onClick={() => handleAttachmentDownload(attachment)}
-                          >
-                            {isDownloading ? "下載中…" : attachment.name}
-                          </button>
+                        {isEditing ? (
+                          <>
+                            <label
+                              htmlFor={nameInputId}
+                              className="block text-label text-ink-muted"
+                            >
+                              名稱
+                            </label>
+                            <Input
+                              id={nameInputId}
+                              className="mt-1"
+                              value={editingAttachmentName}
+                              autoFocus
+                              disabled={updateAttachment.isPending}
+                              error={editAttachmentError !== undefined}
+                              aria-describedby={
+                                editAttachmentError
+                                  ? `${nameInputId}-error`
+                                  : undefined
+                              }
+                              onChange={(event) => {
+                                setEditingAttachmentName(event.target.value);
+                                setEditAttachmentError(undefined);
+                              }}
+                              onKeyDown={(event) => {
+                                // 中文輸入法選字時的 Enter 不視為送出。
+                                if (event.nativeEvent.isComposing) return;
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  saveAttachmentName();
+                                } else if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  cancelEditAttachment();
+                                }
+                              }}
+                            />
+                            {editAttachmentError && (
+                              <p
+                                id={`${nameInputId}-error`}
+                                className="mt-1 text-meta text-state-danger"
+                                role="alert"
+                              >
+                                {editAttachmentError}
+                              </p>
+                            )}
+                          </>
                         ) : (
-                          <p className="text-cell text-ink">
-                            {attachment.name}
-                          </p>
+                          <>
+                            <p className="text-label text-ink-muted">名稱</p>
+                            {canDownload ? (
+                              <button
+                                type="button"
+                                className="rounded-xs text-left text-cell font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-60"
+                                disabled={isDownloading}
+                                title={`下載 ${attachment.name}`}
+                                onClick={() =>
+                                  handleAttachmentDownload(attachment)
+                                }
+                              >
+                                {isDownloading ? "下載中…" : attachment.name}
+                              </button>
+                            ) : (
+                              <p className="text-cell text-ink">
+                                {attachment.name}
+                              </p>
+                            )}
+                          </>
                         )}
                       </div>
                       <div className="flex items-center gap-2 justify-self-start md:justify-self-end">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => openAttachmentVersionModal(attachment)}
-                        >
-                          更新版本
-                        </Button>
-                        {detail.isActive && (
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() => {
-                              setDeleteAttachmentError(undefined);
-                              setDeleteAttachmentTarget(attachment);
-                            }}
-                          >
-                            刪除
-                          </Button>
+                        {isEditing ? (
+                          <>
+                            <Button
+                              size="sm"
+                              loading={updateAttachment.isPending}
+                              loadingText="儲存中"
+                              onClick={saveAttachmentName}
+                            >
+                              儲存
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={updateAttachment.isPending}
+                              onClick={cancelEditAttachment}
+                            >
+                              取消
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() =>
+                                openAttachmentVersionModal(attachment)
+                              }
+                            >
+                              更新版本
+                            </Button>
+                            {detail.isActive && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  disabled={updateAttachment.isPending}
+                                  onClick={() => startEditAttachment(attachment)}
+                                >
+                                  編輯
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="danger"
+                                  onClick={() => {
+                                    setDeleteAttachmentError(undefined);
+                                    setDeleteAttachmentTarget(attachment);
+                                  }}
+                                >
+                                  刪除
+                                </Button>
+                              </>
+                            )}
+                          </>
                         )}
                       </div>
                     </li>

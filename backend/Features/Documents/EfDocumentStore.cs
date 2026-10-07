@@ -1,4 +1,5 @@
 using System.Data;
+using IsoDocument.Api.Common;
 using IsoDocument.Api.Data;
 using IsoDocument.Api.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +11,14 @@ public sealed class EfDocumentStore(IsoDbContext dbContext) : IDocumentStore
 {
     public Task<bool> CompanyExistsAsync(Guid companyId, CancellationToken cancellationToken) =>
         dbContext.Companies.AnyAsync(company => company.Id == companyId, cancellationToken);
+
+    public Task<string?> FindCompanyCodeAsync(
+        Guid companyId,
+        CancellationToken cancellationToken) =>
+        dbContext.Companies
+            .Where(company => company.Id == companyId)
+            .Select(company => company.Code)
+            .SingleOrDefaultAsync(cancellationToken);
 
     public Task<bool> DocumentNoExistsAsync(
         Guid companyId,
@@ -29,13 +38,11 @@ public sealed class EfDocumentStore(IsoDbContext dbContext) : IDocumentStore
     public async Task<IReadOnlyList<Document>> ListAsync(
         Guid? companyId,
         string? keyword,
+        ListSort? sort,
         int skip,
         int take,
         CancellationToken cancellationToken) =>
-        await Query(companyId, keyword)
-            .Include(document => document.Dept)
-            .OrderBy(document => document.DocumentNo)
-            .ThenBy(document => document.Id)
+        await ApplySort(Query(companyId, keyword).Include(document => document.Dept), sort)
             .Skip(skip)
             .Take(take)
             .ToListAsync(cancellationToken);
@@ -145,6 +152,32 @@ public sealed class EfDocumentStore(IsoDbContext dbContext) : IDocumentStore
         new EfDocumentTransaction(await dbContext.Database.BeginTransactionAsync(
             IsolationLevel.Serializable,
             cancellationToken));
+
+    private IOrderedQueryable<Document> ApplySort(IQueryable<Document> query, ListSort? sort)
+    {
+        var descending = sort?.Descending ?? false;
+        var ordered = sort?.Field switch
+        {
+            DocumentSortFields.IsActive => query.OrderByDirection(
+                document => document.IsActive, descending),
+            DocumentSortFields.Name => query.OrderByDirection(
+                document => document.Name, descending),
+            DocumentSortFields.IsoCategoryName => query.OrderByNullsLast(
+                document => dbContext.IsoCategories
+                    .Where(category => category.Id == document.IsoCategoryId)
+                    .Select(category => category.Name)
+                    .FirstOrDefault(),
+                descending),
+            DocumentSortFields.DeptName => query.OrderByNullsLast(
+                document => document.Dept == null ? null : document.Dept.Name, descending),
+            DocumentSortFields.UpdatedAt => query.OrderByDirection(
+                document => document.UpdatedAt, descending),
+            _ => query.OrderByDirection(document => document.DocumentNo, descending)
+        };
+
+        // 同值時依文件編號、id 排列，確保分頁結果穩定。
+        return ordered.ThenBy(document => document.DocumentNo).ThenBy(document => document.Id);
+    }
 
     private IQueryable<Document> Query(Guid? companyId, string? keyword)
     {

@@ -31,6 +31,7 @@ public static class AuditActions
     public const string DeleteDocumentVersion = "DELETE_DOCUMENT_VERSION";
     public const string UploadAttachment = "UPLOAD_ATTACHMENT";
     public const string CreateAttachmentMetadata = "CREATE_ATTACHMENT_METADATA";
+    public const string UpdateAttachment = "UPDATE_ATTACHMENT";
     public const string DeleteAttachment = "DELETE_ATTACHMENT";
     public const string UpdateDocumentDeptPermissions = "UPDATE_DOCUMENT_DEPT_PERMISSIONS";
     public const string DownloadDocument = "DOWNLOAD_DOCUMENT";

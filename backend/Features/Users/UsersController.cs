@@ -19,6 +19,8 @@ public sealed class UsersController(
         [FromQuery] Guid? deptId,
         [FromQuery] string? keyword,
         [FromQuery] bool includeInactive = false,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
@@ -29,7 +31,8 @@ public sealed class UsersController(
         }
 
         return (await userService.ListAsync(
-            companyId, deptId, keyword, includeInactive, page, pageSize, cancellationToken))
+            companyId, deptId, keyword, includeInactive, sortBy, sortDirection,
+            page, pageSize, cancellationToken))
             .ToOkResult(this);
     }
 

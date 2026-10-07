@@ -1,5 +1,10 @@
 import { Fragment, type ReactNode } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
+
+import { SORT_DIRECTION } from '@/types/sort'
+
 import { classNames } from './classNames'
+import { nextTableSort, type TableSort } from './tableSort'
 
 export interface TableCellContext {
   expandable: boolean
@@ -7,12 +12,14 @@ export interface TableCellContext {
   toggleExpansion: () => void
 }
 
-export interface TableColumn<T> {
+export interface TableColumn<T, TSortKey extends string = string> {
   key: string
   header: ReactNode
   render: (row: T, rowIndex: number, context: TableCellContext) => ReactNode
   headerClassName?: string
   cellClassName?: string
+  /** 設定後此欄表頭可點擊排序；值即為送往列表 API 的 sortBy。 */
+  sortKey?: TSortKey
 }
 
 export interface TableExpansion<T> {
@@ -23,8 +30,8 @@ export interface TableExpansion<T> {
   toggleOnRowClick?: boolean
 }
 
-export interface TableProps<T> {
-  columns: ReadonlyArray<TableColumn<T>>
+export interface TableProps<T, TSortKey extends string = string> {
+  columns: ReadonlyArray<TableColumn<T, TSortKey>>
   data: ReadonlyArray<T>
   getRowKey?: (row: T, rowIndex: number) => string | number
   loading?: boolean
@@ -35,9 +42,24 @@ export interface TableProps<T> {
   className?: string
   rowClassName?: string | ((row: T, rowIndex: number) => string | undefined)
   expansion?: TableExpansion<T>
+  /** 目前排序；搭配 onSortChange 使用，未傳 onSortChange 時表頭不可點擊。 */
+  sort?: TableSort<TSortKey> | null
+  onSortChange?: (sort: TableSort<TSortKey> | null) => void
 }
 
-export function Table<T>({
+const ariaSortByDirection = {
+  [SORT_DIRECTION.Asc]: 'ascending',
+  [SORT_DIRECTION.Desc]: 'descending',
+} as const
+
+function SortIcon({ direction }: { direction: TableSort['direction'] | undefined }) {
+  const className = 'size-3.5 shrink-0'
+  if (direction === SORT_DIRECTION.Asc) return <ArrowUp aria-hidden="true" className={className} />
+  if (direction === SORT_DIRECTION.Desc) return <ArrowDown aria-hidden="true" className={className} />
+  return <ArrowUpDown aria-hidden="true" className={classNames(className, 'opacity-50')} />
+}
+
+export function Table<T, TSortKey extends string = string>({
   columns,
   data,
   getRowKey = (_row, rowIndex) => rowIndex,
@@ -49,7 +71,9 @@ export function Table<T>({
   className,
   rowClassName,
   expansion,
-}: TableProps<T>) {
+  sort,
+  onSortChange,
+}: TableProps<T, TSortKey>) {
   const safeSkeletonRows = Math.max(1, skeletonRows)
 
   return (
@@ -58,18 +82,39 @@ export function Table<T>({
         {caption && <caption className="sr-only">{caption}</caption>}
         <thead className="bg-surface-header text-ink-muted">
           <tr>
-            {columns.map((column) => (
-              <th
-                key={column.key}
-                scope="col"
-                className={classNames(
-                  'h-table-header border-b border-line-strong px-3 text-table-header whitespace-nowrap',
-                  column.headerClassName,
-                )}
-              >
-                {column.header}
-              </th>
-            ))}
+            {columns.map((column) => {
+              const sortKey = column.sortKey
+              const direction =
+                sortKey !== undefined && sort?.key === sortKey ? sort.direction : undefined
+
+              return (
+                <th
+                  key={column.key}
+                  scope="col"
+                  aria-sort={direction ? ariaSortByDirection[direction] : undefined}
+                  className={classNames(
+                    'h-table-header border-b border-line-strong px-3 text-table-header whitespace-nowrap',
+                    column.headerClassName,
+                  )}
+                >
+                  {sortKey !== undefined && onSortChange ? (
+                    <button
+                      type="button"
+                      className={classNames(
+                        '-mx-1 inline-flex items-center gap-1 rounded-xs px-1 py-0.5 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+                        direction && 'text-ink',
+                      )}
+                      onClick={() => onSortChange(nextTableSort(sort, sortKey))}
+                    >
+                      {column.header}
+                      <SortIcon direction={direction} />
+                    </button>
+                  ) : (
+                    column.header
+                  )}
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody className="divide-y divide-line text-ink">

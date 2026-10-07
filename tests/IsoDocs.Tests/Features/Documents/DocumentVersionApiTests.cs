@@ -102,6 +102,24 @@ public sealed class DocumentVersionApiTests
     }
 
     [Fact]
+    public async Task UploadVersion_WithoutEffectiveDate_BecomesEffectiveToday()
+    {
+        await using var factory = new DocumentVersionWebApplicationFactory();
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateUploadRequest(
+            factory.Document.Id, token, "1.0", effectiveDate: null, "manual.pdf", ValidPdf());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = Assert.Single(factory.VersionStore.Versions);
+        Assert.Equal(UtcToday(), created.PublishDate);
+        Assert.Equal(UtcToday(), created.EffectiveDate);
+    }
+
+    [Fact]
     public async Task UploadVersion_ObsoletesPreviousPublishedVersionInTransaction()
     {
         await using var factory = new DocumentVersionWebApplicationFactory();
@@ -402,17 +420,20 @@ public sealed class DocumentVersionApiTests
         Guid documentId,
         string token,
         string version,
-        DateOnly effectiveDate,
+        DateOnly? effectiveDate,
         string fileName,
         byte[] contents)
     {
         var multipart = new MultipartFormDataContent
         {
             { new StringContent(version), "version" },
-            { new StringContent(effectiveDate.ToString("yyyy-MM-dd")), "effectiveDate" },
             { new StringContent("12"), "pageCount" },
             { new StringContent("Version memo"), "memo" }
         };
+        if (effectiveDate is { } date)
+        {
+            multipart.Add(new StringContent(date.ToString("yyyy-MM-dd")), "effectiveDate");
+        }
         var file = new ByteArrayContent(contents);
         file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
         multipart.Add(file, "file", fileName);

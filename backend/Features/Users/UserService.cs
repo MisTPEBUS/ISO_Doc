@@ -33,6 +33,8 @@ public sealed class UserService(
         Guid? deptId,
         string? keyword,
         bool includeInactive,
+        string? sortBy,
+        string? sortDirection,
         int page,
         int pageSize,
         CancellationToken cancellationToken)
@@ -43,6 +45,12 @@ public sealed class UserService(
         {
             return Result<PagedResult<UserResponse>>.Forbidden(
                 "您沒有檢視這間公司使用者資料的權限。");
+        }
+
+        if (!ListSort.TryParse(
+                sortBy, sortDirection, UserSortFields.All, out var sort, out var sortErrors))
+        {
+            return Result<PagedResult<UserResponse>>.ValidationFailed(sortErrors);
         }
 
         if (deptId.HasValue && companyFilter.CompanyId.HasValue
@@ -58,7 +66,7 @@ public sealed class UserService(
         var totalCount = await userStore.CountAsync(
             companyFilter.CompanyId, deptId, keyword, includeInactive, cancellationToken);
         var users = await userStore.ListAsync(
-            companyFilter.CompanyId, deptId, keyword, includeInactive,
+            companyFilter.CompanyId, deptId, keyword, includeInactive, sort,
             (page - 1) * pageSize, pageSize, cancellationToken);
 
         return Result<PagedResult<UserResponse>>.Success(new(

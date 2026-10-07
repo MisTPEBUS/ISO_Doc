@@ -34,12 +34,22 @@ function baseFileName(fileName: string): string {
   return dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName
 }
 
+function attachmentNumberPrefix(baseName: string): RegExpMatchArray | null {
+  return baseName.match(
+    /^([A-Za-z]+-[A-Za-z]+-\d+[A-Za-z]?(?:-\d+[A-Za-z]?)?)(?=$|[\s_\-－—.]|[\u3400-\u9fff])/i,
+  )
+}
+
 export function draftAttachmentFromFile(file: File): DraftAttachmentFile {
   const base = baseFileName(file.name).trim()
+  const numberPrefix = attachmentNumberPrefix(base)
+  const nameWithoutNumber = numberPrefix
+    ? base.slice(numberPrefix[0].length).replace(/^[\s_\-－—.]+/, '').trim()
+    : base
   return {
     id: createId(),
     file,
-    attachmentNo: suggestAttachmentNo(base),
-    name: base.slice(0, 255) || file.name.slice(0, 255),
+    attachmentNo: numberPrefix?.[1]?.toUpperCase() ?? suggestAttachmentNo(base),
+    name: (nameWithoutNumber || base || file.name).slice(0, 255),
   }
 }

@@ -7,7 +7,7 @@ public interface IDocumentsBrowseService
 {
     Task<Result<PagedResult<AvailableDocumentResponse>>> ListAvailableAsync(
         int page, int pageSize, string? keyword, Guid? isoCategoryId,
-        CancellationToken cancellationToken);
+        string? sortBy, string? sortDirection, CancellationToken cancellationToken);
     Task<Result<DownloadFileResponse>> DownloadDocumentAsync(
         Guid documentId, Guid versionId, CancellationToken cancellationToken);
     Task<Result<DownloadFileResponse>> DownloadAttachmentAsync(

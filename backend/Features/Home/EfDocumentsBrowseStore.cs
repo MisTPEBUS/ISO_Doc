@@ -1,3 +1,4 @@
+using IsoDocument.Api.Common;
 using IsoDocument.Api.Data;
 using IsoDocument.Api.Features.Home.Dtos;
 using Microsoft.EntityFrameworkCore;
@@ -20,13 +21,12 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
         Guid deptId,
         string? keyword,
         Guid? isoCategoryId,
+        ListSort? sort,
         int skip,
         int take,
         CancellationToken cancellationToken)
     {
-        var documents = await AvailableQuery(deptId, keyword, isoCategoryId)
-            .OrderBy(item => item.DocumentNo)
-            .ThenBy(item => item.DocumentId)
+        var documents = await ApplySort(AvailableQuery(deptId, keyword, isoCategoryId), sort)
             .Skip(skip)
             .Take(take)
             .ToListAsync(cancellationToken);
@@ -177,6 +177,8 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
                 IsoCategoryName = category == null ? null : category.Name,
                 VersionId = version.Id,
                 Version = version.Version,
+                VersionMajor = version.VersionMajor,
+                VersionMinor = version.VersionMinor,
                 EffectiveDate = version.EffectiveDate,
                 PageCount = version.PageCount,
                 FileKey = version.FileKey
@@ -199,6 +201,34 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
         return query;
     }
 
+    private static IOrderedQueryable<AvailableDocumentQueryItem> ApplySort(
+        IQueryable<AvailableDocumentQueryItem> query,
+        ListSort? sort)
+    {
+        var descending = sort?.Descending ?? false;
+        var ordered = sort?.Field switch
+        {
+            AvailableDocumentSortFields.Name => query.OrderByDirection(
+                item => item.DocumentName, descending),
+            AvailableDocumentSortFields.IsoCategoryName => query.OrderByNullsLast(
+                item => item.IsoCategoryName, descending),
+            AvailableDocumentSortFields.DeptName => query.OrderByNullsLast(
+                item => item.DeptName, descending),
+            AvailableDocumentSortFields.CompanyName => query.OrderByDirection(
+                item => item.CompanyName, descending),
+            // 版號依數值比較（2.10 > 2.9），不用字串排序。
+            AvailableDocumentSortFields.Version => query
+                .OrderByDirection(item => item.VersionMajor, descending)
+                .ThenByDirection(item => item.VersionMinor, descending),
+            AvailableDocumentSortFields.EffectiveDate => query.OrderByDirection(
+                item => item.EffectiveDate, descending),
+            _ => query.OrderByDirection(item => item.DocumentNo, descending)
+        };
+
+        // 同值時依文件編號、id 排列，確保分頁結果穩定。
+        return ordered.ThenBy(item => item.DocumentNo).ThenBy(item => item.DocumentId);
+    }
+
     private sealed class AvailableDocumentQueryItem
     {
         public Guid DocumentId { get; init; }
@@ -218,6 +248,10 @@ public sealed class EfDocumentsBrowseStore(IsoDbContext dbContext) : IDocumentsB
         public Guid VersionId { get; init; }
 
         public string Version { get; init; } = string.Empty;
+
+        public int VersionMajor { get; init; }
+
+        public int VersionMinor { get; init; }
 
         public DateOnly? EffectiveDate { get; init; }
 

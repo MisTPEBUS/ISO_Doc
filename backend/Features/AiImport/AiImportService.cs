@@ -409,6 +409,9 @@ public sealed class AiImportService(
             CreatedBy = userId,
             CreatedAt = now
         };
+        // 新文件比照單筆／批次建立預設全開部門權限，與文件同一個 transaction。
+        var deptIds = await documentStore.ListCompanyDeptIdsAsync(companyId, cancellationToken);
+        var permissions = DefaultDocumentPermissions.Create(document.Id, deptIds, userId, now);
 
         string? writtenObjectKey = null;
         try
@@ -432,6 +435,10 @@ public sealed class AiImportService(
 
             documentStore.Add(document);
             documentStore.Add(version);
+            if (permissions.Length > 0)
+            {
+                documentStore.AddRange(permissions);
+            }
             await documentStore.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
@@ -439,6 +446,7 @@ public sealed class AiImportService(
         {
             documentStore.Detach(document);
             documentStore.Detach(version);
+            documentStore.DetachRange(permissions);
             if (writtenObjectKey is not null)
             {
                 await TryMoveToTrashAsync(writtenObjectKey);
@@ -473,6 +481,22 @@ public sealed class AiImportService(
                     ai_import = true
                 }),
             cancellationToken);
+
+        if (permissions.Length > 0)
+        {
+            await auditLogService.WriteAsync(
+                new AuditLogWriteRequest(
+                    companyId,
+                    AuditActions.UpdateDocumentDeptPermissions,
+                    AuditResourceTypes.Document,
+                    document.Id,
+                    new
+                    {
+                        old_value = Array.Empty<Guid>(),
+                        new_value = deptIds
+                    }),
+                cancellationToken);
+        }
 
         return (true, new CommitImportDocumentSuccess(
             documentIndex, documentNo, document.Id, ImportActions.NewDocument,

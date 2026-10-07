@@ -68,7 +68,7 @@ public sealed class PdfWatermarkService : IPdfWatermarkService
         var centerBrush = new XSolidBrush(CenterWatermarkColor);
         var sideBrush = new XSolidBrush(SideWatermarkColor);
 
-        var sideText = $"{content.CompanyCode} {content.DocumentId}";
+        var sideText = $"{content.CompanyCode} {content.DownloadId}";
 
         foreach (var page in document.Pages)
         {
@@ -104,7 +104,7 @@ public sealed class PdfWatermarkService : IPdfWatermarkService
             gfx.Restore();
 
             // =========================================================
-            // 左邊界直式「公司代碼 + 文件 id」
+            // 左邊界直式「公司代碼 + 本次下載 id」
             // =========================================================
             gfx.Save();
 

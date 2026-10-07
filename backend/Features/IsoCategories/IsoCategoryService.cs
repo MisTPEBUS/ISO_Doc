@@ -25,6 +25,8 @@ public sealed class IsoCategoryService(
     public async Task<Result<PagedResult<IsoCategoryResponse>>> ListAsync(
         Guid? companyId,
         bool includeInactive,
+        string? sortBy,
+        string? sortDirection,
         int page,
         int pageSize,
         CancellationToken cancellationToken)
@@ -39,6 +41,12 @@ public sealed class IsoCategoryService(
                 "您沒有檢視這間公司品質系統的權限。");
         }
 
+        if (!ListSort.TryParse(
+                sortBy, sortDirection, IsoCategorySortFields.All, out var sort, out var sortErrors))
+        {
+            return Result<PagedResult<IsoCategoryResponse>>.ValidationFailed(sortErrors);
+        }
+
         page = page > 0 ? page : DefaultPage;
         pageSize = pageSize > 0 ? Math.Min(pageSize, MaximumPageSize) : DefaultPageSize;
         var totalCount = await isoCategoryStore.CountAsync(
@@ -46,6 +54,7 @@ public sealed class IsoCategoryService(
         var categories = await isoCategoryStore.ListAsync(
             companyFilter.CompanyId,
             includeInactive,
+            sort,
             (page - 1) * pageSize,
             pageSize,
             cancellationToken);

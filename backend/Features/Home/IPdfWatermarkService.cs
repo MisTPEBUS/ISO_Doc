@@ -5,7 +5,7 @@ namespace IsoDocument.Api.Features.Home;
 /// </summary>
 public sealed record PdfWatermarkContent(
     string CompanyCode,
-    string DocumentId);
+    string DownloadId);
 
 public interface IPdfWatermarkService
 {

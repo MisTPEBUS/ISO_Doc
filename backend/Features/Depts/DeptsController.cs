@@ -18,6 +18,8 @@ public sealed class DeptsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> List(
         [FromQuery] Guid? companyId,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
@@ -28,7 +30,8 @@ public sealed class DeptsController(
             return Forbid();
         }
 
-        return (await deptService.ListAsync(companyId, page, pageSize, cancellationToken))
+        return (await deptService.ListAsync(
+                companyId, sortBy, sortDirection, page, pageSize, cancellationToken))
             .ToOkResult(this);
     }
 

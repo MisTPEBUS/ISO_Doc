@@ -14,6 +14,7 @@ FROM nginx:1.27-alpine AS runtime
 
 COPY --from=build /app/dist /usr/share/nginx/html/ISO
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY trusted-proxy.conf.template /etc/nginx/templates/00-trusted-proxy.conf.template
 
 EXPOSE 80
 

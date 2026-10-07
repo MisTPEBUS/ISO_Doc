@@ -11,7 +11,9 @@ import {
   Pagination,
   Select,
   Table,
+  toSortParams,
   type TableColumn,
+  type TableSort,
 } from "@/components/common";
 import { useCurrentUser } from "@/features/auth/queries";
 import { USER_ROLE } from "@/features/auth/types";
@@ -26,7 +28,11 @@ import {
   isoCategoryFormSchema,
   type IsoCategoryFormValues,
 } from "@/features/iso-categories/schemas";
-import type { IsoCategoryResponse } from "@/features/iso-categories/types";
+import {
+  ISO_CATEGORY_SORT_FIELD,
+  type IsoCategoryResponse,
+  type IsoCategorySortField,
+} from "@/features/iso-categories/types";
 import { formatRocDateTime } from "@/lib/date";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -47,6 +53,9 @@ export function IsoCategoriesPage() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [sort, setSort] = useState<TableSort<IsoCategorySortField> | null>(
+    null,
+  );
   const [editingCategory, setEditingCategory] = useState<IsoCategoryResponse>();
   const [formOpen, setFormOpen] = useState(false);
   const [formValues, setFormValues] =
@@ -66,7 +75,13 @@ export function IsoCategoriesPage() {
     includeInactive,
     page,
     pageSize,
+    ...toSortParams(sort),
   });
+
+  function handleSortChange(nextSort: TableSort<IsoCategorySortField> | null) {
+    setSort(nextSort);
+    setPage(1);
+  }
 
   function handlePageSizeChange(nextPageSize: number) {
     setPageSize(nextPageSize);
@@ -199,16 +214,20 @@ export function IsoCategoriesPage() {
     });
   }
 
-  const columns: ReadonlyArray<TableColumn<IsoCategoryResponse>> = [
+  const columns: ReadonlyArray<
+    TableColumn<IsoCategoryResponse, IsoCategorySortField>
+  > = [
     {
       key: "name",
       header: "分類名稱",
       cellClassName: "font-medium",
+      sortKey: ISO_CATEGORY_SORT_FIELD.Name,
       render: (category) => category.name,
     },
     {
       key: "status",
       header: "狀態",
+      sortKey: ISO_CATEGORY_SORT_FIELD.IsActive,
       render: (category) => (
         <Badge variant={category.isActive ? "success" : "danger"}>
           {category.isActive ? "啟用" : "停用"}
@@ -220,6 +239,7 @@ export function IsoCategoriesPage() {
       header: "最後更新",
       headerClassName: "w-52",
       cellClassName: "text-meta text-ink-muted tabular",
+      sortKey: ISO_CATEGORY_SORT_FIELD.UpdatedAt,
       render: (category) => formatRocDateTime(category.updatedAt),
     },
     {
@@ -359,6 +379,8 @@ export function IsoCategoriesPage() {
         <Table
           className="border-0"
           columns={columns}
+          sort={sort}
+          onSortChange={handleSortChange}
           data={categories.data?.items ?? []}
           loading={categories.isPending}
           skeletonRows={6}

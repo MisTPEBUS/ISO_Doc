@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
 using IsoDocument.Api.Features.Auth;
 using IsoDocument.Api.Features.Auth.Dtos;
@@ -105,6 +106,71 @@ public sealed class AttachmentApiTests
         Assert.Equal(HttpStatusCode.Created, secondResponse.StatusCode);
         Assert.Null(second!.AttachmentNo);
         Assert.All(factory.Store.Attachments, attachment => Assert.Null(attachment.AttachmentNo));
+    }
+
+    [Fact]
+    public async Task UpdateIdentity_RenamesAttachmentWithoutChangingNumberAndWritesAudit()
+    {
+        await using var factory = new AttachmentWebApplicationFactory();
+        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "Old name");
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = WithXsrf(HttpMethod.Put,
+            $"/api/documents/{factory.Document.Id}/attachments/{attachment.Id}", token,
+            JsonContent.Create(new UpdateAttachmentRequest("  新名稱  ")));
+
+        var response = await client.SendAsync(request);
+        var updated = await response.Content.ReadFromJsonAsync<AttachmentResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("新名稱", updated!.Name);
+        Assert.Equal("ATT-A", updated.AttachmentNo);
+        Assert.Equal("新名稱", factory.Store.Attachments.Single().Name);
+        Assert.Equal("ATT-A", factory.Store.Attachments.Single().AttachmentNo);
+        var audit = Assert.Single(factory.Audit.Entries);
+        Assert.Equal(AuditActions.UpdateAttachment, audit.Action);
+        Assert.Equal(attachment.Id, audit.ResourceId);
+    }
+
+    [Fact]
+    public async Task UpdateIdentity_WithBlankName_ReturnsValidationProblemAndKeepsName()
+    {
+        await using var factory = new AttachmentWebApplicationFactory();
+        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "Old name");
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = WithXsrf(HttpMethod.Put,
+            $"/api/documents/{factory.Document.Id}/attachments/{attachment.Id}", token,
+            JsonContent.Create(new UpdateAttachmentRequest("   ")));
+
+        var response = await client.SendAsync(request);
+        var problem = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("name", problem!.Errors.Keys);
+        Assert.Equal("Old name", factory.Store.Attachments.Single().Name);
+        Assert.Empty(factory.Audit.Entries);
+    }
+
+    [Fact]
+    public async Task UpdateIdentity_WhenAttachmentSoftDeleted_ReturnsNotFound()
+    {
+        await using var factory = new AttachmentWebApplicationFactory();
+        var attachment = factory.Store.AddAttachment(factory.Document.Id, "ATT-A", "Old name");
+        attachment.IsActive = false;
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = WithXsrf(HttpMethod.Put,
+            $"/api/documents/{factory.Document.Id}/attachments/{attachment.Id}", token,
+            JsonContent.Create(new UpdateAttachmentRequest("新名稱")));
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("Old name", factory.Store.Attachments.Single().Name);
     }
 
     [Fact]
@@ -426,12 +492,14 @@ internal sealed class FakeAttachmentDocumentStore(Document seed, Guid userId)
 
     public Task<bool> CompanyExistsAsync(Guid companyId, CancellationToken ct) =>
         Task.FromResult(Documents.Any(x => x.CompanyId == companyId));
+    public Task<string?> FindCompanyCodeAsync(Guid companyId, CancellationToken ct) =>
+        Task.FromResult<string?>(Documents.Any(x => x.CompanyId == companyId) ? "ACME" : null);
     public Task<bool> DocumentNoExistsAsync(Guid companyId, string documentNo, CancellationToken ct) =>
         Task.FromResult(Documents.Any(x => x.CompanyId == companyId && x.DocumentNo == documentNo));
     public Task<int> CountAsync(Guid? companyId, string? keyword, CancellationToken ct) =>
         Task.FromResult(Documents.Count(x => !companyId.HasValue || x.CompanyId == companyId));
     public Task<IReadOnlyList<Document>> ListAsync(
-        Guid? companyId, string? keyword, int skip, int take, CancellationToken ct) =>
+        Guid? companyId, string? keyword, ListSort? sort, int skip, int take, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<Document>>(Documents
             .Where(x => !companyId.HasValue || x.CompanyId == companyId).Skip(skip).Take(take).ToArray());
     public Task<Document?> FindByIdAsync(Guid id, CancellationToken ct) =>

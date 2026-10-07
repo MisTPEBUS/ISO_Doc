@@ -57,8 +57,10 @@ export function Modal({
       ref={dialogRef}
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
+      // 只在開啟時套用 flex（關閉時需保留瀏覽器預設的 display: none）；
+      // 表頭、表尾固定，僅內容區捲動。
       className={classNames(
-        'm-auto w-[calc(100%-2rem)] rounded-md border border-line-strong bg-surface p-0 text-left text-ink shadow-float backdrop:bg-overlay',
+        'm-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-hidden rounded-md border border-line-strong bg-surface p-0 text-left text-ink shadow-float backdrop:bg-overlay open:flex open:flex-col',
         sizeClasses[size],
         className,
       )}
@@ -70,7 +72,7 @@ export function Modal({
         if (closeOnBackdrop && event.target === event.currentTarget) onClose?.()
       }}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
+      <div className="flex shrink-0 items-start justify-between gap-4 border-b border-line px-5 py-4">
         <div className="min-w-0">
           <h2 id={titleId} className="text-section-label text-ink">
             {title}
@@ -92,9 +94,9 @@ export function Modal({
           </button>
         )}
       </div>
-      <div className="px-5 py-4">{children}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
       {footer && (
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-surface-header px-5 py-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line bg-surface-header px-5 py-3">
           {footer}
         </div>
       )}

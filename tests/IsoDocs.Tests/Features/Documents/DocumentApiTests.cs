@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using IsoDocument.Api.Common;
 using IsoDocument.Api.Data.Entities;
@@ -8,6 +9,7 @@ using IsoDocument.Api.Features.AuditLogs;
 using IsoDocument.Api.Features.Documents;
 using IsoDocument.Api.Features.Documents.Dtos;
 using IsoDocument.Api.Security;
+using IsoDocument.Api.Storage;
 using IsoDocs.Tests.Features.Auth;
 using IsoDocs.Tests.Features.AuditLogs;
 using Microsoft.AspNetCore.DataProtection;
@@ -163,6 +165,204 @@ public sealed class DocumentApiTests
     }
 
     [Fact]
+    public async Task CreateWithVersion_WithValidRequest_CreatesDocumentPermissionsAndPublishedVersionInOneTransaction()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        var deptA = factory.DocumentStore.AddDeptSeed(factory.CompanyA);
+        var deptB = factory.DocumentStore.AddDeptSeed(factory.CompanyA);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        var effectiveDate = UtcToday().AddDays(1);
+        using var request = CreateWithVersionRequest(
+            token, factory.CompanyA, " ISO-100 ", "2", effectiveDate, ValidPdf());
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<CreateDocumentWithVersionResponse>();
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal($"/api/documents/{body.Document.Id}", response.Headers.Location?.AbsolutePath);
+        Assert.Equal("ISO-100", body.Document.DocumentNo);
+        Assert.Equal("2.0", body.Version.Version);
+        Assert.Equal("PUBLISHED", body.Version.Status);
+
+        var document = Assert.Single(factory.DocumentStore.Documents);
+        Assert.Equal(body.Document.Id, document.Id);
+        var version = Assert.Single(factory.DocumentStore.DocumentVersions);
+        Assert.Equal(body.Version.VersionId, version.Id);
+        Assert.Equal(document.Id, version.DocumentId);
+        Assert.Equal((2, 0), (version.VersionMajor, version.VersionMinor));
+        Assert.Equal(UtcToday(), version.PublishDate);
+        Assert.Equal(effectiveDate, version.EffectiveDate);
+        Assert.Equal(12, version.PageCount);
+        Assert.Equal("First release", version.Memo);
+        Assert.Equal(Assert.Single(factory.Storage.WrittenKeys), version.FileKey);
+        Assert.Empty(factory.Storage.TrashedKeys);
+        Assert.Equal(
+            new[] { deptA, deptB }.OrderBy(id => id),
+            factory.DocumentStore.DocumentDeptPermissions.Select(p => p.DeptId).OrderBy(id => id));
+
+        // 文件、權限、版本與 audit 同一個 transaction：只開、只 commit 一次。
+        Assert.Equal(1, factory.DocumentStore.BegunTransactionCount);
+        Assert.Equal(1, factory.DocumentStore.CommittedTransactionCount);
+        Assert.Equal(
+            new[]
+            {
+                AuditActions.CreateDocument,
+                AuditActions.UpdateDocumentDeptPermissions,
+                AuditActions.PublishDocumentVersion
+            },
+            factory.Audit.Entries.Select(entry => entry.Action));
+        Assert.Equal(version.Id, factory.Audit.Entries[2].ResourceId);
+    }
+
+    [Fact]
+    public async Task CreateWithVersion_WithoutEffectiveDate_BecomesEffectiveToday()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWithVersionRequest(
+            token, factory.CompanyA, "ISO-100", "1.0", effectiveDate: null, ValidPdf());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var version = Assert.Single(factory.DocumentStore.DocumentVersions);
+        Assert.Equal(UtcToday(), version.EffectiveDate);
+        Assert.Equal(UtcToday(), version.PublishDate);
+    }
+
+    [Fact]
+    public async Task CreateWithVersion_WithInvalidDocumentAndVersionFields_ReturnsAllErrorsAndWritesNothing()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWithVersionRequest(
+            token, factory.CompanyA, "", "abc", UtcToday(), pdf: null);
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Contains("documentNo", body.Errors.Keys);
+        Assert.Contains("version", body.Errors.Keys);
+        Assert.Contains("file", body.Errors.Keys);
+        Assert.Empty(factory.DocumentStore.Documents);
+        Assert.Empty(factory.Storage.WrittenKeys);
+        Assert.Equal(0, factory.DocumentStore.BegunTransactionCount);
+    }
+
+    [Fact]
+    public async Task CreateWithVersion_WithNonPdfContent_ReturnsValidationErrorAndWritesNothing()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWithVersionRequest(
+            token, factory.CompanyA, "ISO-100", "1.0", UtcToday(), "not a pdf"u8.ToArray());
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Contains("file", body.Errors.Keys);
+        Assert.Empty(factory.DocumentStore.Documents);
+        Assert.Empty(factory.Storage.WrittenKeys);
+    }
+
+    [Fact]
+    public async Task CreateWithVersion_WithDuplicateDocumentNo_ReturnsValidationErrorAndWritesNoFile()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        factory.DocumentStore.AddSeed(factory.CompanyA, "ISO-100", "Existing Manual");
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWithVersionRequest(
+            token, factory.CompanyA, "ISO-100", "1.0", UtcToday(), ValidPdf());
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Contains("已使用相同的文件編號", body.Errors["documentNo"].Single(), StringComparison.Ordinal);
+        Assert.Single(factory.DocumentStore.Documents);
+        Assert.Empty(factory.DocumentStore.DocumentVersions);
+        Assert.Empty(factory.Storage.WrittenKeys);
+    }
+
+    [Fact]
+    public async Task CreateWithVersion_WhenDatabaseWriteFails_RollsBackEverythingAndMovesFileToTrash()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        factory.DocumentStore.AddDeptSeed(factory.CompanyA);
+        factory.DocumentStore.DocumentNoToFailOnSave = "ISO-100";
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWithVersionRequest(
+            token, factory.CompanyA, "ISO-100", "1.0", UtcToday(), ValidPdf());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Empty(factory.DocumentStore.Documents);
+        Assert.Empty(factory.DocumentStore.DocumentVersions);
+        Assert.Empty(factory.DocumentStore.DocumentDeptPermissions);
+        Assert.Equal(0, factory.DocumentStore.CommittedTransactionCount);
+        Assert.Empty(factory.Audit.Entries);
+        var writtenKey = Assert.Single(factory.Storage.WrittenKeys);
+        Assert.Equal(writtenKey, Assert.Single(factory.Storage.TrashedKeys));
+    }
+
+    [Fact]
+    public async Task CreateWithVersion_WhenGcpStorageIsUnavailable_Returns503WithoutCreatingDocument()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        factory.Storage.WriteException = new GcpStorageUnavailableException(
+            new TimeoutException("bucket details"));
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWithVersionRequest(
+            token, factory.CompanyA, "ISO-100", "1.0", UtcToday(), ValidPdf());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Empty(factory.DocumentStore.Documents);
+        Assert.Empty(factory.DocumentStore.DocumentVersions);
+        Assert.Equal(0, factory.DocumentStore.BegunTransactionCount);
+        Assert.Empty(factory.Audit.Entries);
+    }
+
+    [Fact]
+    public async Task CreateWithVersion_AsCompanyAdminForAnotherCompany_ReturnsForbidden()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWithVersionRequest(
+            token, factory.CompanyB, "ISO-100", "1.0", UtcToday(), ValidPdf());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Empty(factory.DocumentStore.Documents);
+        Assert.Empty(factory.Storage.WrittenKeys);
+    }
+
+    [Fact]
     public async Task List_AsCompanyAdmin_ReturnsOnlyOwnCompanyDocuments()
     {
         await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
@@ -190,6 +390,36 @@ public sealed class DocumentApiTests
         var response = await client.GetAsync($"/api/documents?companyId={factory.CompanyB}");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task List_WithSortParameters_PassesNormalizedSortToStore()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+
+        var response = await client.GetAsync("/api/documents?sortBy=UpdatedAt&sortDirection=DESC");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(new ListSort(DocumentSortFields.UpdatedAt, Descending: true),
+            factory.DocumentStore.LastSort);
+    }
+
+    [Fact]
+    public async Task List_WithUnsupportedSortFieldOrDirection_ReturnsValidationError()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+
+        var response = await client.GetAsync("/api/documents?sortBy=createdBy&sortDirection=up");
+        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Contains("sortBy", body.Errors.Keys);
+        Assert.Contains("sortDirection", body.Errors.Keys);
     }
 
     [Fact]
@@ -610,6 +840,44 @@ public sealed class DocumentApiTests
         Assert.Equal(1, factory.DocumentStore.CommittedTransactionCount);
     }
 
+    [Fact]
+    public async Task BulkImport_WithIsoCategoryIds_PersistsOwnCategoryAndFailsInvalidRows()
+    {
+        await using var factory = new DocumentWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        var ownCategory = factory.DocumentStore.AddIsoCategorySeed(factory.CompanyA);
+        var foreignCategory = factory.DocumentStore.AddIsoCategorySeed(factory.CompanyB);
+        var missingCategory = Guid.NewGuid();
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+        var token = await GetAntiforgeryTokenAsync(client);
+        using var request = CreateWriteRequest(HttpMethod.Post, "/api/documents/bulk-import", token,
+            new BulkImportDocumentsRequest
+            {
+                CompanyId = factory.CompanyA,
+                Items =
+                [
+                    new BulkImportDocumentItem { DocumentNo = "CAT-01", Name = "本公司分類", Version = "1.0", IsoCategoryId = ownCategory },
+                    ValidBulkItem("CAT-02"),
+                    new BulkImportDocumentItem { DocumentNo = "CAT-03", Name = "跨公司分類", Version = "1.0", IsoCategoryId = foreignCategory },
+                    new BulkImportDocumentItem { DocumentNo = "CAT-04", Name = "不存在分類", Version = "1.0", IsoCategoryId = missingCategory }
+                ]
+            });
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<BulkImportDocumentsResponse>();
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal(2, body.SuccessCount);
+        Assert.Equal(2, body.FailureCount);
+        Assert.Equal(ownCategory, body.Succeeded[0].Document.IsoCategoryId);
+        Assert.Null(body.Succeeded[1].Document.IsoCategoryId);
+        Assert.Equal(ownCategory, factory.DocumentStore.Documents.Single(d => d.DocumentNo == "CAT-01").IsoCategoryId);
+        Assert.Null(factory.DocumentStore.Documents.Single(d => d.DocumentNo == "CAT-02").IsoCategoryId);
+        Assert.Equal(new[] { 3, 4 }, body.Failed.Select(f => f.Index));
+        Assert.All(body.Failed, failure => Assert.Contains("isoCategoryId", failure.Errors.Keys));
+        Assert.Equal(2, factory.DocumentStore.CommittedTransactionCount);
+    }
+
     private static BulkImportDocumentItem ValidBulkItem(string documentNo, Guid? deptId = null) => new()
     {
         DeptId = deptId,
@@ -665,6 +933,46 @@ public sealed class DocumentApiTests
         request.Headers.Add("X-XSRF-TOKEN", token);
         return request;
     }
+
+    private static HttpRequestMessage CreateWithVersionRequest(
+        string token,
+        Guid companyId,
+        string documentNo,
+        string version,
+        DateOnly? effectiveDate,
+        byte[]? pdf)
+    {
+        var multipart = new MultipartFormDataContent
+        {
+            { new StringContent(companyId.ToString()), "companyId" },
+            { new StringContent(documentNo), "documentNo" },
+            { new StringContent("Quality Manual"), "name" },
+            { new StringContent(version), "version" },
+            { new StringContent("12"), "pageCount" },
+            { new StringContent("First release"), "memo" }
+        };
+        if (effectiveDate is { } date)
+        {
+            multipart.Add(new StringContent(date.ToString("yyyy-MM-dd")), "effectiveDate");
+        }
+        if (pdf is not null)
+        {
+            var file = new ByteArrayContent(pdf);
+            file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+            multipart.Add(file, "file", "manual.pdf");
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/documents/with-version")
+        {
+            Content = multipart
+        };
+        request.Headers.Add("X-XSRF-TOKEN", token);
+        return request;
+    }
+
+    private static byte[] ValidPdf() => "%PDF-1.7\nmock"u8.ToArray();
+
+    private static DateOnly UtcToday() => DateOnly.FromDateTime(DateTime.UtcNow);
 }
 
 internal sealed class DocumentWebApplicationFactory : WebApplicationFactory<Program>
@@ -676,6 +984,7 @@ internal sealed class DocumentWebApplicationFactory : WebApplicationFactory<Prog
         CompanyA = AuthStore.User.CompanyId;
         CompanyB = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         DocumentStore = new FakeDocumentStore([CompanyA, CompanyB]);
+        Storage = new FakeDocumentStorage();
         Audit = new RecordingOperationAuditLogService();
     }
 
@@ -683,6 +992,7 @@ internal sealed class DocumentWebApplicationFactory : WebApplicationFactory<Prog
     public Guid CompanyB { get; }
     public FakeAuthUserStore AuthStore { get; }
     public FakeDocumentStore DocumentStore { get; }
+    public FakeDocumentStorage Storage { get; }
     public RecordingOperationAuditLogService Audit { get; }
 
     public HttpClient CreateSecureClient() => CreateClient(new WebApplicationFactoryClientOptions
@@ -703,6 +1013,8 @@ internal sealed class DocumentWebApplicationFactory : WebApplicationFactory<Prog
             services.AddSingleton<IAuthUserStore>(AuthStore);
             services.RemoveAll<IDocumentStore>();
             services.AddSingleton<IDocumentStore>(DocumentStore);
+            services.RemoveAll<IDocumentStorage>();
+            services.AddSingleton<IDocumentStorage>(Storage);
             services.RemoveAll<IOperationAuditLogService>();
             services.AddSingleton<IOperationAuditLogService>(Audit);
         });
@@ -817,6 +1129,12 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
         return Task.FromResult(_companyIds.Contains(companyId));
     }
 
+    public Task<string?> FindCompanyCodeAsync(Guid companyId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult<string?>(_companyIds.Contains(companyId) ? "ACME" : null);
+    }
+
     public Task<bool> DocumentNoExistsAsync(
         Guid companyId,
         string documentNo,
@@ -836,14 +1154,18 @@ internal sealed class FakeDocumentStore(IEnumerable<Guid> companyIds) : IDocumen
         return Task.FromResult(Filter(companyId, keyword).Count());
     }
 
+    public ListSort? LastSort { get; private set; }
+
     public Task<IReadOnlyList<Document>> ListAsync(
         Guid? companyId,
         string? keyword,
+        ListSort? sort,
         int skip,
         int take,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        LastSort = sort;
         IReadOnlyList<Document> documents = Filter(companyId, keyword)
             .OrderBy(document => document.DocumentNo)
             .ThenBy(document => document.Id)

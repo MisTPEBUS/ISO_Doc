@@ -218,6 +218,36 @@ public sealed class UserApiTests
     }
 
     [Fact]
+    public async Task List_WithSortParameters_PassesNormalizedSortToStore()
+    {
+        await using var factory = new UserWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+
+        var response = await client.GetAsync("/api/users?sortBy=LASTLOGINAT&sortDirection=desc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(new ListSort(UserSortFields.LastLoginAt, Descending: true),
+            factory.UserStore.LastSort);
+    }
+
+    [Fact]
+    public async Task List_WithUnsupportedSortField_ReturnsValidationError()
+    {
+        await using var factory = new UserWebApplicationFactory(UserRole.COMPANY_ADMIN);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+
+        var response = await client.GetAsync("/api/users?sortBy=passwordDigest");
+        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Contains("sortBy", body.Errors.Keys);
+        Assert.Null(factory.UserStore.LastSort);
+    }
+
+    [Fact]
     public async Task Delete_WithUnknownId_ReturnsNotFound()
     {
         await using var factory = new UserWebApplicationFactory(UserRole.SYSTEM_ADMIN);
@@ -409,16 +439,20 @@ internal sealed class FakeUserStore(
         return Task.FromResult(Filter(companyId, deptId, keyword, includeInactive).Count());
     }
 
+    public ListSort? LastSort { get; private set; }
+
     public Task<IReadOnlyList<User>> ListAsync(
         Guid? companyId,
         Guid? deptId,
         string? keyword,
         bool includeInactive,
+        ListSort? sort,
         int skip,
         int take,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        LastSort = sort;
         IReadOnlyList<User> users = Filter(companyId, deptId, keyword, includeInactive)
             .OrderBy(user => user.Empno)
             .ThenBy(user => user.Id)

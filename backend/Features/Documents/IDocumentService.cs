@@ -6,10 +6,12 @@ namespace IsoDocument.Api.Features.Documents;
 public interface IDocumentService
 {
     Task<Result<PagedResult<DocumentResponse>>> ListAsync(
-        Guid? companyId, string? keyword, int page, int pageSize,
-        CancellationToken cancellationToken);
+        Guid? companyId, string? keyword, string? sortBy, string? sortDirection,
+        int page, int pageSize, CancellationToken cancellationToken);
     Task<Result<DocumentResponse>> CreateAsync(
         CreateDocumentRequest request, CancellationToken cancellationToken);
+    Task<Result<CreateDocumentWithVersionResponse>> CreateWithVersionAsync(
+        CreateDocumentWithVersionRequest request, CancellationToken cancellationToken);
     Task<Result<BulkImportDocumentsResponse>> BulkImportAsync(
         BulkImportDocumentsRequest request, CancellationToken cancellationToken);
     Task<Result<DocumentDetailResponse>> GetAsync(Guid id, CancellationToken cancellationToken);

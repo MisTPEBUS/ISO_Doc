@@ -138,6 +138,35 @@ public sealed class DeptApiTests
     }
 
     [Fact]
+    public async Task List_WithSortParameters_PassesNormalizedSortToStore()
+    {
+        await using var factory = new DeptWebApplicationFactory(UserRole.SYSTEM_ADMIN);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+
+        var response = await client.GetAsync("/api/depts?sortBy=name");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(new ListSort(DeptSortFields.Name, Descending: false),
+            factory.DeptStore.LastSort);
+    }
+
+    [Fact]
+    public async Task List_WithUnsupportedSortField_ReturnsValidationError()
+    {
+        await using var factory = new DeptWebApplicationFactory(UserRole.SYSTEM_ADMIN);
+        using var client = factory.CreateSecureClient();
+        await LoginAsync(client);
+
+        var response = await client.GetAsync("/api/depts?sortBy=companyId");
+        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Contains("sortBy", body.Errors.Keys);
+    }
+
+    [Fact]
     public async Task List_AsCompanyAdmin_ReturnsOnlyOwnCompanyDepartments()
     {
         await using var factory = new DeptWebApplicationFactory(UserRole.COMPANY_ADMIN);
@@ -384,13 +413,17 @@ internal sealed class FakeDeptStore(IEnumerable<Guid> companyIds) : IDeptStore
         return Task.FromResult(Filter(companyId).Count());
     }
 
+    public ListSort? LastSort { get; private set; }
+
     public Task<IReadOnlyList<Dept>> ListAsync(
         Guid? companyId,
+        ListSort? sort,
         int skip,
         int take,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        LastSort = sort;
         IReadOnlyList<Dept> result = Filter(companyId)
             .OrderBy(dept => dept.Seq is null)
             .ThenBy(dept => dept.Seq)
